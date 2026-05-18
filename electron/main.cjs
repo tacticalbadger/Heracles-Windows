@@ -13,8 +13,10 @@ const {
   emptyTrash
 } = require('./db.cjs');
 
+let mainWindow;
+
 const createWindow = () => {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
@@ -27,11 +29,15 @@ const createWindow = () => {
     }
   });
 
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   if (!app.isPackaged) {
-    win.loadURL('http://localhost:5173');
-    win.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    win.loadFile(path.join(__dirname, '../dist/renderer/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/renderer/index.html'));
   }
 };
 

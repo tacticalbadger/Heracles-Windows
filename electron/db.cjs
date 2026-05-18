@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const Database = require('better-sqlite3');
 const { drizzle } = require('drizzle-orm/better-sqlite3');
@@ -28,7 +29,10 @@ const initDatabase = (userDataPath) => {
   db = new Database(dbPath);
   orm = drizzle(db);
   const migrationsFolder = path.join(__dirname, 'migrations');
-  migrate(orm, { migrationsFolder });
+  const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+  if (fs.existsSync(journalPath)) {
+    migrate(orm, { migrationsFolder });
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (

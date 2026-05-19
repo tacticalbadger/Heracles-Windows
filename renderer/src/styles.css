@@ -12,6 +12,10 @@
   --accent: #2f5c52;
   --accent-soft: #dbe7e2;
   --shadow: 0 24px 60px rgba(28, 27, 26, 0.12);
+  --block-hover: rgba(28, 27, 26, 0.05);
+  --block-focus: rgba(28, 27, 26, 0.08);
+  --callout-bg: #f2f6f1;
+  --callout-border: #dae3d8;
 }
 
 :root[data-theme='dark'] {
@@ -24,6 +28,10 @@
   --accent: #5cc8a1;
   --accent-soft: #1c3b32;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --block-hover: rgba(255, 255, 255, 0.05);
+  --block-focus: rgba(255, 255, 255, 0.08);
+  --callout-bg: rgba(92, 200, 161, 0.08);
+  --callout-border: rgba(92, 200, 161, 0.2);
 }
 
 * {
@@ -611,6 +619,7 @@ body {
   padding: 18px 20px 28px;
   flex: 1;
   overflow: auto;
+  position: relative;
   background: var(--surface);
 }
 
@@ -623,42 +632,303 @@ body {
   min-height: 260px;
   line-height: 1.7;
   font-size: 15px;
+  padding: 4px 2px 6px;
+}
+
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block) {
+  position: relative;
+  margin: 0;
+  padding: 4px 8px 4px 32px;
+  border-radius: 4px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover {
+  background: var(--block-hover);
+}
+
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within {
+  background: var(--block-focus);
+}
+
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block)::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 10px;
+  height: 14px;
+  transform: translateY(-50%);
+  opacity: 0;
+  background-image: radial-gradient(circle, var(--text-muted) 1.2px, transparent 1.3px);
+  background-size: 4px 4px;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover::before,
+.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within::before {
+  opacity: 0.55;
 }
 
 .editor-content h1 {
   font-size: 24px;
-  margin: 0 0 12px;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.editor-content h2 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.editor-content h3 {
+  font-size: 17px;
+  margin: 0;
+}
+
+.editor-content h4 {
+  font-size: 15px;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .editor-content p {
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--text-primary);
 }
 
 .editor-content ul {
-  padding-left: 20px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.editor-content li {
+  position: relative;
+  margin: 2px 0;
+  padding: 4px 12px 4px 10px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+.editor-content li::marker {
+  color: var(--text-muted);
+}
+
+.editor-content li::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 10px;
+  height: 14px;
+  transform: translateY(-50%);
+  opacity: 0;
+  background-image: radial-gradient(circle, var(--text-muted) 1.2px, transparent 1.3px);
+  background-size: 4px 4px;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.editor-content li:hover,
+.editor-content li:focus-within {
+  background: var(--block-hover);
+}
+
+.editor-content li:hover::before,
+.editor-content li:focus-within::before {
+  opacity: 0.55;
 }
 
 .code-block {
-  margin: 16px 0;
-  border-radius: 14px;
+  margin: 6px 0;
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--pane-bg);
   overflow: hidden;
 }
 
 .code-block__header {
-  padding: 8px 12px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: transparent;
 }
 
 .code-block__editor {
-  padding: 12px;
+  padding: 10px 12px 12px;
+}
+
+.editor-content .ProseMirror > .callout-block {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 4px 8px 4px 32px;
+  background: var(--callout-bg);
+  border: none;
+  border-radius: 6px;
+}
+
+.editor-content .ProseMirror > .callout-block:hover,
+.editor-content .ProseMirror > .callout-block:focus-within {
+  background: var(--callout-bg);
+}
+
+.callout-block__icon {
+  font-size: 18px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.callout-block__content {
+  color: var(--text-primary);
+}
+
+.editor-content .ProseMirror > .toggle-block {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 8px 4px 32px;
+}
+
+.toggle-block__caret {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.toggle-block__caret:hover {
+  background: var(--block-hover);
+  color: var(--text-primary);
+}
+
+.toggle-block__content > :first-child {
+  margin: 0;
+}
+
+.toggle-block.is-closed .toggle-block__content > :not(:first-child) {
+  display: none;
+}
+
+.block-handle {
+  position: absolute;
+  z-index: 15;
+}
+
+.block-handle__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  letter-spacing: -1px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.block-handle__button:hover {
+  background: var(--block-hover);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.block-menu {
+  position: absolute;
+  z-index: 25;
+  min-width: 220px;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.block-menu__search {
+  padding: 4px;
+  margin-bottom: 4px;
+}
+
+.block-menu__search-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.block-menu__search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.block-menu__empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.block-menu__title {
+  margin: 6px 8px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.block-menu__section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.block-menu__item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.block-menu__item:hover {
+  background: var(--block-hover);
+}
+
+.block-menu__divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 4px;
 }
 
 .slash-menu {

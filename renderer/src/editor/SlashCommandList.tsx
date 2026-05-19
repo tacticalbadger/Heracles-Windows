@@ -19,7 +19,7 @@ type SlashCommandListProps = {
   command: (item: CommandItem) => void;
 };
 
-type SlashCommandListHandle = {
+export type SlashCommandListHandle = {
   onKeyDown: (props: SuggestionKeyDownProps) => boolean;
 };
 

@@ -2,9 +2,16 @@ import { Extension } from '@tiptap/core';
 import Suggestion from '@tiptap/suggestion';
 import { ReactRenderer } from '@tiptap/react';
 import tippy from 'tippy.js';
-import SlashCommandList, { type CommandItem } from './SlashCommandList';
+import SlashCommandList, { type CommandItem, type SlashCommandListHandle } from './SlashCommandList';
 
 const commandItems: CommandItem[] = [
+  {
+    title: 'Text',
+    description: 'Plain paragraph text',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setParagraph().run();
+    }
+  },
   {
     title: 'Heading 1',
     description: 'Big section heading',
@@ -20,10 +27,31 @@ const commandItems: CommandItem[] = [
     }
   },
   {
+    title: 'Heading 3',
+    description: 'Smaller section heading',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setNode('heading', { level: 3 }).run();
+    }
+  },
+  {
+    title: 'Heading 4',
+    description: 'Small heading',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setNode('heading', { level: 4 }).run();
+    }
+  },
+  {
     title: 'Bullet list',
     description: 'Start a bulleted list',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleBulletList().run();
+    }
+  },
+  {
+    title: 'Numbered list',
+    description: 'Start a numbered list',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleOrderedList().run();
     }
   },
   {
@@ -38,6 +66,63 @@ const commandItems: CommandItem[] = [
     description: 'Call out an important note',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).toggleBlockquote().run();
+    }
+  },
+  {
+    title: 'Callout',
+    description: 'Highlight a block with an icon',
+    command: ({ editor, range }) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: 'calloutBlock',
+          attrs: {
+            emoji: '💡'
+          },
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Callout' }]
+            }
+          ]
+        })
+        .run();
+    }
+  },
+  {
+    title: 'Toggle list',
+    description: 'Collapsible list of content',
+    command: ({ editor, range }) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: 'toggleBlock',
+          attrs: {
+            open: true
+          },
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Toggle' }]
+            },
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: '' }]
+            }
+          ]
+        })
+        .run();
+    }
+  },
+  {
+    title: 'Divider',
+    description: 'Insert a horizontal divider',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setHorizontalRule().run();
     }
   },
   {
@@ -71,10 +156,12 @@ const SlashCommand = Extension.create({
 
           return {
             onStart: (props: any) => {
-              component = new ReactRenderer(SlashCommandList, {
+              const renderer = new ReactRenderer(SlashCommandList, {
                 props,
                 editor: props.editor
               });
+
+              component = renderer;
 
               if (!props.clientRect) {
                 return;
@@ -83,7 +170,7 @@ const SlashCommand = Extension.create({
               popup = tippy('body', {
                 getReferenceClientRect: props.clientRect,
                 appendTo: () => document.body,
-                content: component.element,
+                content: renderer.element,
                 showOnCreate: true,
                 interactive: true,
                 trigger: 'manual',
@@ -102,7 +189,9 @@ const SlashCommand = Extension.create({
               });
             },
             onKeyDown: (props: any) => {
-              return component?.ref?.onKeyDown(props) ?? false;
+              const handler = (component as (ReactRenderer & { ref?: SlashCommandListHandle | null }) | null)
+                ?.ref?.onKeyDown;
+              return handler ? handler(props) : false;
             },
             onExit: () => {
               popup?.[0]?.destroy();
@@ -115,7 +204,7 @@ const SlashCommand = Extension.create({
   },
 
   addProseMirrorPlugins() {
-    return [Suggestion(this.options.suggestion)];
+    return [Suggestion({ editor: this.editor, ...this.options.suggestion })];
   }
 });
 

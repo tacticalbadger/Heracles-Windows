@@ -3,7 +3,6 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, type ViewUpdate, keymap } from '@codemirror/view';
 import { defaultKeymap } from '@codemirror/commands';
-import { basicSetup } from '@codemirror/basic-setup';
 import { javascript } from '@codemirror/lang-javascript';
 
 const CodeMirrorNodeView = ({ node, updateAttributes }: NodeViewProps) => {
@@ -40,7 +39,6 @@ const CodeMirrorNodeView = ({ node, updateAttributes }: NodeViewProps) => {
     const state = EditorState.create({
       doc: node.attrs.code ?? '',
       extensions: [
-        basicSetup,
         keymap.of(defaultKeymap),
         javascript(),
         EditorView.lineWrapping,

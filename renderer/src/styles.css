@@ -12,10 +12,12 @@
   --accent: #2f80ed;
   --accent-soft: #e7f0ff;
   --shadow: 0 1px 2px rgba(15, 15, 15, 0.06), 0 8px 24px rgba(15, 15, 15, 0.08);
-  --block-hover: #f1f1ee;
+  --block-hover: rgba(47, 52, 55, 0.04);
   --block-focus: rgba(47, 128, 237, 0.12);
   --callout-bg: #f4f6f2;
   --callout-border: #e1e6dd;
+  --editor-gutter: 48px;
+  --page-width: 860px;
 }
 
 :root[data-theme='dark'] {
@@ -28,8 +30,8 @@
   --accent: #4d9eff;
   --accent-soft: rgba(77, 158, 255, 0.18);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.4);
-  --block-hover: rgba(255, 255, 255, 0.05);
-  --block-focus: rgba(77, 158, 255, 0.2);
+  --block-hover: rgba(255, 255, 255, 0.035);
+  --block-focus: rgba(77, 158, 255, 0.18);
   --callout-bg: rgba(255, 255, 255, 0.04);
   --callout-border: rgba(255, 255, 255, 0.08);
 }
@@ -601,73 +603,182 @@ body {
 .pane__header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  padding: 26px var(--editor-gutter) 8px;
+  border-bottom: none;
+  background: transparent;
+  max-width: var(--page-width);
+  width: 100%;
+  margin: 0 auto;
 }
 
 .pane__title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
 }
 
 .pane__subtitle {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+.pane__properties {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.pane__property {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pane__property-label {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pane__property-value {
+  color: var(--text-primary);
 }
 
 .pane__actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-self: flex-start;
 }
 
 .pane__body {
-  padding: 16px 18px 28px;
+  padding: 6px 18px 28px;
   flex: 1;
   overflow: auto;
   position: relative;
   background: var(--surface);
 }
 
+.editor-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.editor-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-toolbar__button {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.editor-toolbar__button:hover {
+  background: var(--block-hover);
+}
+
+.editor-toolbar__button.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.editor-toolbar__button--bold {
+  font-weight: 700;
+}
+
+.editor-toolbar__button--italic {
+  font-style: italic;
+}
+
+.editor-toolbar__button--strike {
+  text-decoration: line-through;
+}
+
 .editor-content {
   min-height: 300px;
 }
 
-.editor-content .ProseMirror {
+.editor-content {
   outline: none;
+  border: none;
   min-height: 260px;
-  line-height: 1.6;
+  line-height: 1.55;
   font-size: 16px;
-  padding: 8px 4px 40px;
+  padding: 10px 8px 40px var(--editor-gutter);
   margin: 0 auto;
-  max-width: 720px;
+  max-width: var(--page-width);
 }
 
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block) {
+.editor-content:focus {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.editor-content.ProseMirror-focused {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.editor-content:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border: none;
+}
+
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block) {
   position: relative;
   margin: 0;
-  padding: 4px 8px 4px 32px;
+  padding: 4px 8px 4px 0;
   border-radius: 4px;
   background: transparent;
   transition: background 120ms ease;
 }
 
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover {
+.editor-content > :where(p, h1, h2, h3, h4) {
+  border: none;
+  box-shadow: none;
+}
+
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover {
   background: var(--block-hover);
 }
 
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within {
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within {
   background: var(--block-focus);
 }
 
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block)::before {
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block)::before {
   content: '';
   position: absolute;
-  left: 12px;
+  left: calc(-1 * var(--editor-gutter) + 16px);
   top: 50%;
   width: 10px;
   height: 14px;
@@ -679,8 +790,8 @@ body {
   pointer-events: none;
 }
 
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover::before,
-.editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within::before {
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):hover::before,
+.editor-content > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block):focus-within::before {
   opacity: 0.55;
 }
 
@@ -778,7 +889,7 @@ body {
   padding: 10px 12px 12px;
 }
 
-.editor-content .ProseMirror > .callout-block {
+.editor-content > .callout-block {
   display: grid;
   grid-template-columns: 22px 1fr;
   gap: 10px;
@@ -789,8 +900,8 @@ body {
   border-radius: 6px;
 }
 
-.editor-content .ProseMirror > .callout-block:hover,
-.editor-content .ProseMirror > .callout-block:focus-within {
+.editor-content > .callout-block:hover,
+.editor-content > .callout-block:focus-within {
   background: var(--callout-bg);
 }
 
@@ -808,7 +919,7 @@ body {
   color: var(--text-primary);
 }
 
-.editor-content .ProseMirror > .toggle-block {
+.editor-content > .toggle-block {
   display: grid;
   grid-template-columns: 20px 1fr;
   gap: 8px;
@@ -844,22 +955,31 @@ body {
 .block-handle {
   position: absolute;
   z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .block-handle__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  font-size: 15px;
+  font-size: 14px;
   letter-spacing: -1px;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.block-handle__button--add {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .block-handle__button:hover {

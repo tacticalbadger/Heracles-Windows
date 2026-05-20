@@ -9,7 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ChangeEvent
 } from 'react';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { BubbleMenu, EditorContent, useEditor } from '@tiptap/react';
 import { type Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -189,7 +189,7 @@ const EditorPane = ({
   const isTrashed = Boolean(note?.trashed);
   const isArchived = Boolean(note?.archived);
   const paneBodyRef = useRef<HTMLDivElement | null>(null);
-  const blockHandleRef = useRef<HTMLButtonElement | null>(null);
+  const blockHandleRef = useRef<HTMLDivElement | null>(null);
   const blockMenuRef = useRef<HTMLDivElement | null>(null);
   const blockMenuSearchRef = useRef<HTMLInputElement | null>(null);
   const [blockAnchor, setBlockAnchor] = useState<BlockAnchor>({
@@ -198,8 +198,10 @@ const EditorPane = ({
     height: 0,
     visible: false
   });
+  const [blockHandleVisible, setBlockHandleVisible] = useState(false);
   const [blockMenuOpen, setBlockMenuOpen] = useState(false);
   const [blockMenuQuery, setBlockMenuQuery] = useState('');
+  const toolbarDisabled = !note || isTrashed;
   const editor = useEditor(
     {
       extensions: [
@@ -250,18 +252,9 @@ const EditorPane = ({
     editor.setEditable(Boolean(note) && !note?.trashed);
   }, [editor, note?.id, note?.trashed]);
 
-  const updateBlockAnchor = useCallback(() => {
-    if (!editor || !paneBodyRef.current || !note || note.trashed) {
-      setBlockMenuOpen(false);
-      setBlockAnchor((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-      return;
-    }
-
-    const blockDom = getBlockDom(editor);
-    if (!blockDom) {
-      setBlockMenuOpen(false);
-      setBlockAnchor((prev) => (prev.visible ? { ...prev, visible: false } : prev));
-      return;
+  const updateBlockAnchorFromDom = useCallback((blockDom: Element | null) => {
+    if (!paneBodyRef.current || !blockDom) {
+      return false;
     }
 
     const container = paneBodyRef.current;
@@ -276,6 +269,41 @@ const EditorPane = ({
       height: blockRect.height,
       visible: true
     });
+
+    return true;
+  }, []);
+
+  const updateBlockAnchor = useCallback(() => {
+    if (!editor || !paneBodyRef.current || !note || note.trashed) {
+      setBlockMenuOpen(false);
+      setBlockAnchor((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    const blockDom = getBlockDom(editor);
+    if (!blockDom) {
+      setBlockMenuOpen(false);
+      setBlockAnchor((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+      return;
+    }
+
+    updateBlockAnchorFromDom(blockDom);
+  }, [editor, note?.id, note?.trashed, updateBlockAnchorFromDom]);
+
+  const handleAddBlock = useCallback(() => {
+    if (!editor || !note || note.trashed) {
+      return;
+    }
+
+    const blockInfo = getBlockInfo(editor);
+    if (!blockInfo) {
+      return;
+    }
+
+    const insertPos = blockInfo.pos + blockInfo.node.nodeSize;
+    editor.commands.insertContentAt(insertPos, { type: 'paragraph' });
+    editor.commands.setTextSelection(insertPos + 1);
+    editor.commands.focus();
   }, [editor, note?.id, note?.trashed]);
 
   const handleBlockContextMenu = useCallback(
@@ -334,6 +362,77 @@ const EditorPane = ({
       window.removeEventListener('resize', handleUpdate);
     };
   }, [editor, updateBlockAnchor, blockMenuOpen]);
+
+  useEffect(() => {
+    if (!editor || !note || note.trashed) {
+      setBlockHandleVisible(false);
+      return;
+    }
+
+    const container = paneBodyRef.current;
+    if (!container) {
+      return;
+    }
+
+    const handlePointerMove = (event: MouseEvent) => {
+      if (blockMenuOpen) {
+        setBlockHandleVisible(true);
+        return;
+      }
+
+      if (!(event.target instanceof Node)) {
+        setBlockHandleVisible(false);
+        return;
+      }
+
+      const target = event.target instanceof Element ? event.target : event.target.parentElement;
+      if (!target) {
+        setBlockHandleVisible(false);
+        return;
+      }
+
+      if (blockMenuRef.current?.contains(target) || blockHandleRef.current?.contains(target)) {
+        setBlockHandleVisible(true);
+        return;
+      }
+
+      if (!target.closest('.editor-content')) {
+        setBlockHandleVisible(false);
+        return;
+      }
+
+      const blockDom = target.closest('li') ?? target.closest(BLOCK_SELECTOR);
+      if (!blockDom) {
+        setBlockHandleVisible(false);
+        return;
+      }
+
+      const blockRect = blockDom.getBoundingClientRect();
+      const gutterMin = blockRect.left - 46;
+      const gutterMax = blockRect.left + 12;
+      if (event.clientX < gutterMin || event.clientX > gutterMax) {
+        setBlockHandleVisible(false);
+        return;
+      }
+
+      updateBlockAnchorFromDom(blockDom);
+      setBlockHandleVisible(true);
+    };
+
+    const handlePointerLeave = () => {
+      if (!blockMenuOpen) {
+        setBlockHandleVisible(false);
+      }
+    };
+
+    container.addEventListener('mousemove', handlePointerMove);
+    container.addEventListener('mouseleave', handlePointerLeave);
+
+    return () => {
+      container.removeEventListener('mousemove', handlePointerMove);
+      container.removeEventListener('mouseleave', handlePointerLeave);
+    };
+  }, [editor, note?.id, note?.trashed, blockMenuOpen, updateBlockAnchorFromDom]);
 
   useEffect(() => {
     if (!blockMenuOpen) {
@@ -774,8 +873,19 @@ const EditorPane = ({
             {!note && 'Choose from the sidebar'}
             {note && note.trashed && 'In Trash · Read-only'}
             {note && !note.trashed && note.archived && 'Archived'}
-            {note && !note.trashed && !note.archived && `Updated ${formatDate(note.updatedAt)}`}
           </div>
+          {note && !note.trashed && (
+            <div className="pane__properties">
+              <div className="pane__property">
+                <span className="pane__property-label">Tags</span>
+                <span className="pane__property-value">Empty</span>
+              </div>
+              <div className="pane__property">
+                <span className="pane__property-label">Last edited</span>
+                <span className="pane__property-value">{formatDate(note.updatedAt)}</span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="pane__actions">
           {note && !isTrashed && (
@@ -824,18 +934,100 @@ const EditorPane = ({
             Select a note from the left and it will appear here.
           </div>
         )}
-        {note && editor && !isTrashed && blockAnchor.visible && (
+        {note && editor && !isTrashed && (
+          <BubbleMenu
+            editor={editor}
+            className="editor-bubble"
+            tippyOptions={{ duration: 150, placement: 'top-start', offset: [0, 8] }}
+            shouldShow={({ editor: bubbleEditor, state }) =>
+              !toolbarDisabled && bubbleEditor.isFocused && !state.selection.empty
+            }
+          >
+            <div className="editor-toolbar__group">
+              <button
+                type="button"
+                className={`editor-toolbar__button ${
+                  editor.isActive('paragraph') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('paragraph')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().setParagraph().run()}
+              >
+                Text
+              </button>
+              {([1, 2, 3] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`editor-toolbar__button ${
+                    editor.isActive('heading', { level }) ? 'is-active' : ''
+                  }`}
+                  aria-pressed={editor.isActive('heading', { level })}
+                  disabled={toolbarDisabled}
+                  onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                >
+                  H{level}
+                </button>
+              ))}
+            </div>
+            <div className="editor-toolbar__group">
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--bold ${
+                  editor.isActive('bold') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('bold')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleBold().run()}
+              >
+                B
+              </button>
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--italic ${
+                  editor.isActive('italic') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('italic')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+              >
+                I
+              </button>
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--strike ${
+                  editor.isActive('strike') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('strike')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleStrike().run()}
+              >
+                S
+              </button>
+            </div>
+          </BubbleMenu>
+        )}
+        {note && editor && !isTrashed && blockAnchor.visible && (blockMenuOpen || blockHandleVisible) && (
           <div
+            ref={blockHandleRef}
             className="block-handle"
             style={{
               top: blockAnchor.top + Math.min(8, blockAnchor.height / 4),
-              left: Math.max(8, blockAnchor.left - 46)
+              left: Math.max(8, blockAnchor.left - 42)
             }}
           >
             <button
-              ref={blockHandleRef}
               type="button"
-              className="block-handle__button"
+              className="block-handle__button block-handle__button--add"
+              aria-label="Add block"
+              onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => event.preventDefault()}
+              onClick={handleAddBlock}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="block-handle__button block-handle__button--menu"
               aria-label="Block actions"
               onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => event.preventDefault()}
               onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => {

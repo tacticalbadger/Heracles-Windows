@@ -404,9 +404,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--pane-bg);
+  background: var(--surface);
   overflow-x: auto;
 }
 
@@ -603,18 +603,18 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 18px 20px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--pane-bg);
+  background: var(--surface);
 }
 
 .pane__title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
 }
 
 .pane__subtitle {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-top: 4px;
 }
@@ -626,7 +626,7 @@ body {
 }
 
 .pane__body {
-  padding: 18px 20px 28px;
+  padding: 16px 18px 28px;
   flex: 1;
   overflow: auto;
   position: relative;
@@ -640,9 +640,11 @@ body {
 .editor-content .ProseMirror {
   outline: none;
   min-height: 260px;
-  line-height: 1.7;
-  font-size: 15px;
-  padding: 4px 2px 6px;
+  line-height: 1.6;
+  font-size: 16px;
+  padding: 8px 4px 40px;
+  margin: 0 auto;
+  max-width: 720px;
 }
 
 .editor-content .ProseMirror > :where(p, h1, h2, h3, h4, blockquote, pre, hr, .code-block, .callout-block, .toggle-block) {
@@ -683,27 +685,27 @@ body {
 }
 
 .editor-content h1 {
-  font-size: 24px;
+  font-size: 28px;
   margin: 0;
   letter-spacing: -0.01em;
 }
 
 .editor-content h2 {
-  font-size: 20px;
+  font-size: 22px;
   margin: 0;
   letter-spacing: -0.01em;
 }
 
 .editor-content h3 {
-  font-size: 17px;
+  font-size: 18px;
   margin: 0;
 }
 
 .editor-content h4 {
-  font-size: 15px;
+  font-size: 14px;
   margin: 0;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
 }
 
 .editor-content p {

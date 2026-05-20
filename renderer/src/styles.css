@@ -1,37 +1,37 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --font-sans: 'Space Grotesk', 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, monospace;
-  --bg: #f6f4f1;
+  --font-sans: 'Source Sans 3', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
+  --bg: #f7f6f3;
   --surface: #ffffff;
-  --pane-bg: #faf8f4;
-  --border: #e1dad0;
-  --text-primary: #1c1b1a;
-  --text-muted: #6f675c;
-  --accent: #2f5c52;
-  --accent-soft: #dbe7e2;
-  --shadow: 0 24px 60px rgba(28, 27, 26, 0.12);
-  --block-hover: rgba(28, 27, 26, 0.05);
-  --block-focus: rgba(28, 27, 26, 0.08);
-  --callout-bg: #f2f6f1;
-  --callout-border: #dae3d8;
+  --pane-bg: #fbfbfa;
+  --border: #e6e5e2;
+  --text-primary: #2f3437;
+  --text-muted: #6b6f73;
+  --accent: #2f80ed;
+  --accent-soft: #e7f0ff;
+  --shadow: 0 1px 2px rgba(15, 15, 15, 0.06), 0 8px 24px rgba(15, 15, 15, 0.08);
+  --block-hover: #f1f1ee;
+  --block-focus: rgba(47, 128, 237, 0.12);
+  --callout-bg: #f4f6f2;
+  --callout-border: #e1e6dd;
 }
 
 :root[data-theme='dark'] {
-  --bg: #0e1116;
-  --surface: #151a21;
-  --pane-bg: #0f141a;
-  --border: #263043;
-  --text-primary: #f5f5f7;
-  --text-muted: #96a1b2;
-  --accent: #5cc8a1;
-  --accent-soft: #1c3b32;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --bg: #191919;
+  --surface: #1f1f1f;
+  --pane-bg: #202020;
+  --border: #2a2a2a;
+  --text-primary: #f1f1f0;
+  --text-muted: #a9a9a9;
+  --accent: #4d9eff;
+  --accent-soft: rgba(77, 158, 255, 0.18);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.4);
   --block-hover: rgba(255, 255, 255, 0.05);
-  --block-focus: rgba(255, 255, 255, 0.08);
-  --callout-bg: rgba(92, 200, 161, 0.08);
-  --callout-border: rgba(92, 200, 161, 0.2);
+  --block-focus: rgba(77, 158, 255, 0.2);
+  --callout-bg: rgba(255, 255, 255, 0.04);
+  --callout-border: rgba(255, 255, 255, 0.08);
 }
 
 * {

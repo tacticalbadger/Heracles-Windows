@@ -1,4 +1,17 @@
 node_modules
+.DS_Store
+
+# build outputs
 dist/
 app/
 App/
+*.app
+*.app/**
+*.asar
+*.dmg
+*.zip
+*.tar.gz
+*.tgz
+
+# logs
+*.log

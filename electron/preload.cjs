@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('heracles', {
     trash: (payload) => ipcRenderer.invoke('notes:trash', payload),
     restore: (payload) => ipcRenderer.invoke('notes:restore', payload),
     remove: (payload) => ipcRenderer.invoke('notes:delete', payload),
-    emptyTrash: () => ipcRenderer.invoke('notes:emptyTrash')
+    emptyTrash: () => ipcRenderer.invoke('notes:emptyTrash'),
+    setParent: (payload) => ipcRenderer.invoke('notes:setParent', payload),
+    setFavorited: (payload) => ipcRenderer.invoke('notes:setFavorited', payload),
+    reorder: (payload) => ipcRenderer.invoke('notes:reorder', payload),
+    openWindow: (payload) => ipcRenderer.invoke('notes:openWindow', payload)
   }
 });

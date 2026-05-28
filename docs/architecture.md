@@ -46,9 +46,20 @@ Example block types:
 - Code blocks embed CodeMirror 6 for syntax highlighting and editing.
 
 ## Multi-Pane Layout
-- Pane tree layout stored in app state (split direction + sizes).
-- Each pane references a document ID or a query view.
-- Drag to split and resize, similar to Obsidian.
+- Pane tree (`renderer/src/workspace/paneTreeOps.ts`) stored as a recursive
+  union of `LeafPane` and `SplitPane`. Each split has direction, children, and
+  ratios.
+- Each leaf has its own ordered tab list of note IDs and an active tab.
+- Splits are unbounded — any leaf may split horizontally or vertically.
+- Closing a leaf collapses parent splits with only one remaining child.
+- Tab interactions:
+  - Click tab → activate
+  - Right-click tab → split right / split down / close
+  - ⌘/Ctrl+click sidebar item → open in new split
+- Resize handle between siblings updates ratios in place (Obsidian-style).
+- The component layer is split into `paneTreeOps.ts` (pure tree state),
+  `PaneTree.tsx` (recursive renderer), `EditorPane.tsx` (per-leaf editor +
+  tab strip), and `Sidebar.tsx` (Notion-style page list).
 
 ## Offline-First Approach
 - All data stored in local SQLite.

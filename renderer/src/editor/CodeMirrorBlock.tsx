@@ -2,6 +2,14 @@ import { Node, mergeAttributes, type CommandProps } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import CodeMirrorNodeView from './CodeMirrorNodeView';
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    codeMirrorBlock: {
+      insertCodeMirrorBlock: () => ReturnType;
+    };
+  }
+}
+
 export const CodeMirrorBlock = Node.create({
   name: 'codeMirrorBlock',
   group: 'block',

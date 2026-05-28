@@ -10,13 +10,17 @@ const {
   trashNote,
   restoreNote,
   deleteNote,
-  emptyTrash
+  emptyTrash,
+  setNoteParent,
+  setNoteFavorited,
+  reorderNote
 } = require('./db.cjs');
 
 let mainWindow;
+const extraWindows = new Set();
 
-const createWindow = () => {
-  mainWindow = new BrowserWindow({
+const createWindow = ({ initialNoteId } = {}) => {
+  const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
@@ -29,16 +33,30 @@ const createWindow = () => {
     }
   });
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  const hashSuffix = initialNoteId ? `#note=${encodeURIComponent(initialNoteId)}` : '';
 
   if (!app.isPackaged) {
-    mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    win.loadURL(`http://localhost:5173/${hashSuffix}`);
+    win.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/renderer/index.html'));
+    win.loadFile(path.join(__dirname, '../dist/renderer/index.html'), {
+      hash: hashSuffix.replace(/^#/, '')
+    });
   }
+
+  if (!mainWindow) {
+    mainWindow = win;
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+    });
+  } else {
+    extraWindows.add(win);
+    win.on('closed', () => {
+      extraWindows.delete(win);
+    });
+  }
+
+  return win;
 };
 
 app.whenReady().then(() => {
@@ -53,6 +71,13 @@ app.whenReady().then(() => {
   ipcMain.handle('notes:restore', (_event, payload) => restoreNote(payload));
   ipcMain.handle('notes:delete', (_event, payload) => deleteNote(payload));
   ipcMain.handle('notes:emptyTrash', () => emptyTrash());
+  ipcMain.handle('notes:setParent', (_event, payload) => setNoteParent(payload));
+  ipcMain.handle('notes:setFavorited', (_event, payload) => setNoteFavorited(payload));
+  ipcMain.handle('notes:reorder', (_event, payload) => reorderNote(payload));
+  ipcMain.handle('notes:openWindow', (_event, payload) => {
+    createWindow({ initialNoteId: payload?.id });
+    return { success: true };
+  });
 
   createWindow();
 

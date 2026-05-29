@@ -346,9 +346,10 @@ const App = () => {
     );
   }, []);
 
-  const removeNoteEverywhere = useCallback(
+  // Close all tabs for a note in every pane, collapsing emptied panes.
+  // Does not modify the notes list.
+  const closeNoteTabsEverywhere = useCallback(
     (noteId: string) => {
-      setNotes((current) => current.filter((note) => note.id !== noteId));
       setPaneTree((current) => {
         const next = removeNoteFromTree(current, noteId);
         const safe = ensureLeaf(next);
@@ -357,6 +358,14 @@ const App = () => {
       });
     },
     [ensureActiveLeafExists]
+  );
+
+  const removeNoteEverywhere = useCallback(
+    (noteId: string) => {
+      setNotes((current) => current.filter((note) => note.id !== noteId));
+      closeNoteTabsEverywhere(noteId);
+    },
+    [closeNoteTabsEverywhere]
   );
 
   const handleNewNote = useCallback(async () => {
@@ -424,6 +433,8 @@ const App = () => {
       const updated = await window.heracles.notes.trash({ id: note.id });
       if (updated) {
         replaceNote(updated);
+        // Close the trashed note's tab(s) and collapse any pane that becomes empty.
+        closeNoteTabsEverywhere(note.id);
         pushToast(
           'Moved to trash',
           'info',
@@ -439,7 +450,7 @@ const App = () => {
         );
       }
     },
-    [pushToast, replaceNote]
+    [closeNoteTabsEverywhere, pushToast, replaceNote]
   );
 
   const handleRestoreNote = useCallback(
@@ -760,6 +771,7 @@ const App = () => {
             onCloseLeaf={handleCloseLeaf}
             onMoveTab={handleMoveTab}
             onMoveTabToSplit={handleMoveTabToSplit}
+            onOpenNoteInLeaf={(leafId, noteId) => openNoteInLeaf(noteId, leafId)}
             onUpdateNoteIcon={handleUpdateNoteIcon}
             onSetSplitRatios={handleSetSplitRatios}
             onArchiveNote={handleArchiveNote}

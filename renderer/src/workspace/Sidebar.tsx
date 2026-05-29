@@ -354,11 +354,14 @@ export const Sidebar = ({
   };
 
   const handleItemDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    // Ignore non-page drags (e.g. editor tabs being dragged across the window).
+    if (!event.dataTransfer.types.includes(PAGE_DRAG_MIME)) return;
     if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+    // Capture the leaving note id synchronously — currentTarget is nulled
+    // by the time React runs the setState updater.
+    const leavingNoteId = (event.currentTarget as HTMLElement).dataset.noteId;
     setDragOver((current) =>
-      current && current.noteId === (event.currentTarget as HTMLElement).dataset.noteId
-        ? null
-        : current
+      current && current.noteId === leavingNoteId ? null : current
     );
   };
 

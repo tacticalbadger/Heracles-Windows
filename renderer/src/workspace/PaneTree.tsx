@@ -25,6 +25,7 @@ type Callbacks = {
     destLeafId: string,
     target: SplitTarget
   ) => void;
+  onOpenNoteInLeaf: (leafId: string, noteId: string) => void;
   onUpdateNoteIcon: (noteId: string, icon: string | null) => void;
   onSetSplitRatios: (splitId: string, ratios: number[]) => void;
   onArchiveNote: (note: Note) => void;
@@ -131,6 +132,7 @@ export const PaneTree = ({ node, ...callbacks }: PaneTreeProps) => {
         onCloseLeaf={callbacks.onCloseLeaf}
         onMoveTab={callbacks.onMoveTab}
         onMoveTabToSplit={callbacks.onMoveTabToSplit}
+        onOpenNoteInLeaf={callbacks.onOpenNoteInLeaf}
         onUpdateNoteIcon={callbacks.onUpdateNoteIcon}
         onArchiveNote={callbacks.onArchiveNote}
         onTrashNote={callbacks.onTrashNote}

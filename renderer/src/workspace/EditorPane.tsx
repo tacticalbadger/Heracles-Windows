@@ -22,6 +22,7 @@ import type { Note } from '../types/notes';
 import type { SplitTarget } from './paneTreeOps';
 import { IconPicker } from './IconPicker';
 import { PageMenu } from './PageMenu';
+import { PAGE_DRAG_MIME } from './Sidebar';
 
 export type ToastTone = 'success' | 'info' | 'danger';
 
@@ -71,6 +72,7 @@ type EditorPaneProps = {
     destLeafId: string,
     target: SplitTarget
   ) => void;
+  onOpenNoteInLeaf: (leafId: string, noteId: string) => void;
   onUpdateNoteIcon?: (noteId: string, icon: string | null) => void;
   onArchiveNote: (note: Note) => void;
   onTrashNote: (note: Note) => void;
@@ -171,6 +173,7 @@ export const EditorPane = ({
   onCloseLeaf,
   onMoveTab,
   onMoveTabToSplit,
+  onOpenNoteInLeaf,
   onUpdateNoteIcon,
   onArchiveNote,
   onTrashNote,
@@ -936,8 +939,15 @@ export const EditorPane = ({
         className="leaf__body"
         ref={paneBodyRef}
         onContextMenu={handleBlockContextMenu}
+        onDragEnter={(event) => {
+          const types = event.dataTransfer.types;
+          if (!types.includes(TAB_DRAG_MIME) && !types.includes(PAGE_DRAG_MIME)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+        }}
         onDragOver={(event) => {
-          if (!event.dataTransfer.types.includes(TAB_DRAG_MIME)) return;
+          const types = event.dataTransfer.types;
+          if (!types.includes(TAB_DRAG_MIME) && !types.includes(PAGE_DRAG_MIME)) return;
           event.preventDefault();
           event.dataTransfer.dropEffect = 'move';
           const rect = event.currentTarget.getBoundingClientRect();
@@ -965,29 +975,135 @@ export const EditorPane = ({
           if (zone !== dropZone) setDropZone(zone);
         }}
         onDragLeave={(event) => {
-          if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+          // Use geometry rather than relatedTarget — relatedTarget is unreliable
+          // during HTML5 drags (esp. when crossing child boundaries inside the body).
+          const rect = event.currentTarget.getBoundingClientRect();
+          const stillInside =
+            event.clientX >= rect.left &&
+            event.clientX < rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY < rect.bottom;
+          if (stillInside) return;
           setDropZone(null);
         }}
         onDrop={(event) => {
-          const payload = event.dataTransfer.getData(TAB_DRAG_MIME);
-          if (!payload) return;
+          const types = event.dataTransfer.types;
+          const isTabDrag = types.includes(TAB_DRAG_MIME);
+          const isPageDrag = types.includes(PAGE_DRAG_MIME);
+          if (!isTabDrag && !isPageDrag) return;
           event.preventDefault();
           event.stopPropagation();
           const zone = dropZone ?? 'center';
           setDropZone(null);
-          const [sourceLeafId, noteId] = payload.split('|');
-          if (!sourceLeafId || !noteId) return;
-          if (zone === 'center') {
-            // Same as dropping on tabs strip end
-            onMoveTab(sourceLeafId, noteId, leafId, Number.MAX_SAFE_INTEGER);
+
+          if (isTabDrag) {
+            const payload = event.dataTransfer.getData(TAB_DRAG_MIME);
+            const [sourceLeafId, noteId] = payload.split('|');
+            if (!sourceLeafId || !noteId) return;
+            if (zone === 'center') {
+              onMoveTab(sourceLeafId, noteId, leafId, Number.MAX_SAFE_INTEGER);
+              return;
+            }
+            onMoveTabToSplit(sourceLeafId, noteId, leafId, zone);
             return;
           }
-          onMoveTabToSplit(sourceLeafId, noteId, leafId, zone);
+
+          // Page drag from the sidebar.
+          const noteId = event.dataTransfer.getData(PAGE_DRAG_MIME);
+          if (!noteId) return;
+          if (zone === 'center') {
+            onOpenNoteInLeaf(leafId, noteId);
+            return;
+          }
+          onSplitLeaf(leafId, zone, noteId);
         }}
       >
         {dropZone && (
           <div className={`leaf__drop-overlay leaf__drop-overlay--${dropZone}`} aria-hidden />
         )}
+        {/* Stable, dedicated host for the BubbleMenu. @tiptap/extension-bubble-menu
+            calls element.remove() on its child <div>, detaching it from React's tree.
+            Isolating it inside this empty host prevents that detachment from breaking
+            sibling reconciliation in leaf__body. */}
+        <div className="bubble-menu-host">
+          {editor && (
+            <BubbleMenu
+              editor={editor}
+              className="editor-bubble"
+              tippyOptions={{
+                duration: 150,
+                placement: 'top-start',
+                offset: [0, 8]
+              }}
+              shouldShow={({ editor: bubbleEditor, state }) =>
+                Boolean(note) && !isTrashed && !toolbarDisabled && bubbleEditor.isFocused && !state.selection.empty
+              }
+            >
+            <div className="editor-toolbar__group">
+              <button
+                type="button"
+                className={`editor-toolbar__button ${
+                  editor.isActive('paragraph') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('paragraph')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().setParagraph().run()}
+              >
+                Text
+              </button>
+              {([1, 2, 3] as const).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`editor-toolbar__button ${
+                    editor.isActive('heading', { level }) ? 'is-active' : ''
+                  }`}
+                  aria-pressed={editor.isActive('heading', { level })}
+                  disabled={toolbarDisabled}
+                  onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+                >
+                  H{level}
+                </button>
+              ))}
+            </div>
+            <div className="editor-toolbar__group">
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--bold ${
+                  editor.isActive('bold') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('bold')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleBold().run()}
+              >
+                B
+              </button>
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--italic ${
+                  editor.isActive('italic') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('italic')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+              >
+                I
+              </button>
+              <button
+                type="button"
+                className={`editor-toolbar__button editor-toolbar__button--strike ${
+                  editor.isActive('strike') ? 'is-active' : ''
+                }`}
+                aria-pressed={editor.isActive('strike')}
+                disabled={toolbarDisabled}
+                onClick={() => editor.chain().focus().toggleStrike().run()}
+              >
+                S
+              </button>
+            </div>
+          </BubbleMenu>
+          )}
+        </div>
         {!note && (
           <div className="leaf__empty">
             Open a note from the sidebar, or right-click a tab to split this pane.
@@ -1079,79 +1195,6 @@ export const EditorPane = ({
                 {!note.trashed && !note.archived && `Last edited ${formatDate(note.updatedAt)}`}
               </div>
             </div>
-            {editor && !isTrashed && (
-              <BubbleMenu
-                editor={editor}
-                className="editor-bubble"
-                tippyOptions={{ duration: 150, placement: 'top-start', offset: [0, 8] }}
-                shouldShow={({ editor: bubbleEditor, state }) =>
-                  !toolbarDisabled && bubbleEditor.isFocused && !state.selection.empty
-                }
-              >
-                <div className="editor-toolbar__group">
-                  <button
-                    type="button"
-                    className={`editor-toolbar__button ${
-                      editor.isActive('paragraph') ? 'is-active' : ''
-                    }`}
-                    aria-pressed={editor.isActive('paragraph')}
-                    disabled={toolbarDisabled}
-                    onClick={() => editor.chain().focus().setParagraph().run()}
-                  >
-                    Text
-                  </button>
-                  {([1, 2, 3] as const).map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      className={`editor-toolbar__button ${
-                        editor.isActive('heading', { level }) ? 'is-active' : ''
-                      }`}
-                      aria-pressed={editor.isActive('heading', { level })}
-                      disabled={toolbarDisabled}
-                      onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-                    >
-                      H{level}
-                    </button>
-                  ))}
-                </div>
-                <div className="editor-toolbar__group">
-                  <button
-                    type="button"
-                    className={`editor-toolbar__button editor-toolbar__button--bold ${
-                      editor.isActive('bold') ? 'is-active' : ''
-                    }`}
-                    aria-pressed={editor.isActive('bold')}
-                    disabled={toolbarDisabled}
-                    onClick={() => editor.chain().focus().toggleBold().run()}
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    className={`editor-toolbar__button editor-toolbar__button--italic ${
-                      editor.isActive('italic') ? 'is-active' : ''
-                    }`}
-                    aria-pressed={editor.isActive('italic')}
-                    disabled={toolbarDisabled}
-                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                  >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    className={`editor-toolbar__button editor-toolbar__button--strike ${
-                      editor.isActive('strike') ? 'is-active' : ''
-                    }`}
-                    aria-pressed={editor.isActive('strike')}
-                    disabled={toolbarDisabled}
-                    onClick={() => editor.chain().focus().toggleStrike().run()}
-                  >
-                    S
-                  </button>
-                </div>
-              </BubbleMenu>
-            )}
             {editor &&
               !isTrashed &&
               blockAnchor.visible &&

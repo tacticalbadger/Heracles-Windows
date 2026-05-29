@@ -245,6 +245,9 @@ export const removeNoteFromTree = (root: PaneNode, noteId: string): PaneNode | n
   if (root.type === 'leaf') {
     if (!root.tabs.includes(noteId)) return root;
     const tabs = root.tabs.filter((id) => id !== noteId);
+    // If this leaf had only the removed note, drop the whole leaf so the
+    // parent split collapses and remaining panes resize to fill the space.
+    if (tabs.length === 0) return null;
     let activeTabId = root.activeTabId;
     if (activeTabId === noteId) {
       const removedIndex = root.tabs.indexOf(noteId);

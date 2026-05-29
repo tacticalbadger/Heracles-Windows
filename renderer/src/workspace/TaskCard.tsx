@@ -42,6 +42,7 @@ type TaskCardProps = {
   readOnly?: boolean;
   onOpen: () => void;
   onToggleComplete: (completed: boolean) => void;
+  onDelete: () => void;
 };
 
 export const TaskCard = ({
@@ -50,7 +51,8 @@ export const TaskCard = ({
   completedSubtaskCount,
   readOnly = false,
   onOpen,
-  onToggleComplete
+  onToggleComplete,
+  onDelete
 }: TaskCardProps) => {
   const due = formatDueDate(task.dueDate);
   const overdue = isOverdue(task.dueDate, task.completed);
@@ -59,6 +61,14 @@ export const TaskCard = ({
     event.stopPropagation();
     if (readOnly) return;
     onToggleComplete(!task.completed);
+  };
+
+  const handleDeleteClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (readOnly) return;
+    if (window.confirm('Delete this task and all its subtasks?')) {
+      onDelete();
+    }
   };
 
   return (
@@ -86,6 +96,17 @@ export const TaskCard = ({
           {task.completed ? '✓' : ''}
         </span>
       </button>
+      {!readOnly && (
+        <button
+          type="button"
+          className="task-card__delete"
+          aria-label="Delete task"
+          title="Delete task"
+          onClick={handleDeleteClick}
+        >
+          <span aria-hidden>×</span>
+        </button>
+      )}
       <div className="task-card__body">
         <div className="task-card__title">{task.title || 'Untitled task'}</div>
         {task.description && (

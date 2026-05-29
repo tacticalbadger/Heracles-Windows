@@ -488,6 +488,7 @@ export const KanbanBoard = ({
                         onToggleComplete={(completed: boolean) =>
                           handleToggleTask(task.id, completed)
                         }
+                        onDelete={() => handleDeleteTask(task.id)}
                       />
                     </div>
                   );

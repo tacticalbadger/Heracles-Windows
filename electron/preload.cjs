@@ -16,5 +16,22 @@ contextBridge.exposeInMainWorld('heracles', {
     setFavorited: (payload) => ipcRenderer.invoke('notes:setFavorited', payload),
     reorder: (payload) => ipcRenderer.invoke('notes:reorder', payload),
     openWindow: (payload) => ipcRenderer.invoke('notes:openWindow', payload)
+  },
+  tasks: {
+    listColumns: (payload) => ipcRenderer.invoke('tasks:listColumns', payload),
+    createColumn: (payload) => ipcRenderer.invoke('tasks:createColumn', payload),
+    updateColumn: (payload) => ipcRenderer.invoke('tasks:updateColumn', payload),
+    deleteColumn: (payload) => ipcRenderer.invoke('tasks:deleteColumn', payload),
+    reorderColumns: (payload) => ipcRenderer.invoke('tasks:reorderColumns', payload),
+    list: (payload) => ipcRenderer.invoke('tasks:list', payload),
+    create: (payload) => ipcRenderer.invoke('tasks:create', payload),
+    update: (payload) => ipcRenderer.invoke('tasks:update', payload),
+    toggleComplete: (payload) => ipcRenderer.invoke('tasks:toggleComplete', payload),
+    move: (payload) => ipcRenderer.invoke('tasks:move', payload),
+    remove: (payload) => ipcRenderer.invoke('tasks:delete', payload),
+    listComments: (payload) => ipcRenderer.invoke('tasks:listComments', payload),
+    createComment: (payload) => ipcRenderer.invoke('tasks:createComment', payload),
+    updateComment: (payload) => ipcRenderer.invoke('tasks:updateComment', payload),
+    deleteComment: (payload) => ipcRenderer.invoke('tasks:deleteComment', payload)
   }
 });

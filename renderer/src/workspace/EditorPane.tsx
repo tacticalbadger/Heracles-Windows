@@ -23,6 +23,7 @@ import type { SplitTarget } from './paneTreeOps';
 import { IconPicker } from './IconPicker';
 import { PageMenu } from './PageMenu';
 import { PAGE_DRAG_MIME } from './Sidebar';
+import { KanbanBoard } from './KanbanBoard';
 
 export type ToastTone = 'success' | 'info' | 'danger';
 
@@ -1036,7 +1037,12 @@ export const EditorPane = ({
                 offset: [0, 8]
               }}
               shouldShow={({ editor: bubbleEditor, state }) =>
-                Boolean(note) && !isTrashed && !toolbarDisabled && bubbleEditor.isFocused && !state.selection.empty
+                Boolean(note) &&
+                note?.kind !== 'todolist' &&
+                !isTrashed &&
+                !toolbarDisabled &&
+                bubbleEditor.isFocused &&
+                !state.selection.empty
               }
             >
             <div className="editor-toolbar__group">
@@ -1195,7 +1201,8 @@ export const EditorPane = ({
                 {!note.trashed && !note.archived && `Last edited ${formatDate(note.updatedAt)}`}
               </div>
             </div>
-            {editor &&
+            {note.kind !== 'todolist' &&
+              editor &&
               !isTrashed &&
               blockAnchor.visible &&
               (blockMenuOpen || blockHandleVisible) && (
@@ -1242,7 +1249,7 @@ export const EditorPane = ({
                   </button>
                 </div>
               )}
-            {editor && !isTrashed && blockAnchor.visible && blockMenuOpen && (
+            {note.kind !== 'todolist' && editor && !isTrashed && blockAnchor.visible && blockMenuOpen && (
               <div
                 ref={blockMenuRef}
                 className="block-menu"
@@ -1308,7 +1315,16 @@ export const EditorPane = ({
                 )}
               </div>
             )}
-            <EditorContent editor={editor} />
+            {note.kind === 'todolist' ? (
+              <KanbanBoard
+                noteId={note.id}
+                todoListTitle={note.title}
+                readOnly={isTrashed}
+                onNotify={onNotify}
+              />
+            ) : (
+              <EditorContent editor={editor} />
+            )}
           </div>
         )}
       </div>

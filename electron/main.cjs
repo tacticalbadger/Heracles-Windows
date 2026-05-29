@@ -13,7 +13,23 @@ const {
   emptyTrash,
   setNoteParent,
   setNoteFavorited,
-  reorderNote
+  reorderNote,
+  listColumns,
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  reorderColumns,
+  listTasks,
+  createTask,
+  updateTask,
+  toggleTaskComplete,
+  moveTask,
+  deleteTask,
+  listComments,
+  createComment,
+  updateComment,
+  deleteComment,
+  seedDefaultColumns
 } = require('./db.cjs');
 
 let mainWindow;
@@ -64,7 +80,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:list', () => listNotes());
   ipcMain.handle('notes:get', (_event, id) => getNote(id));
-  ipcMain.handle('notes:create', (_event, payload) => createNote(payload));
+  ipcMain.handle('notes:create', (_event, payload) => {
+    const created = createNote(payload);
+    // Seed default kanban columns for fresh todo lists.
+    if (created && created.kind === 'todolist') {
+      seedDefaultColumns(created.id);
+    }
+    return created;
+  });
   ipcMain.handle('notes:update', (_event, payload) => updateNote(payload));
   ipcMain.handle('notes:archive', (_event, payload) => archiveNote(payload));
   ipcMain.handle('notes:trash', (_event, payload) => trashNote(payload));
@@ -78,6 +101,23 @@ app.whenReady().then(() => {
     createWindow({ initialNoteId: payload?.id });
     return { success: true };
   });
+
+  // ── Todo lists / kanban ────────────────────────────────────────────────
+  ipcMain.handle('tasks:listColumns', (_event, payload) => listColumns(payload?.todoListId));
+  ipcMain.handle('tasks:createColumn', (_event, payload) => createColumn(payload));
+  ipcMain.handle('tasks:updateColumn', (_event, payload) => updateColumn(payload));
+  ipcMain.handle('tasks:deleteColumn', (_event, payload) => deleteColumn(payload));
+  ipcMain.handle('tasks:reorderColumns', (_event, payload) => reorderColumns(payload));
+  ipcMain.handle('tasks:list', (_event, payload) => listTasks(payload?.todoListId));
+  ipcMain.handle('tasks:create', (_event, payload) => createTask(payload));
+  ipcMain.handle('tasks:update', (_event, payload) => updateTask(payload));
+  ipcMain.handle('tasks:toggleComplete', (_event, payload) => toggleTaskComplete(payload));
+  ipcMain.handle('tasks:move', (_event, payload) => moveTask(payload));
+  ipcMain.handle('tasks:delete', (_event, payload) => deleteTask(payload));
+  ipcMain.handle('tasks:listComments', (_event, payload) => listComments(payload?.taskId));
+  ipcMain.handle('tasks:createComment', (_event, payload) => createComment(payload));
+  ipcMain.handle('tasks:updateComment', (_event, payload) => updateComment(payload));
+  ipcMain.handle('tasks:deleteComment', (_event, payload) => deleteComment(payload));
 
   createWindow();
 

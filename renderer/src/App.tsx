@@ -668,6 +668,36 @@ const App = () => {
     [pushToast]
   );
 
+  const handleCreateTodoList = useCallback(
+    async (parentId: string | null) => {
+      if (!window.heracles?.notes) return;
+      const created = await window.heracles.notes.create({
+        title: 'New todo list',
+        kind: 'todolist',
+        parentId
+      });
+      setNotes((current) => sortNotes([created, ...current]));
+      openNoteInLeaf(created.id);
+      pushToast('Todo list created', 'success');
+    },
+    [openNoteInLeaf, pushToast]
+  );
+
+  const handleAddChildTodoList = useCallback(
+    async (parent: Note) => {
+      if (!window.heracles?.notes) return;
+      const created = await window.heracles.notes.create({
+        title: 'New todo list',
+        kind: 'todolist',
+        parentId: parent.id
+      });
+      setNotes((current) => sortNotes([created, ...current]));
+      openNoteInLeaf(created.id);
+      pushToast(`Todo list added inside ${parent.title || 'Untitled'}`, 'success');
+    },
+    [openNoteInLeaf, pushToast]
+  );
+
   const handleRenameSectionLabel = useCallback((section: Section, label: string) => {
     setSectionLabels((current) => {
       const next = { ...current, [section]: label };
@@ -739,6 +769,8 @@ const App = () => {
         onMoveTo={handleRequestMoveTo}
         onMovePage={handleMovePage}
         onCreateSection={handleCreateSection}
+        onCreateTodoList={handleCreateTodoList}
+        onAddChildTodoList={handleAddChildTodoList}
         sectionSort={sectionSort}
         onChangeSectionSort={handleChangeSectionSort}
         sectionLabels={sectionLabels}

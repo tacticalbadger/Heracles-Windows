@@ -20,7 +20,14 @@ const CodeMirrorNodeView = ({ node, updateAttributes }: NodeViewProps) => {
         '.cm-content': {
           fontFamily: 'var(--font-mono)',
           fontSize: '13px',
-          lineHeight: '1.6'
+          lineHeight: '1.6',
+          caretColor: 'var(--text-primary)'
+        },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeftColor: 'var(--text-primary)'
+        },
+        '&.cm-focused .cm-cursor': {
+          borderLeftColor: 'var(--text-primary)'
         },
         '.cm-gutters': {
           backgroundColor: 'var(--pane-bg)',
@@ -88,8 +95,29 @@ const CodeMirrorNodeView = ({ node, updateAttributes }: NodeViewProps) => {
     }
   }, [node.attrs.code]);
 
+  const handleWrapperMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    // If the click already landed inside CodeMirror's own content area, let
+    // CodeMirror handle it natively (cursor placement, selection, etc.).
+    if (target && view.contentDOM.contains(target)) {
+      return;
+    }
+
+    // Otherwise the click landed on the header, padding, or gutter — forward
+    // focus to CodeMirror and put the caret at the end of the document.
+    event.preventDefault();
+    const end = view.state.doc.length;
+    view.focus();
+    view.dispatch({ selection: { anchor: end, head: end } });
+  };
+
   return (
-    <NodeViewWrapper className="code-block">
+    <NodeViewWrapper className="code-block" onMouseDown={handleWrapperMouseDown}>
       <div className="code-block__header">Code block</div>
       <div ref={hostRef} className="code-block__editor" />
     </NodeViewWrapper>

@@ -24,6 +24,8 @@ type SidebarProps = {
   onSelectNote: (noteId: string, openInNewPane?: boolean) => void;
   onCreateNote: () => void;
   onCreateSection: (parentId: string | null) => void;
+  onCreateTodoList: (parentId: string | null) => void;
+  onAddChildTodoList: (parentNote: Note) => void;
   onOpenSwitcher: () => void;
   onEmptyTrash: () => void;
   onTheme: () => void;
@@ -89,6 +91,8 @@ export const Sidebar = ({
   onSelectNote,
   onCreateNote,
   onCreateSection,
+  onCreateTodoList,
+  onAddChildTodoList,
   onOpenSwitcher,
   onEmptyTrash,
   onTheme,
@@ -483,7 +487,8 @@ export const Sidebar = ({
             {hasChildren || isSection ? '›' : ''}
           </button>
           <span className="sidebar__item-icon" aria-hidden>
-            {note.icon || (isSection ? '◈' : '▦')}
+            {note.icon ||
+              (isSection ? '◈' : note.kind === 'todolist' ? '☰' : '▦')}
           </span>
           {isRenaming ? (
             <input
@@ -702,6 +707,14 @@ export const Sidebar = ({
         <button
           type="button"
           className="sidebar__row"
+          onClick={() => onCreateTodoList(null)}
+        >
+          <span className="sidebar__row-icon">☰</span>
+          <span className="sidebar__row-label">New todo list</span>
+        </button>
+        <button
+          type="button"
+          className="sidebar__row"
           onClick={() => onCreateSection(null)}
         >
           <span className="sidebar__row-icon">◈</span>
@@ -841,6 +854,7 @@ export const Sidebar = ({
           onToggleFavorite={onToggleFavorite}
           onMoveTo={onMoveTo}
           onAddChildPage={onAddChildPage}
+          onAddChildTodoList={onAddChildTodoList}
         />
       )}
 
@@ -863,6 +877,16 @@ export const Sidebar = ({
             setSectionMenu(null);
             beginSectionRename(section);
           }}
+          onCreateNote={
+            sectionMenu.section === 'private' || sectionMenu.section === 'favorites'
+              ? onCreateNote
+              : undefined
+          }
+          onCreateTodoList={
+            sectionMenu.section === 'private' || sectionMenu.section === 'favorites'
+              ? () => onCreateTodoList(null)
+              : undefined
+          }
         />
       )}
     </aside>

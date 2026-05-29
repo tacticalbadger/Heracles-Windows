@@ -18,6 +18,8 @@ type SectionMenuProps = {
   onClose: () => void;
   allowRename?: boolean;
   onRename?: () => void;
+  onCreateNote?: () => void;
+  onCreateTodoList?: () => void;
 };
 
 export const SectionMenu = ({
@@ -28,7 +30,9 @@ export const SectionMenu = ({
   onHide,
   onClose,
   allowRename = false,
-  onRename
+  onRename,
+  onCreateNote,
+  onCreateTodoList
 }: SectionMenuProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: x, top: y });
@@ -77,6 +81,38 @@ export const SectionMenu = ({
       style={{ left: position.left, top: position.top, right: 'auto' }}
       onClick={(event) => event.stopPropagation()}
     >
+      {(onCreateNote || onCreateTodoList) && (
+        <>
+          <div className="page-menu__title">Add</div>
+          {onCreateNote && (
+            <button
+              type="button"
+              className="page-menu__item"
+              onClick={run(onCreateNote)}
+              role="menuitem"
+            >
+              <span className="page-menu__icon" aria-hidden>
+                ＋
+              </span>
+              <span className="page-menu__label">New page</span>
+            </button>
+          )}
+          {onCreateTodoList && (
+            <button
+              type="button"
+              className="page-menu__item"
+              onClick={run(onCreateTodoList)}
+              role="menuitem"
+            >
+              <span className="page-menu__icon" aria-hidden>
+                ☰
+              </span>
+              <span className="page-menu__label">New todo list</span>
+            </button>
+          )}
+          <div className="page-menu__divider" />
+        </>
+      )}
       <div className="page-menu__title">Sort by</div>
       {SORT_OPTIONS.map((option) => (
         <button

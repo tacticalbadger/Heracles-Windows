@@ -61,6 +61,24 @@ Example block types:
   `PaneTree.tsx` (recursive renderer), `EditorPane.tsx` (per-leaf editor +
   tab strip), and `Sidebar.tsx` (Notion-style page list).
 
+## Tasks / Kanban (implemented)
+- A page can be rendered as a Kanban board (`renderer/src/workspace/KanbanBoard.tsx`).
+- Tables: `task_columns`, `tasks` (self-referential via `parent_task_id` for
+  unlimited subtask nesting), and `task_comments`.
+- Cards (`TaskCard.tsx`) show priority, due date, labels, location, and a
+  completed/total subtask roll-up.
+- `TaskDetailModal.tsx` edits a task's fields, comments, and subtasks, and lets
+  you drill into any subtask.
+- A single IPC call, `tasks.move({ id, columnId, parentTaskId, beforeId })`,
+  covers every move: reorder within a column/parent, move between columns,
+  promote a subtask to a top-level card, or reparent it under another task.
+- Drag-and-drop MIME types: `application/x-heracles-task` (cards on the board)
+  and `application/x-heracles-subtask` (subtasks within the detail modal).
+- Because the detail modal overlays the board, subtasks are relocated through a
+  `⤴` "move to…" menu rather than by dragging onto a column. Candidate targets
+  exclude the subtask itself, its descendants, and its current parent to prevent
+  cycles.
+
 ## Offline-First Approach
 - All data stored in local SQLite.
 - Sync layer added later (separate module) to avoid early complexity.

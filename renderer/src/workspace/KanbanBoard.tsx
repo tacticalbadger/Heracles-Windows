@@ -13,6 +13,7 @@ import { TaskCard } from './TaskCard';
 import { TaskDetailModal } from './TaskDetailModal';
 
 const TASK_DRAG_MIME = 'application/x-heracles-task';
+const SUBTASK_DRAG_MIME = 'application/x-heracles-subtask';
 
 type DropPos = 'before' | 'after' | 'inside-column';
 type DragOver = { columnId: string; pos: DropPos; targetTaskId?: string } | null;
@@ -323,7 +324,7 @@ export const KanbanBoard = ({
 
   const handleColumnDragOver = useCallback(
     (column: TaskColumn, event: ReactDragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes(TASK_DRAG_MIME)) return;
+      if (!event.dataTransfer.types.includes(TASK_DRAG_MIME) && !event.dataTransfer.types.includes(SUBTASK_DRAG_MIME)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       setDragOver((prev) => {
@@ -346,10 +347,14 @@ export const KanbanBoard = ({
 
   const handleColumnDrop = useCallback(
     async (column: TaskColumn, event: ReactDragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes(TASK_DRAG_MIME)) return;
+      const isTask = event.dataTransfer.types.includes(TASK_DRAG_MIME);
+      const isSubtask = event.dataTransfer.types.includes(SUBTASK_DRAG_MIME);
+      if (!isTask && !isSubtask) return;
       event.preventDefault();
       event.stopPropagation();
-      const sourceId = event.dataTransfer.getData(TASK_DRAG_MIME);
+      const sourceId = isTask
+        ? event.dataTransfer.getData(TASK_DRAG_MIME)
+        : event.dataTransfer.getData(SUBTASK_DRAG_MIME);
       const drop = dragOver;
       setDragOver(null);
       if (!sourceId) return;
@@ -367,6 +372,7 @@ export const KanbanBoard = ({
                 : null;
         }
       }
+      // Dropping a subtask onto a column "promotes" it to a root task
       const updated = await window.heracles.tasks.move({
         id: sourceId,
         columnId: column.id,
@@ -379,6 +385,42 @@ export const KanbanBoard = ({
       }
     },
     [dragOver, refreshTasks, tasksByColumn]
+  );
+
+  const handleMoveSubtask = useCallback(
+    async (taskId: string, parentTaskId: string, beforeId: string | null) => {
+      if (!window.heracles?.tasks) return;
+      const updated = await window.heracles.tasks.move({
+        id: taskId,
+        columnId: null,
+        parentTaskId,
+        beforeId
+      });
+      if (updated) {
+        await refreshTasks();
+      }
+    },
+    [refreshTasks]
+  );
+
+  const handleMoveTaskTo = useCallback(
+    async (
+      taskId: string,
+      destination:
+        | { kind: 'column'; columnId: string }
+        | { kind: 'task'; parentTaskId: string }
+    ) => {
+      if (!window.heracles?.tasks) return;
+      const payload =
+        destination.kind === 'column'
+          ? { id: taskId, columnId: destination.columnId, parentTaskId: null, beforeId: null }
+          : { id: taskId, columnId: null, parentTaskId: destination.parentTaskId, beforeId: null };
+      const updated = await window.heracles.tasks.move(payload);
+      if (updated) {
+        await refreshTasks();
+      }
+    },
+    [refreshTasks]
   );
 
   // ── Render ──────────────────────────────────────────────────────────────
@@ -575,6 +617,8 @@ export const KanbanBoard = ({
           onToggleComplete={handleToggleTask}
           onAddSubtask={handleAddSubtask}
           onDeleteTask={handleDeleteTask}
+          onMoveSubtask={handleMoveSubtask}
+          onMoveTaskTo={handleMoveTaskTo}
         />
       )}
     </div>

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from 'react';
@@ -22,6 +23,12 @@ type TaskPatch = Partial<{
   location: string | null;
 }>;
 
+const SUBTASK_DRAG_MIME = 'application/x-heracles-subtask';
+
+type MoveDestination =
+  | { kind: 'column'; columnId: string }
+  | { kind: 'task'; parentTaskId: string };
+
 type TaskDetailModalProps = {
   rootTaskId: string;
   tasks: Task[];
@@ -34,6 +41,8 @@ type TaskDetailModalProps = {
   onToggleComplete: (taskId: string, completed: boolean) => Promise<void> | void;
   onAddSubtask: (parentTaskId: string, title: string) => Promise<Task | null>;
   onDeleteTask: (taskId: string) => Promise<void> | void;
+  onMoveSubtask?: (taskId: string, parentTaskId: string, beforeId: string | null) => Promise<void> | void;
+  onMoveTaskTo?: (taskId: string, destination: MoveDestination) => Promise<void> | void;
 };
 
 const PRIORITY_LABEL: Record<Priority, string> = {
@@ -88,7 +97,9 @@ export const TaskDetailModal = ({
   onUpdateTask,
   onToggleComplete,
   onAddSubtask,
-  onDeleteTask
+  onDeleteTask,
+  onMoveSubtask,
+  onMoveTaskTo
 }: TaskDetailModalProps) => {
   // Navigation stack: rootTaskId → drilled-in subtask ids
   const [navStack, setNavStack] = useState<string[]>([rootTaskId]);
@@ -142,6 +153,48 @@ export const TaskDetailModal = ({
   const [commentDraft, setCommentDraft] = useState('');
   const [commentsLoaded, setCommentsLoaded] = useState(false);
 
+  // Drag-and-drop state for subtasks
+  type SubtaskDropPos = 'before' | 'after';
+  type SubtaskDragOver = { targetTaskId: string; pos: SubtaskDropPos } | null;
+  const [subtaskDragOver, setSubtaskDragOver] = useState<SubtaskDragOver>(null);
+
+  // "Move to…" menu — tracks which subtask's menu is open
+  const [moveMenuTaskId, setMoveMenuTaskId] = useState<string | null>(null);
+
+  // All tasks in tree order (depth-first) for the "move under task" picker
+  const orderedTasks = useMemo(() => {
+    const out: { task: Task; depth: number }[] = [];
+    const roots = tasks
+      .filter((t) => t.parentTaskId == null)
+      .sort((a, b) => a.position - b.position);
+    const walk = (node: Task, depth: number) => {
+      out.push({ task: node, depth });
+      for (const child of subtasksByParent.get(node.id) ?? []) {
+        walk(child, depth + 1);
+      }
+    };
+    for (const root of roots) walk(root, 0);
+    return out;
+  }, [tasks, subtasksByParent]);
+
+  const getDescendantIds = useCallback(
+    (rootId: string): Set<string> => {
+      const result = new Set<string>();
+      const queue = [rootId];
+      while (queue.length) {
+        const id = queue.shift() as string;
+        for (const child of subtasksByParent.get(id) ?? []) {
+          if (!result.has(child.id)) {
+            result.add(child.id);
+            queue.push(child.id);
+          }
+        }
+      }
+      return result;
+    },
+    [subtasksByParent]
+  );
+
   // Sync drafts when current task changes
   useEffect(() => {
     setTitleDraft(currentTask?.title ?? '');
@@ -155,6 +208,8 @@ export const TaskDetailModal = ({
     setCommentDraft('');
     setCommentsLoaded(false);
     setComments([]);
+    setMoveMenuTaskId(null);
+    setSubtaskDragOver(null);
   }, [currentTaskId, currentTask?.title, currentTask?.description, currentTask?.location]);
 
   // Lazy-load comments for the focused task
@@ -173,14 +228,33 @@ export const TaskDetailModal = ({
     };
   }, [currentTaskId, currentTask?.id]);
 
-  // Esc closes the modal
+  // Esc closes the move menu first, otherwise the modal
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key !== 'Escape') return;
+      if (moveMenuTaskId) {
+        setMoveMenuTaskId(null);
+        return;
+      }
+      onClose();
     };
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
-  }, [onClose]);
+  }, [onClose, moveMenuTaskId]);
+
+  // Close the move menu when clicking outside of it
+  useEffect(() => {
+    if (!moveMenuTaskId) return;
+    const handle = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('.task-modal__move-menu') || target?.closest('.task-modal__subtask-move')) {
+        return;
+      }
+      setMoveMenuTaskId(null);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [moveMenuTaskId]);
 
   // Focus subtask composer when started
   useEffect(() => {
@@ -279,6 +353,89 @@ export const TaskDetailModal = ({
     await window.heracles.tasks.deleteComment({ id: commentId });
     setComments((prev) => prev.filter((c) => c.id !== commentId));
   };
+
+  // ── Drag and drop for subtasks ───────────────────────────────────────
+  const handleSubtaskDragStart = useCallback(
+    (subtask: Task, event: ReactDragEvent<HTMLLIElement>) => {
+      if (readOnly) {
+        event.preventDefault();
+        return;
+      }
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData(SUBTASK_DRAG_MIME, subtask.id);
+      event.dataTransfer.setData('text/plain', subtask.title || 'Untitled');
+    },
+    [readOnly]
+  );
+
+  const computeSubtaskDropPos = (event: ReactDragEvent<HTMLLIElement>): SubtaskDropPos => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+  };
+
+  const handleSubtaskDragOver = useCallback(
+    (targetSubtask: Task, event: ReactDragEvent<HTMLLIElement>) => {
+      if (!event.dataTransfer.types.includes(SUBTASK_DRAG_MIME)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'move';
+      const pos = computeSubtaskDropPos(event);
+      setSubtaskDragOver((prev) => {
+        if (prev && prev.targetTaskId === targetSubtask.id && prev.pos === pos) {
+          return prev;
+        }
+        return { targetTaskId: targetSubtask.id, pos };
+      });
+    },
+    []
+  );
+
+  const handleSubtaskDragLeave = useCallback((event: ReactDragEvent<HTMLLIElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+    setSubtaskDragOver(null);
+  }, []);
+
+  const handleSubtaskDrop = useCallback(
+    async (targetSubtask: Task, event: ReactDragEvent<HTMLLIElement>) => {
+      if (!event.dataTransfer.types.includes(SUBTASK_DRAG_MIME)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const sourceId = event.dataTransfer.getData(SUBTASK_DRAG_MIME);
+      const drop = subtaskDragOver;
+      setSubtaskDragOver(null);
+      if (!sourceId || !currentTask || !onMoveSubtask) return;
+      if (sourceId === targetSubtask.id) return; // dropped on self
+
+      // Determine beforeId based on drop position
+      const siblings = directSubtasks;
+      let beforeId: string | null = null;
+      const idx = siblings.findIndex((s) => s.id === targetSubtask.id);
+      if (idx >= 0) {
+        if (drop?.pos === 'before') {
+          beforeId = targetSubtask.id;
+        } else {
+          // 'after' - insert before the next sibling
+          beforeId = siblings[idx + 1]?.id ?? null;
+        }
+      }
+      await onMoveSubtask(sourceId, currentTask.id, beforeId);
+    },
+    [subtaskDragOver, currentTask, directSubtasks, onMoveSubtask]
+  );
+
+  const handleSubtaskDragEnd = useCallback(() => {
+    setSubtaskDragOver(null);
+  }, []);
+
+  // ── "Move to…" menu ──────────────────────────────────────────────────
+  const handleMoveTo = useCallback(
+    async (taskId: string, destination: MoveDestination) => {
+      setMoveMenuTaskId(null);
+      if (!onMoveTaskTo) return;
+      await onMoveTaskTo(taskId, destination);
+    },
+    [onMoveTaskTo]
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────
   if (!currentTask) {
@@ -411,39 +568,130 @@ export const TaskDetailModal = ({
                 </span>
               </header>
               <ul className="task-modal__subtask-list">
-                {directSubtasks.map((sub) => (
-                  <li
-                    key={sub.id}
-                    className={`task-modal__subtask ${sub.completed ? 'is-complete' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className={`task-modal__check task-modal__check--small task-modal__check--p${sub.priority}`}
-                      aria-label={sub.completed ? 'Mark as not done' : 'Mark as done'}
-                      aria-pressed={sub.completed}
-                      disabled={readOnly}
-                      onClick={() => onToggleComplete(sub.id, !sub.completed)}
+                {directSubtasks.map((sub) => {
+                  const isDropTargetBefore =
+                    subtaskDragOver?.targetTaskId === sub.id && subtaskDragOver?.pos === 'before';
+                  const isDropTargetAfter =
+                    subtaskDragOver?.targetTaskId === sub.id && subtaskDragOver?.pos === 'after';
+                  const isMoveMenuOpen = moveMenuTaskId === sub.id;
+                  const subDescendants = isMoveMenuOpen ? getDescendantIds(sub.id) : null;
+                  const candidateTasks = isMoveMenuOpen
+                    ? orderedTasks.filter(
+                        ({ task }) =>
+                          task.id !== sub.id &&
+                          task.id !== sub.parentTaskId &&
+                          !(subDescendants?.has(task.id) ?? false)
+                      )
+                    : [];
+                  return (
+                    <li
+                      key={sub.id}
+                      className={`task-modal__subtask ${sub.completed ? 'is-complete' : ''} ${isDropTargetBefore ? 'is-drop-before' : ''} ${isDropTargetAfter ? 'is-drop-after' : ''}`}
+                      draggable={!readOnly}
+                      onDragStart={(event) => handleSubtaskDragStart(sub, event)}
+                      onDragOver={(event) => handleSubtaskDragOver(sub, event)}
+                      onDragLeave={handleSubtaskDragLeave}
+                      onDrop={(event) => handleSubtaskDrop(sub, event)}
+                      onDragEnd={handleSubtaskDragEnd}
                     >
-                      {sub.completed ? '✓' : ''}
-                    </button>
-                    <button
-                      type="button"
-                      className="task-modal__subtask-title"
-                      onClick={() => setNavStack((stack) => [...stack, sub.id])}
-                      title="Open subtask"
-                    >
-                      {sub.title || 'Untitled task'}
-                      {(subtasksByParent.get(sub.id)?.length ?? 0) > 0 && (
-                        <span className="task-modal__subtask-count">
-                          ↳ {subtasksByParent.get(sub.id)?.length}
+                      {!readOnly && (
+                        <span className="task-modal__subtask-drag-handle" title="Drag to reorder">
+                          ⋮⋮
                         </span>
                       )}
-                    </button>
-                    {sub.dueDate && (
-                      <span className="task-modal__subtask-date">{formatDateChip(sub.dueDate)}</span>
-                    )}
-                  </li>
-                ))}
+                      <button
+                        type="button"
+                        className={`task-modal__check task-modal__check--small task-modal__check--p${sub.priority}`}
+                        aria-label={sub.completed ? 'Mark as not done' : 'Mark as done'}
+                        aria-pressed={sub.completed}
+                        disabled={readOnly}
+                        onClick={() => onToggleComplete(sub.id, !sub.completed)}
+                      >
+                        {sub.completed ? '✓' : ''}
+                      </button>
+                      <button
+                        type="button"
+                        className="task-modal__subtask-title"
+                        onClick={() => setNavStack((stack) => [...stack, sub.id])}
+                        title="Open subtask"
+                      >
+                        {sub.title || 'Untitled task'}
+                        {(subtasksByParent.get(sub.id)?.length ?? 0) > 0 && (
+                          <span className="task-modal__subtask-count">
+                            ↳ {subtasksByParent.get(sub.id)?.length}
+                          </span>
+                        )}
+                      </button>
+                      {sub.dueDate && (
+                        <span className="task-modal__subtask-date">{formatDateChip(sub.dueDate)}</span>
+                      )}
+                      {!readOnly && onMoveTaskTo && (
+                        <div className="task-modal__subtask-move">
+                          <button
+                            type="button"
+                            className="task-modal__subtask-move-btn"
+                            aria-label="Move to…"
+                            aria-haspopup="menu"
+                            aria-expanded={isMoveMenuOpen}
+                            title="Move to another card or column"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMoveMenuTaskId((prev) => (prev === sub.id ? null : sub.id));
+                            }}
+                          >
+                            ⤴
+                          </button>
+                          {isMoveMenuOpen && (
+                            <div className="task-modal__move-menu" role="menu">
+                              <div className="task-modal__move-group-label">
+                                Make its own card in…
+                              </div>
+                              {columns.length === 0 && (
+                                <div className="task-modal__move-empty">No columns</div>
+                              )}
+                              {columns.map((col) => (
+                                <button
+                                  key={col.id}
+                                  type="button"
+                                  role="menuitem"
+                                  className="task-modal__move-item"
+                                  onClick={() =>
+                                    handleMoveTo(sub.id, { kind: 'column', columnId: col.id })
+                                  }
+                                >
+                                  <span aria-hidden>▦</span> {col.name}
+                                </button>
+                              ))}
+                              <div className="task-modal__move-group-label">
+                                Move under another task…
+                              </div>
+                              {candidateTasks.length === 0 && (
+                                <div className="task-modal__move-empty">No other tasks</div>
+                              )}
+                              {candidateTasks.map(({ task, depth }) => (
+                                <button
+                                  key={task.id}
+                                  type="button"
+                                  role="menuitem"
+                                  className="task-modal__move-item"
+                                  style={{ paddingLeft: 8 + depth * 14 }}
+                                  onClick={() =>
+                                    handleMoveTo(sub.id, {
+                                      kind: 'task',
+                                      parentTaskId: task.id
+                                    })
+                                  }
+                                >
+                                  <span aria-hidden>↳</span> {task.title || 'Untitled task'}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
               {composingSubtask ? (
                 <div className="task-modal__subtask-composer">

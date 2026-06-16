@@ -2774,6 +2774,124 @@ textarea {
   color: var(--text-muted);
 }
 
+.task-modal__subtask-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 12px;
+  user-select: none;
+  padding: 2px 4px;
+  margin-left: -8px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.task-modal__subtask-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.task-modal__subtask[draggable='true']:active .task-modal__subtask-drag-handle {
+  cursor: grabbing;
+}
+
+.task-modal__subtask.is-drop-before {
+  border-top: 2px solid var(--accent);
+}
+
+.task-modal__subtask.is-drop-after {
+  border-bottom: 2px solid var(--accent);
+}
+
+.task-modal__subtask-move {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.task-modal__subtask-move-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.task-modal__subtask-move-btn:hover,
+.task-modal__subtask-move-btn[aria-expanded='true'] {
+  opacity: 1;
+  background: var(--hover);
+  color: var(--accent);
+}
+
+.task-modal__move-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 90;
+  min-width: 200px;
+  max-width: 260px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-modal__move-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 6px 8px 2px;
+}
+
+.task-modal__move-group-label:not(:first-child) {
+  border-top: 1px solid var(--divider);
+  margin-top: 4px;
+}
+
+.task-modal__move-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-modal__move-item:hover {
+  background: var(--hover);
+}
+
+.task-modal__move-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 8px;
+}
+
 .task-modal__subtask-composer {
   display: flex;
   flex-direction: column;

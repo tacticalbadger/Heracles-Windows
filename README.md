@@ -13,6 +13,10 @@ A local-first, hierarchical notebook for macOS. Electron shell, React renderer, 
 - **Icon picker** per page
 - **Multiple windows** — open any page in its own window
 - **Error boundary** — render-error recovery without losing in-memory state
+- **Tasks / Kanban board** — turn a page into a board with custom columns; cards carry priority, due dates, labels, location, reminders, and comments
+- **Subtasks** — unlimited nesting; drill into any subtask in the detail modal, with completion roll-up counts on cards
+- **Subtask drag-reorder** — drag the `⋮⋮` handle to reorder subtasks within their parent
+- **Move a subtask anywhere** — the `⤴` menu on each subtask can pop it out into its own card in any column, or re-parent it under any other task (self/descendants excluded)
 
 ## Tech stack
 
@@ -41,7 +45,14 @@ Starts Vite on `http://localhost:5173` and launches the Electron shell with DevT
 | `npm run dev` | Vite dev server + Electron with HMR |
 | `npm run build` | Production renderer bundle into `dist/renderer/` |
 | `npm run package:mac` | Build + package an unsigned macOS `.app` into `app/macOS/` |
+| `npm run package:mac:dmg` | Build a `.dmg` installer into `app/macOS/` |
+| `npm run package:win` | Build a Windows NSIS installer into `app/windows/` (run on Windows) |
+| `npm run package:win:dir` | Build an unpacked Windows folder into `app/windows/` |
 | `npm run preview` | Preview the built renderer in a browser (no Electron) |
+
+For full build/packaging/distribution instructions on both macOS and Windows
+(including code signing notes and cross-compilation via Docker), see
+[`BUILDING.md`](./BUILDING.md).
 
 ## Project structure
 
@@ -64,6 +75,9 @@ renderer/src/
 │   ├── SidebarItemMenu.tsx Right-click context menu (sidebar item)
 │   ├── SectionMenu.tsx    Section header context menu
 │   ├── MovePagePicker.tsx "Move to..." dialog
+│   ├── KanbanBoard.tsx    Task board: columns, cards, drag-drop, composer
+│   ├── TaskCard.tsx       Single card (priority flag, due date, subtask count)
+│   ├── TaskDetailModal.tsx Task detail: fields, subtasks, comments, move menu
 │   └── IconPicker.tsx     Emoji icon picker
 └── styles.css             All renderer styles
 ```
@@ -77,7 +91,7 @@ A single SQLite database file: `heracles.sqlite` inside Electron's `userData` di
 | Dev | `~/Library/Application Support/heracles/heracles.sqlite` |
 | Packaged | `~/Library/Application Support/Heracles/heracles.sqlite` |
 
-Only the **notes** table is persisted. Pane layout, open tabs, and sidebar collapse state live in renderer state and reset on app restart.
+Persisted tables: **notes**, plus **task_columns**, **tasks**, and **task_comments** for the Kanban feature. Pane layout, open tabs, and sidebar collapse state live in renderer state and reset on app restart.
 
 To inspect:
 
@@ -88,8 +102,9 @@ sqlite3 ~/Library/Application\ Support/heracles/heracles.sqlite "SELECT id, titl
 ## Architecture notes
 
 - **Pane tree** is an immutable `PaneNode` tree (`leaf` or `split`) manipulated by the pure functions in `renderer/src/workspace/paneTreeOps.ts`. Splits auto-collapse when reduced to one child; removing the last note in a leaf removes the leaf.
-- **IPC** flows through `window.heracles.notes.*` declared in `electron/preload.cjs` and handled in `electron/main.cjs`. The renderer never touches SQLite directly.
-- **Drag-and-drop** uses two custom MIME types: `application/x-heracles-tab` (tab moves between panes) and `application/x-heracles-page` (sidebar page onto pane / between panes).
+- **IPC** flows through `window.heracles.notes.*` and `window.heracles.tasks.*` declared in `electron/preload.cjs` and handled in `electron/main.cjs`. The renderer never touches SQLite directly. `tasks.move({ id, columnId, parentTaskId, beforeId })` handles both reordering and reparenting/promoting in one call.
+- **Drag-and-drop** uses four custom MIME types: `application/x-heracles-tab` (tab moves between panes), `application/x-heracles-page` (sidebar page onto pane / between panes), `application/x-heracles-task` (card reorder/move between columns), and `application/x-heracles-subtask` (subtask reorder within a parent).
+- **Subtask moves** — because the task detail modal covers the board, subtasks are moved via the `⤴` menu (not by dragging onto a column). The menu offers every column (promote to a standalone card) and a depth-indented tree of every other task (reparent), filtering out the subtask itself, its descendants, and its current parent.
 - **BubbleMenu host** — TipTap's bubble-menu plugin detaches its DOM via `element.remove()`, which clashes with React reconciliation if it has dynamic siblings. The menu is wrapped in a dedicated empty `.bubble-menu-host` div so the detachment never disturbs sibling reconciliation.
 
 ## License

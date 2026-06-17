@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const {
   initDatabase,
   listNotes,
@@ -100,6 +101,50 @@ app.whenReady().then(() => {
   ipcMain.handle('notes:openWindow', (_event, payload) => {
     createWindow({ initialNoteId: payload?.id });
     return { success: true };
+  });
+  ipcMain.handle('notes:importMarkdown', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Import Markdown',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'txt'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, files: [] };
+    }
+    const files = result.filePaths.map((filePath) => {
+      const markdown = fs.readFileSync(filePath, 'utf8');
+      const base = path.basename(filePath);
+      const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
+      return { name: name || 'Untitled', markdown };
+    });
+    return { canceled: false, files };
+  });
+  ipcMain.handle('notes:importHtml', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Import HTML',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'HTML', extensions: ['html', 'htm'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, files: [] };
+    }
+    const files = result.filePaths.map((filePath) => {
+      const html = fs.readFileSync(filePath, 'utf8');
+      const base = path.basename(filePath);
+      const name = base.replace(/\.(html|htm)$/i, '').trim();
+      return { name: name || 'Untitled', html };
+    });
+    return { canceled: false, files };
   });
 
   // ── Todo lists / kanban ────────────────────────────────────────────────

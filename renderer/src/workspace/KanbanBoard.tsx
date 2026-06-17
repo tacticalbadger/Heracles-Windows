@@ -14,9 +14,11 @@ import { TaskDetailModal } from './TaskDetailModal';
 
 const TASK_DRAG_MIME = 'application/x-heracles-task';
 const SUBTASK_DRAG_MIME = 'application/x-heracles-subtask';
+const COLUMN_DRAG_MIME = 'application/x-heracles-column';
 
 type DropPos = 'before' | 'after' | 'inside-column';
 type DragOver = { columnId: string; pos: DropPos; targetTaskId?: string } | null;
+type ColumnDragOver = { targetColumnId: string; pos: 'before' | 'after' } | null;
 
 type KanbanBoardProps = {
   noteId: string;
@@ -48,6 +50,7 @@ export const KanbanBoard = ({
 
   // Drag state
   const [dragOver, setDragOver] = useState<DragOver>(null);
+  const [columnDragOver, setColumnDragOver] = useState<ColumnDragOver>(null);
 
   useEffect(() => {
     if (renamingColumnId && renameRef.current) {
@@ -423,6 +426,111 @@ export const KanbanBoard = ({
     [refreshTasks]
   );
 
+  // ── Column drag and drop ────────────────────────────────────────────────
+  const handleColumnDragStart = useCallback(
+    (column: TaskColumn, event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData(COLUMN_DRAG_MIME, column.id);
+      // Add a class to the dragged element for styling
+      (event.currentTarget as HTMLElement).classList.add('is-dragging');
+    },
+    []
+  );
+
+  const computeColumnDropPos = (event: ReactDragEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    return x < rect.width / 2 ? 'before' : 'after';
+  };
+
+  const handleColumnHeaderDragOver = useCallback(
+    (targetColumn: TaskColumn, event: ReactDragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes(COLUMN_DRAG_MIME)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const pos = computeColumnDropPos(event);
+      setColumnDragOver((prev) => {
+        if (prev && prev.targetColumnId === targetColumn.id && prev.pos === pos) return prev;
+        return { targetColumnId: targetColumn.id, pos };
+      });
+    },
+    []
+  );
+
+  const handleColumnHeaderDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+      setColumnDragOver(null);
+    },
+    []
+  );
+
+  const handleColumnHeaderDrop = useCallback(
+    async (targetColumn: TaskColumn, event: ReactDragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes(COLUMN_DRAG_MIME)) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const sourceId = event.dataTransfer.getData(COLUMN_DRAG_MIME);
+      const drop = columnDragOver;
+      setColumnDragOver(null);
+
+      // Remove the dragging class from the source
+      const sourceEl = document.querySelector(`[data-column-id="${sourceId}"]`);
+      sourceEl?.classList.remove('is-dragging');
+
+      if (!sourceId || sourceId === targetColumn.id || !window.heracles?.tasks) return;
+
+      // Compute new order
+      const currentIds = columns.map((c) => c.id);
+      const sourceIndex = currentIds.indexOf(sourceId);
+      const targetIndex = currentIds.indexOf(targetColumn.id);
+
+      if (sourceIndex === -1 || targetIndex === -1) return;
+
+      // Remove source from current position
+      currentIds.splice(sourceIndex, 1);
+
+      // Calculate insertion index based on drop position
+      let insertIndex = targetIndex;
+      if (drop && drop.targetColumnId === targetColumn.id) {
+        if (drop.pos === 'after') {
+          insertIndex = targetIndex;
+        } else {
+          insertIndex = targetIndex - 1;
+        }
+      }
+
+      // Adjust for the removal if source was before target
+      if (sourceIndex < targetIndex && drop?.pos === 'before') {
+        insertIndex -= 1;
+      }
+
+      // Clamp insert index
+      insertIndex = Math.max(0, Math.min(insertIndex, currentIds.length));
+
+      // Insert at new position
+      currentIds.splice(insertIndex, 0, sourceId);
+
+      // Call IPC to reorder
+      const updated = await window.heracles.tasks.reorderColumns({
+        todoListId: noteId,
+        orderedIds: currentIds
+      });
+
+      if (updated) {
+        setColumns(updated);
+        onNotify?.('Column moved', 'success');
+      }
+    },
+    [columnDragOver, columns, noteId, onNotify]
+  );
+
+  const handleColumnDragEnd = useCallback((event: ReactDragEvent<HTMLElement>) => {
+    (event.currentTarget as HTMLElement).classList.remove('is-dragging');
+    setColumnDragOver(null);
+  }, []);
+
   // ── Render ──────────────────────────────────────────────────────────────
   if (loading) {
     return <div className="kanban kanban--loading">Loading…</div>;
@@ -438,13 +546,39 @@ export const KanbanBoard = ({
           const isRenaming = renamingColumnId === column.id;
           const isComposing = composerColumnId === column.id;
           const dropTarget = dragOver && dragOver.columnId === column.id ? dragOver : null;
+          const colDropTarget = columnDragOver && columnDragOver.targetColumnId === column.id ? columnDragOver : null;
           return (
             <section
               key={column.id}
-              className={`kanban__column ${dropTarget ? 'is-drop' : ''}`}
-              onDragOver={(event) => handleColumnDragOver(column, event)}
-              onDragLeave={handleColumnDragLeave}
-              onDrop={(event) => handleColumnDrop(column, event)}
+              data-column-id={column.id}
+              className={`kanban__column ${dropTarget ? 'is-drop' : ''} ${colDropTarget ? `is-col-drop-${colDropTarget.pos}` : ''}`}
+              draggable={!readOnly}
+              onDragStart={(event) => handleColumnDragStart(column, event)}
+              onDragEnd={handleColumnDragEnd}
+              onDragOver={(event) => {
+                // Handle task/card drag over (dropping tasks into column)
+                if (event.dataTransfer.types.includes(TASK_DRAG_MIME) || event.dataTransfer.types.includes(SUBTASK_DRAG_MIME)) {
+                  handleColumnDragOver(column, event);
+                }
+                // Handle column drag over (reordering columns)
+                if (event.dataTransfer.types.includes(COLUMN_DRAG_MIME)) {
+                  handleColumnHeaderDragOver(column, event);
+                }
+              }}
+              onDragLeave={(event) => {
+                handleColumnDragLeave(event);
+                handleColumnHeaderDragLeave(event);
+              }}
+              onDrop={(event) => {
+                // Handle task/card drop
+                if (event.dataTransfer.types.includes(TASK_DRAG_MIME) || event.dataTransfer.types.includes(SUBTASK_DRAG_MIME)) {
+                  handleColumnDrop(column, event);
+                }
+                // Handle column drop
+                if (event.dataTransfer.types.includes(COLUMN_DRAG_MIME)) {
+                  handleColumnHeaderDrop(column, event);
+                }
+              }}
             >
               <header className="kanban__column-header">
                 {isRenaming ? (

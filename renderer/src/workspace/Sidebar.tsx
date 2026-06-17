@@ -23,6 +23,8 @@ type SidebarProps = {
   activeNoteId: string | null;
   onSelectNote: (noteId: string, openInNewPane?: boolean) => void;
   onCreateNote: () => void;
+  onImportMarkdown: () => void;
+  onImportHtml: () => void;
   onCreateSection: (parentId: string | null) => void;
   onCreateTodoList: (parentId: string | null) => void;
   onAddChildTodoList: (parentNote: Note) => void;
@@ -90,6 +92,8 @@ export const Sidebar = ({
   activeNoteId,
   onSelectNote,
   onCreateNote,
+  onImportMarkdown,
+  onImportHtml,
   onCreateSection,
   onCreateTodoList,
   onAddChildTodoList,
@@ -703,6 +707,14 @@ export const Sidebar = ({
         <button type="button" className="sidebar__row" onClick={onCreateNote}>
           <span className="sidebar__row-icon">＋</span>
           <span className="sidebar__row-label">New page</span>
+        </button>
+        <button type="button" className="sidebar__row" onClick={onImportMarkdown}>
+          <span className="sidebar__row-icon">⤓</span>
+          <span className="sidebar__row-label">New page from Markdown</span>
+        </button>
+        <button type="button" className="sidebar__row" onClick={onImportHtml}>
+          <span className="sidebar__row-icon">⤓</span>
+          <span className="sidebar__row-label">New page from HTML</span>
         </button>
         <button
           type="button"

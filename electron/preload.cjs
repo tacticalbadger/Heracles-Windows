@@ -15,7 +15,9 @@ contextBridge.exposeInMainWorld('heracles', {
     setParent: (payload) => ipcRenderer.invoke('notes:setParent', payload),
     setFavorited: (payload) => ipcRenderer.invoke('notes:setFavorited', payload),
     reorder: (payload) => ipcRenderer.invoke('notes:reorder', payload),
-    openWindow: (payload) => ipcRenderer.invoke('notes:openWindow', payload)
+    openWindow: (payload) => ipcRenderer.invoke('notes:openWindow', payload),
+    importMarkdown: () => ipcRenderer.invoke('notes:importMarkdown'),
+    importHtml: () => ipcRenderer.invoke('notes:importHtml')
   },
   tasks: {
     listColumns: (payload) => ipcRenderer.invoke('tasks:listColumns', payload),

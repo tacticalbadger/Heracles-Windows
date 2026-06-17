@@ -34,6 +34,14 @@ declare global {
           beforeId: string | null;
         }) => Promise<Note | null>;
         openWindow: (payload: { id: string }) => Promise<{ success: boolean }>;
+        importMarkdown: () => Promise<{
+          canceled: boolean;
+          files: { name: string; markdown: string }[];
+        }>;
+        importHtml: () => Promise<{
+          canceled: boolean;
+          files: { name: string; html: string }[];
+        }>;
       };
       tasks: {
         listColumns: (payload: { todoListId: string }) => Promise<TaskColumn[]>;

@@ -1,0 +1,62 @@
+# Changelog
+
+All notable changes to Heracles are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- **Import HTML** — "New page from HTML" in the sidebar imports one or more
+  `.html`/`.htm` files as pages, converting common formatting to editor content.
+- **Paste HTML** — pasting rich HTML into the editor (e.g. from a web page) is
+  now sanitized and converted to supported nodes instead of pasted as raw markup.
+- **Import Markdown** — "New page from Markdown" imports one or more `.md` files
+  as pages, converting headings, lists, task lists, code blocks, and links.
+- **Create under active context** — new pages (blank, Markdown, or HTML) are now
+  created as children of the currently active page/section.
+- **Reorder Kanban columns** — drag a column left/right to rearrange the board;
+  the new order is persisted via `tasks.reorderColumns`.
+- **Subtask drag-reorder** — drag the `⋮⋮` handle to reorder subtasks within a
+  parent task.
+- **Move a subtask anywhere** — a `⤴` menu promotes a subtask to a standalone
+  card in any column or re-parents it under any other task (self and descendants
+  excluded to prevent cycles).
+
+### Changed
+
+- The editor now registers TipTap's `Link` extension so links survive import,
+  paste, and editing.
+- Added a fifth drag-and-drop MIME type, `application/x-heracles-column`, for
+  column reordering on a board.
+
+### Technical
+
+- New conversion utilities: `renderer/src/lib/markdownImport.ts`
+  (`markdownToEditorHtml`, backed by `marked`) and
+  `renderer/src/lib/htmlImport.ts` (`htmlToEditorHtml`, also used by the editor's
+  paste handler).
+- New IPC: `notes.importMarkdown()` and `notes.importHtml()` open native
+  multi-select file dialogs and return file names + contents.
+
+## [0.1.0]
+
+### Added
+
+- Local-first, hierarchical notebook: nest pages under pages or sections with
+  drag-reorder/reparent in the sidebar.
+- Multi-pane workspace with horizontal/vertical splits, tabbed panes, and
+  drag-to-split; panes auto-collapse when emptied.
+- TipTap rich-text editor with bubble menu, block handles, slash commands, task
+  lists, and CodeMirror code blocks.
+- Page states: favorite, archive, trash (with undo), and permanent delete.
+- Per-page icon picker and the ability to open any page in its own window.
+- Tasks / Kanban board: custom columns and cards with priority, due dates,
+  labels, location, reminders, and comments; unlimited subtask nesting.
+- SQLite storage via `better-sqlite3` + `drizzle-orm`; global render-error
+  boundary.
+
+[Unreleased]: https://github.com/
+[0.1.0]: https://github.com/

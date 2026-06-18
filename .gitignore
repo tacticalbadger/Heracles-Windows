@@ -8,3 +8,6 @@ App/
 *.asar
 *.dmg
 *.zip
+
+# Vite renderer build output
+dist/

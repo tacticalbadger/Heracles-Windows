@@ -19,6 +19,7 @@ type SidebarItemMenuProps = {
   onToggleFavorite: (note: Note) => void;
   onMoveTo: (note: Note) => void;
   onAddChildPage: (parent: Note) => void;
+  onAddChildTodoList: (parent: Note) => void;
 };
 
 const formatTimestamp = (value: string) => {
@@ -50,7 +51,8 @@ export const SidebarItemMenu = ({
   onOpenInNewWindow,
   onToggleFavorite,
   onMoveTo,
-  onAddChildPage
+  onAddChildPage,
+  onAddChildTodoList
 }: SidebarItemMenuProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: x, top: y });
@@ -184,6 +186,18 @@ export const SidebarItemMenu = ({
               ＋
             </span>
             <span className="page-menu__label">Add a page inside</span>
+          </button>
+
+          <button
+            type="button"
+            className="page-menu__item"
+            onClick={run(() => onAddChildTodoList(note))}
+            role="menuitem"
+          >
+            <span className="page-menu__icon" aria-hidden>
+              ☰
+            </span>
+            <span className="page-menu__label">Add a todo list inside</span>
           </button>
 
           <button

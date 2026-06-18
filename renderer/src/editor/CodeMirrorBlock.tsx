@@ -14,7 +14,10 @@ export const CodeMirrorBlock = Node.create({
   name: 'codeMirrorBlock',
   group: 'block',
   atom: true,
-  selectable: true,
+  // Disabling node-selectability stops ProseMirror from intercepting clicks
+  // inside the block as a "select this atom" gesture, which was preventing
+  // the inner CodeMirror from receiving focus.
+  selectable: false,
   draggable: true,
 
   addAttributes() {

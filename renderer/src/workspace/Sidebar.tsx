@@ -23,7 +23,11 @@ type SidebarProps = {
   activeNoteId: string | null;
   onSelectNote: (noteId: string, openInNewPane?: boolean) => void;
   onCreateNote: () => void;
+  onImportMarkdown: () => void;
+  onImportHtml: () => void;
   onCreateSection: (parentId: string | null) => void;
+  onCreateTodoList: (parentId: string | null) => void;
+  onAddChildTodoList: (parentNote: Note) => void;
   onOpenSwitcher: () => void;
   onEmptyTrash: () => void;
   onTheme: () => void;
@@ -88,7 +92,11 @@ export const Sidebar = ({
   activeNoteId,
   onSelectNote,
   onCreateNote,
+  onImportMarkdown,
+  onImportHtml,
   onCreateSection,
+  onCreateTodoList,
+  onAddChildTodoList,
   onOpenSwitcher,
   onEmptyTrash,
   onTheme,
@@ -483,7 +491,8 @@ export const Sidebar = ({
             {hasChildren || isSection ? '›' : ''}
           </button>
           <span className="sidebar__item-icon" aria-hidden>
-            {note.icon || (isSection ? '◈' : '▦')}
+            {note.icon ||
+              (isSection ? '◈' : note.kind === 'todolist' ? '☰' : '▦')}
           </span>
           {isRenaming ? (
             <input
@@ -699,6 +708,22 @@ export const Sidebar = ({
           <span className="sidebar__row-icon">＋</span>
           <span className="sidebar__row-label">New page</span>
         </button>
+        <button type="button" className="sidebar__row" onClick={onImportMarkdown}>
+          <span className="sidebar__row-icon">⤓</span>
+          <span className="sidebar__row-label">New page from Markdown</span>
+        </button>
+        <button type="button" className="sidebar__row" onClick={onImportHtml}>
+          <span className="sidebar__row-icon">⤓</span>
+          <span className="sidebar__row-label">New page from HTML</span>
+        </button>
+        <button
+          type="button"
+          className="sidebar__row"
+          onClick={() => onCreateTodoList(null)}
+        >
+          <span className="sidebar__row-icon">☰</span>
+          <span className="sidebar__row-label">New todo list</span>
+        </button>
         <button
           type="button"
           className="sidebar__row"
@@ -841,6 +866,7 @@ export const Sidebar = ({
           onToggleFavorite={onToggleFavorite}
           onMoveTo={onMoveTo}
           onAddChildPage={onAddChildPage}
+          onAddChildTodoList={onAddChildTodoList}
         />
       )}
 
@@ -863,6 +889,16 @@ export const Sidebar = ({
             setSectionMenu(null);
             beginSectionRename(section);
           }}
+          onCreateNote={
+            sectionMenu.section === 'private' || sectionMenu.section === 'favorites'
+              ? onCreateNote
+              : undefined
+          }
+          onCreateTodoList={
+            sectionMenu.section === 'private' || sectionMenu.section === 'favorites'
+              ? () => onCreateTodoList(null)
+              : undefined
+          }
         />
       )}
     </aside>

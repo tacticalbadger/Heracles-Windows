@@ -61,6 +61,47 @@ Example block types:
   `PaneTree.tsx` (recursive renderer), `EditorPane.tsx` (per-leaf editor +
   tab strip), and `Sidebar.tsx` (Notion-style page list).
 
+## Tasks / Kanban (implemented)
+- A page can be rendered as a Kanban board (`renderer/src/workspace/KanbanBoard.tsx`).
+- Tables: `task_columns`, `tasks` (self-referential via `parent_task_id` for
+  unlimited subtask nesting), and `task_comments`.
+- Cards (`TaskCard.tsx`) show priority, due date, labels, location, and a
+  completed/total subtask roll-up.
+- `TaskDetailModal.tsx` edits a task's fields, comments, and subtasks, and lets
+  you drill into any subtask.
+- A single IPC call, `tasks.move({ id, columnId, parentTaskId, beforeId })`,
+  covers every move: reorder within a column/parent, move between columns,
+  promote a subtask to a top-level card, or reparent it under another task.
+- Columns can be reordered by dragging a column left/right. The board computes a
+  new ordered id list and persists it via `tasks.reorderColumns({ todoListId,
+  orderedIds })`, which rewrites each column's `position`.
+- Drag-and-drop MIME types: `application/x-heracles-task` (cards on the board),
+  `application/x-heracles-subtask` (subtasks within the detail modal), and
+  `application/x-heracles-column` (columns on the board). Each column `<section>`
+  inspects `dataTransfer.types` in its `onDragOver`/`onDrop` so it can accept
+  both a dropped card and a dropped column.
+- Because the detail modal overlays the board, subtasks are relocated through a
+  `⤴` "move to…" menu rather than by dragging onto a column. Candidate targets
+  exclude the subtask itself, its descendants, and its current parent to prevent
+  cycles.
+
+## Import & Paste (implemented)
+- "New page from Markdown" and "New page from HTML" live in the sidebar under
+  "New page". The Electron main process exposes `notes.importMarkdown()` and
+  `notes.importHtml()` which open native file dialogs (multi-select) and return
+  each file's base name plus its raw contents.
+- The renderer converts file contents before saving:
+  `renderer/src/lib/markdownImport.ts` (`markdownToEditorHtml`, backed by
+  `marked`) and `renderer/src/lib/htmlImport.ts` (`htmlToEditorHtml`).
+- `htmlToEditorHtml` normalizes arbitrary HTML to nodes the editor supports:
+  strips `script`/`style`/`iframe`, turns `<img>` into a link, converts `<pre>`
+  into a CodeMirror block (with language sniffed from `language-*` classes),
+  maps checkbox list items to task items, and collapses `h5`/`h6` to `h4`.
+- The same `htmlToEditorHtml` is wired into the TipTap editor's `handlePaste`,
+  so pasting rich HTML produces clean editor content rather than raw markup.
+- Imported pages are created under the currently active page/section (the same
+  `parentId` behavior as a blank "New page").
+
 ## Offline-First Approach
 - All data stored in local SQLite.
 - Sync layer added later (separate module) to avoid early complexity.

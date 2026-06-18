@@ -9,6 +9,8 @@ import {
   type MouseEvent as ReactMouseEvent
 } from 'react';
 import type { Note } from './types/notes';
+import { markdownToEditorHtml } from './lib/markdownImport';
+import { htmlToEditorHtml } from './lib/htmlImport';
 import { Sidebar, type Section } from './workspace/Sidebar';
 import type { SectionSort } from './workspace/SectionMenu';
 import { MovePagePicker } from './workspace/MovePagePicker';
@@ -115,6 +117,13 @@ const App = () => {
       trash: 'last-edited'
     };
   });
+
+  // Derived state: currently active note (from the active leaf's active tab)
+  const activeNoteId = useMemo(() => {
+    const leaf = getLeaf(paneTree, activeLeafId);
+    return leaf?.activeTabId ?? null;
+  }, [paneTree, activeLeafId]);
+
   const switcherInputRef = useRef<HTMLInputElement | null>(null);
   const saveTimers = useRef(new Map<string, number>());
   const initRan = useRef(false);
@@ -371,11 +380,69 @@ const App = () => {
   const handleNewNote = useCallback(async () => {
     if (!window.heracles?.notes) return;
 
-    const created = await window.heracles.notes.create({ title: 'Untitled', content: '<p></p>' });
+    const created = await window.heracles.notes.create({
+      title: 'Untitled',
+      content: '<p></p>',
+      parentId: activeNoteId
+    });
     setNotes((current) => sortNotes([created, ...current]));
     openNoteInLeaf(created.id);
     pushToast('New page created', 'success');
-  }, [openNoteInLeaf, pushToast]);
+  }, [activeNoteId, openNoteInLeaf, pushToast]);
+
+  const handleImportMarkdown = useCallback(async () => {
+    if (!window.heracles?.notes?.importMarkdown) return;
+    const result = await window.heracles.notes.importMarkdown();
+    if (!result || result.canceled || result.files.length === 0) return;
+
+    const created: Note[] = [];
+    for (const file of result.files) {
+      const content = markdownToEditorHtml(file.markdown);
+      const note = await window.heracles.notes.create({
+        title: file.name,
+        content,
+        parentId: activeNoteId
+      });
+      created.push(note);
+    }
+    if (created.length === 0) return;
+
+    setNotes((current) => sortNotes([...created, ...current]));
+    openNoteInLeaf(created[0].id);
+    pushToast(
+      created.length === 1
+        ? `Imported “${created[0].title}”`
+        : `Imported ${created.length} pages`,
+      'success'
+    );
+  }, [activeNoteId, openNoteInLeaf, pushToast]);
+
+  const handleImportHtml = useCallback(async () => {
+    if (!window.heracles?.notes?.importHtml) return;
+    const result = await window.heracles.notes.importHtml();
+    if (!result || result.canceled || result.files.length === 0) return;
+
+    const created: Note[] = [];
+    for (const file of result.files) {
+      const content = htmlToEditorHtml(file.html);
+      const note = await window.heracles.notes.create({
+        title: file.name,
+        content,
+        parentId: activeNoteId
+      });
+      created.push(note);
+    }
+    if (created.length === 0) return;
+
+    setNotes((current) => sortNotes([...created, ...current]));
+    openNoteInLeaf(created[0].id);
+    pushToast(
+      created.length === 1
+        ? `Imported "${created[0].title}"`
+        : `Imported ${created.length} pages`,
+      'success'
+    );
+  }, [activeNoteId, openNoteInLeaf, pushToast]);
 
   const handleDuplicateNote = useCallback(
     async (note: Note, target?: 'current' | 'right' | 'down') => {
@@ -668,6 +735,36 @@ const App = () => {
     [pushToast]
   );
 
+  const handleCreateTodoList = useCallback(
+    async (parentId: string | null) => {
+      if (!window.heracles?.notes) return;
+      const created = await window.heracles.notes.create({
+        title: 'New todo list',
+        kind: 'todolist',
+        parentId
+      });
+      setNotes((current) => sortNotes([created, ...current]));
+      openNoteInLeaf(created.id);
+      pushToast('Todo list created', 'success');
+    },
+    [openNoteInLeaf, pushToast]
+  );
+
+  const handleAddChildTodoList = useCallback(
+    async (parent: Note) => {
+      if (!window.heracles?.notes) return;
+      const created = await window.heracles.notes.create({
+        title: 'New todo list',
+        kind: 'todolist',
+        parentId: parent.id
+      });
+      setNotes((current) => sortNotes([created, ...current]));
+      openNoteInLeaf(created.id);
+      pushToast(`Todo list added inside ${parent.title || 'Untitled'}`, 'success');
+    },
+    [openNoteInLeaf, pushToast]
+  );
+
   const handleRenameSectionLabel = useCallback((section: Section, label: string) => {
     setSectionLabels((current) => {
       const next = { ...current, [section]: label };
@@ -701,11 +798,6 @@ const App = () => {
     ).slice(0, 10);
   }, [notes, switcherQuery]);
 
-  const activeNoteId = useMemo(() => {
-    const leaf = getLeaf(paneTree, activeLeafId);
-    return leaf?.activeTabId ?? null;
-  }, [paneTree, activeLeafId]);
-
   const rootIsLeaf = isLeaf(paneTree);
   const leafCount = useMemo(() => collectLeaves(paneTree).length, [paneTree]);
 
@@ -716,6 +808,8 @@ const App = () => {
         activeNoteId={activeNoteId}
         onSelectNote={handleSidebarSelect}
         onCreateNote={handleNewNote}
+        onImportMarkdown={handleImportMarkdown}
+        onImportHtml={handleImportHtml}
         onOpenSwitcher={() => {
           setIsSwitcherOpen(true);
           setSwitcherQuery('');
@@ -739,6 +833,8 @@ const App = () => {
         onMoveTo={handleRequestMoveTo}
         onMovePage={handleMovePage}
         onCreateSection={handleCreateSection}
+        onCreateTodoList={handleCreateTodoList}
+        onAddChildTodoList={handleAddChildTodoList}
         sectionSort={sectionSort}
         onChangeSectionSort={handleChangeSectionSort}
         sectionLabels={sectionLabels}

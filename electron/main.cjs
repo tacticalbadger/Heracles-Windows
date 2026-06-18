@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const {
   initDatabase,
   listNotes,
@@ -13,7 +14,23 @@ const {
   emptyTrash,
   setNoteParent,
   setNoteFavorited,
-  reorderNote
+  reorderNote,
+  listColumns,
+  createColumn,
+  updateColumn,
+  deleteColumn,
+  reorderColumns,
+  listTasks,
+  createTask,
+  updateTask,
+  toggleTaskComplete,
+  moveTask,
+  deleteTask,
+  listComments,
+  createComment,
+  updateComment,
+  deleteComment,
+  seedDefaultColumns
 } = require('./db.cjs');
 
 let mainWindow;
@@ -64,7 +81,14 @@ app.whenReady().then(() => {
 
   ipcMain.handle('notes:list', () => listNotes());
   ipcMain.handle('notes:get', (_event, id) => getNote(id));
-  ipcMain.handle('notes:create', (_event, payload) => createNote(payload));
+  ipcMain.handle('notes:create', (_event, payload) => {
+    const created = createNote(payload);
+    // Seed default kanban columns for fresh todo lists.
+    if (created && created.kind === 'todolist') {
+      seedDefaultColumns(created.id);
+    }
+    return created;
+  });
   ipcMain.handle('notes:update', (_event, payload) => updateNote(payload));
   ipcMain.handle('notes:archive', (_event, payload) => archiveNote(payload));
   ipcMain.handle('notes:trash', (_event, payload) => trashNote(payload));
@@ -78,6 +102,67 @@ app.whenReady().then(() => {
     createWindow({ initialNoteId: payload?.id });
     return { success: true };
   });
+  ipcMain.handle('notes:importMarkdown', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Import Markdown',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'txt'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, files: [] };
+    }
+    const files = result.filePaths.map((filePath) => {
+      const markdown = fs.readFileSync(filePath, 'utf8');
+      const base = path.basename(filePath);
+      const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
+      return { name: name || 'Untitled', markdown };
+    });
+    return { canceled: false, files };
+  });
+  ipcMain.handle('notes:importHtml', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? mainWindow ?? undefined;
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Import HTML',
+      buttonLabel: 'Import',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'HTML', extensions: ['html', 'htm'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, files: [] };
+    }
+    const files = result.filePaths.map((filePath) => {
+      const html = fs.readFileSync(filePath, 'utf8');
+      const base = path.basename(filePath);
+      const name = base.replace(/\.(html|htm)$/i, '').trim();
+      return { name: name || 'Untitled', html };
+    });
+    return { canceled: false, files };
+  });
+
+  // ── Todo lists / kanban ────────────────────────────────────────────────
+  ipcMain.handle('tasks:listColumns', (_event, payload) => listColumns(payload?.todoListId));
+  ipcMain.handle('tasks:createColumn', (_event, payload) => createColumn(payload));
+  ipcMain.handle('tasks:updateColumn', (_event, payload) => updateColumn(payload));
+  ipcMain.handle('tasks:deleteColumn', (_event, payload) => deleteColumn(payload));
+  ipcMain.handle('tasks:reorderColumns', (_event, payload) => reorderColumns(payload));
+  ipcMain.handle('tasks:list', (_event, payload) => listTasks(payload?.todoListId));
+  ipcMain.handle('tasks:create', (_event, payload) => createTask(payload));
+  ipcMain.handle('tasks:update', (_event, payload) => updateTask(payload));
+  ipcMain.handle('tasks:toggleComplete', (_event, payload) => toggleTaskComplete(payload));
+  ipcMain.handle('tasks:move', (_event, payload) => moveTask(payload));
+  ipcMain.handle('tasks:delete', (_event, payload) => deleteTask(payload));
+  ipcMain.handle('tasks:listComments', (_event, payload) => listComments(payload?.taskId));
+  ipcMain.handle('tasks:createComment', (_event, payload) => createComment(payload));
+  ipcMain.handle('tasks:updateComment', (_event, payload) => updateComment(payload));
+  ipcMain.handle('tasks:deleteComment', (_event, payload) => deleteComment(payload));
 
   createWindow();
 

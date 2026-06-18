@@ -76,6 +76,7 @@ const App = () => {
     return stored === 'light' ? 'light' : 'dark';
   });
   const [notes, setNotes] = useState<Note[]>([]);
+  const [autoRenameId, setAutoRenameId] = useState<string | null>(null);
   const [paneTree, setPaneTree] = useState<PaneNode>(() => createLeaf());
   const [activeLeafId, setActiveLeafId] = useState<string>(() => firstLeaf(createLeaf()).id);
   const [isSwitcherOpen, setIsSwitcherOpen] = useState(false);
@@ -387,6 +388,7 @@ const App = () => {
     });
     setNotes((current) => sortNotes([created, ...current]));
     openNoteInLeaf(created.id);
+    setAutoRenameId(created.id);
     pushToast('New page created', 'success');
   }, [activeNoteId, openNoteInLeaf, pushToast]);
 
@@ -667,6 +669,7 @@ const App = () => {
       });
       setNotes((current) => sortNotes([created, ...current]));
       openNoteInLeaf(created.id);
+      setAutoRenameId(created.id);
       pushToast(`Added page inside ${parent.title || 'Untitled'}`, 'success');
     },
     [openNoteInLeaf, pushToast]
@@ -728,9 +731,8 @@ const App = () => {
       });
       const refreshed = await window.heracles.notes.list();
       setNotes(refreshed);
+      setAutoRenameId(created.id);
       pushToast('Section created', 'success');
-      // No auto-open since sections aren't opened as tabs
-      void created;
     },
     [pushToast]
   );
@@ -745,6 +747,7 @@ const App = () => {
       });
       setNotes((current) => sortNotes([created, ...current]));
       openNoteInLeaf(created.id);
+      setAutoRenameId(created.id);
       pushToast('Todo list created', 'success');
     },
     [openNoteInLeaf, pushToast]
@@ -760,6 +763,7 @@ const App = () => {
       });
       setNotes((current) => sortNotes([created, ...current]));
       openNoteInLeaf(created.id);
+      setAutoRenameId(created.id);
       pushToast(`Todo list added inside ${parent.title || 'Untitled'}`, 'success');
     },
     [openNoteInLeaf, pushToast]
@@ -839,6 +843,7 @@ const App = () => {
         onChangeSectionSort={handleChangeSectionSort}
         sectionLabels={sectionLabels}
         onRenameSectionLabel={handleRenameSectionLabel}
+        autoRenameId={autoRenameId}
       />
 
       <main className="workspace">

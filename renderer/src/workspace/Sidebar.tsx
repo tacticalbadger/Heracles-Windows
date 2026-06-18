@@ -54,6 +54,7 @@ type SidebarProps = {
   onChangeSectionSort: (section: Section, sort: SectionSort) => void;
   sectionLabels: Partial<Record<Section, string>>;
   onRenameSectionLabel: (section: Section, label: string) => void;
+  autoRenameId: string | null;
 };
 
 type ContextMenuState = { note: Note; x: number; y: number } | null;
@@ -118,7 +119,8 @@ export const Sidebar = ({
   sectionSort,
   onChangeSectionSort,
   sectionLabels,
-  onRenameSectionLabel
+  onRenameSectionLabel,
+  autoRenameId
 }: SidebarProps) => {
   const [open, setOpen] = useState<Record<Section, boolean>>(() => {
     try {
@@ -192,6 +194,27 @@ export const Sidebar = ({
       sectionInputRef.current.select();
     }
   }, [renamingSection]);
+
+  // When a new item is created, auto-trigger inline rename for it
+  useEffect(() => {
+    if (!autoRenameId) return;
+    const note = notes.find((n) => n.id === autoRenameId);
+    if (!note) return;
+    setExpandedIds((prev) => {
+      if (note.parentId && !prev.has(note.parentId)) {
+        const next = new Set(prev);
+        next.add(note.parentId);
+        return next;
+      }
+      return prev;
+    });
+    // Small delay so the item is rendered before we try to focus it
+    const id = window.setTimeout(() => {
+      setRenameDraft(note.title || 'Untitled');
+      setRenamingId(note.id);
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [autoRenameId, notes]);
 
   const beginRename = (note: Note) => {
     setRenameDraft(note.title || 'Untitled');

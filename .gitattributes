@@ -1,7 +1,0 @@
-*.app/** filter=lfs diff=lfs merge=lfs -text
-*.asar filter=lfs diff=lfs merge=lfs -text
-*.framework/** filter=lfs diff=lfs merge=lfs -text
-*.dylib filter=lfs diff=lfs merge=lfs -text
-app/macOS/** filter=lfs diff=lfs merge=lfs -text
-App/MacOS/** filter=lfs diff=lfs merge=lfs -text
-*.app filter=lfs diff=lfs merge=lfs -text

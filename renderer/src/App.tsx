@@ -175,23 +175,34 @@ const App = () => {
       if (!isMounted) return;
 
       let initial = stored;
-      if (initial.length === 0) {
+      // Seed a welcome page (inside the default notebook) when there is no
+      // openable document yet. The notebook itself is created by the DB migration.
+      const hasDocument = initial.some(
+        (note) => note.kind === 'page' || note.kind === 'todolist'
+      );
+      if (!hasDocument) {
+        const firstNotebook = initial.find((note) => note.kind === 'notebook');
         const seed = await window.heracles.notes.create({
           title: 'Welcome to Heracles',
           content:
-            '<h1>Welcome to Heracles</h1><p>Use / to open the slash menu.</p><p>Use ⌘K to search.</p>'
+            '<h1>Welcome to Heracles</h1><p>Use / to open the slash menu.</p><p>Use ⌘K to search.</p>',
+          parentId: firstNotebook ? firstNotebook.id : null
         });
-        initial = [seed];
+        initial = [...initial, seed];
       }
 
       const sorted = sortNotes(initial);
 
       // Allow main process to seed an initial note via location hash (#note=ID).
+      // Only open documents — notebooks and sections aren't editable.
       const hashMatch = window.location.hash.match(/note=([^&]+)/);
       const requestedNoteId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
+      const firstOpenable = sorted.find(
+        (note) => note.kind === 'page' || note.kind === 'todolist'
+      );
       const firstId =
         (requestedNoteId && sorted.find((note) => note.id === requestedNoteId)?.id) ||
-        sorted[0]?.id ||
+        firstOpenable?.id ||
         null;
       const newLeaf = createLeaf(firstId ? [firstId] : [], firstId);
       setNotes(sorted);
@@ -378,19 +389,57 @@ const App = () => {
     [closeNoteTabsEverywhere]
   );
 
+  // Walk up from a note to the notebook that contains it.
+  const findNotebookOf = useCallback(
+    (noteId: string | null): string | null => {
+      if (!noteId) return null;
+      const byId = new Map(notes.map((note) => [note.id, note]));
+      let current = byId.get(noteId);
+      while (current) {
+        if (current.kind === 'notebook') return current.id;
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+      return null;
+    },
+    [notes]
+  );
+
+  // The notebook new top-level content should land in: the active note's
+  // notebook, falling back to the first notebook.
+  const resolveNotebookId = useCallback((): string | null => {
+    const fromActive = findNotebookOf(activeNoteId);
+    if (fromActive) return fromActive;
+    const firstNotebook = notes.find(
+      (note) => note.kind === 'notebook' && !note.archived && !note.trashed
+    );
+    return firstNotebook ? firstNotebook.id : null;
+  }, [activeNoteId, findNotebookOf, notes]);
+
+  const handleCreateNotebook = useCallback(async () => {
+    if (!window.heracles?.notes) return;
+    const created = await window.heracles.notes.create({
+      title: 'New notebook',
+      kind: 'notebook'
+    });
+    const refreshed = await window.heracles.notes.list();
+    setNotes(refreshed);
+    setAutoRenameId(created.id);
+    pushToast('Notebook created', 'success');
+  }, [pushToast]);
+
   const handleNewNote = useCallback(async () => {
     if (!window.heracles?.notes) return;
 
     const created = await window.heracles.notes.create({
       title: 'Untitled',
       content: '<p></p>',
-      parentId: activeNoteId
+      parentId: activeNoteId ?? resolveNotebookId()
     });
     setNotes((current) => sortNotes([created, ...current]));
     openNoteInLeaf(created.id);
     setAutoRenameId(created.id);
     pushToast('New page created', 'success');
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
 
   const handleImportMarkdown = useCallback(async () => {
     if (!window.heracles?.notes?.importMarkdown) return;
@@ -403,7 +452,7 @@ const App = () => {
       const note = await window.heracles.notes.create({
         title: file.name,
         content,
-        parentId: activeNoteId
+        parentId: activeNoteId ?? resolveNotebookId()
       });
       created.push(note);
     }
@@ -417,7 +466,7 @@ const App = () => {
         : `Imported ${created.length} pages`,
       'success'
     );
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
 
   const handleImportHtml = useCallback(async () => {
     if (!window.heracles?.notes?.importHtml) return;
@@ -430,7 +479,7 @@ const App = () => {
       const note = await window.heracles.notes.create({
         title: file.name,
         content,
-        parentId: activeNoteId
+        parentId: activeNoteId ?? resolveNotebookId()
       });
       created.push(note);
     }
@@ -444,7 +493,7 @@ const App = () => {
         : `Imported ${created.length} pages`,
       'success'
     );
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
 
   const handleDuplicateNote = useCallback(
     async (note: Note, target?: 'current' | 'right' | 'down') => {
@@ -453,7 +502,8 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: note.title ? `${note.title} (copy)` : 'Untitled',
         content: note.content,
-        icon: note.icon
+        icon: note.icon,
+        parentId: note.parentId ?? resolveNotebookId()
       });
       setNotes((current) => sortNotes([created, ...current]));
 
@@ -466,7 +516,7 @@ const App = () => {
       }
       pushToast('Duplicated', 'success');
     },
-    [activeLeafId, handleSplitLeaf, openNoteInLeaf, pushToast]
+    [activeLeafId, handleSplitLeaf, openNoteInLeaf, pushToast, resolveNotebookId]
   );
 
   const handleCopyNoteLink = useCallback(
@@ -537,7 +587,19 @@ const App = () => {
   const handleDeleteNote = useCallback(
     async (note: Note) => {
       if (!window.heracles?.notes) return;
-      await window.heracles.notes.remove({ id: note.id });
+      const result = await window.heracles.notes.remove({ id: note.id });
+      if (result && result.success === false) {
+        pushToast("You can't delete your only notebook", 'danger');
+        return;
+      }
+      if (note.kind === 'notebook') {
+        // The notebook's contents were reassigned to another notebook in the DB —
+        // refresh so the moved items show under their new home.
+        const refreshed = await window.heracles.notes.list();
+        setNotes(refreshed);
+        pushToast('Notebook deleted', 'danger');
+        return;
+      }
       removeNoteEverywhere(note.id);
       pushToast('Deleted permanently', 'danger');
     },
@@ -727,14 +789,14 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: 'New section',
         kind: 'section',
-        parentId
+        parentId: parentId ?? resolveNotebookId()
       });
       const refreshed = await window.heracles.notes.list();
       setNotes(refreshed);
       setAutoRenameId(created.id);
       pushToast('Section created', 'success');
     },
-    [pushToast]
+    [resolveNotebookId, pushToast]
   );
 
   const handleCreateTodoList = useCallback(
@@ -743,14 +805,14 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: 'New todo list',
         kind: 'todolist',
-        parentId
+        parentId: parentId ?? resolveNotebookId()
       });
       setNotes((current) => sortNotes([created, ...current]));
       openNoteInLeaf(created.id);
       setAutoRenameId(created.id);
       pushToast('Todo list created', 'success');
     },
-    [openNoteInLeaf, pushToast]
+    [resolveNotebookId, openNoteInLeaf, pushToast]
   );
 
   const handleAddChildTodoList = useCallback(
@@ -795,7 +857,9 @@ const App = () => {
 
   const switcherNotes = useMemo(() => {
     const term = switcherQuery.trim().toLowerCase();
-    const base = notes.filter((note) => !note.trashed && note.kind !== 'section');
+    const base = notes.filter(
+      (note) => !note.trashed && note.kind !== 'section' && note.kind !== 'notebook'
+    );
     if (!term) return sortNotes(base).slice(0, 10);
     return sortNotes(
       base.filter((note) => `${note.title} ${stripHtml(note.content)}`.toLowerCase().includes(term))
@@ -838,6 +902,7 @@ const App = () => {
         onMovePage={handleMovePage}
         onCreateSection={handleCreateSection}
         onCreateTodoList={handleCreateTodoList}
+        onCreateNotebook={handleCreateNotebook}
         onAddChildTodoList={handleAddChildTodoList}
         sectionSort={sectionSort}
         onChangeSectionSort={handleChangeSectionSort}

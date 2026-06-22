@@ -13,7 +13,7 @@ declare global {
           content?: string;
           icon?: string | null;
           parentId?: string | null;
-          kind?: 'page' | 'section' | 'todolist';
+          kind?: 'page' | 'section' | 'todolist' | 'notebook';
         }) => Promise<Note>;
         update: (payload: {
           id: string;

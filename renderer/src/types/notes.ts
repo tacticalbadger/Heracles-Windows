@@ -1,4 +1,4 @@
-export type NoteKind = 'page' | 'section' | 'todolist';
+export type NoteKind = 'page' | 'section' | 'todolist' | 'notebook';
 
 export type Note = {
   id: string;

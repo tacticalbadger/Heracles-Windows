@@ -481,6 +481,39 @@ textarea {
   outline-offset: -2px;
 }
 
+/* Notebook (top-level group) drag-reorder + drop-into indicators */
+.sidebar__section-header-row.is-drop-before::before,
+.sidebar__section-header-row.is-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--accent, #2eaadc);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.sidebar__section-header-row.is-drop-before::before {
+  top: 0;
+}
+
+.sidebar__section-header-row.is-drop-after::after {
+  bottom: 0;
+}
+
+.sidebar__section-header-row.is-drop-inside {
+  background: rgba(46, 170, 220, 0.18);
+  outline: 1px dashed rgba(46, 170, 220, 0.7);
+  outline-offset: -2px;
+}
+
+.sidebar__new-notebook {
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
 .sidebar__item--section {
   font-weight: 600;
   text-transform: none;
@@ -1024,6 +1057,21 @@ textarea {
   min-height: 1.5em;
 }
 
+.editor-content img,
+.editor-content .editor-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border-radius: 8px;
+  cursor: default;
+}
+
+.editor-content img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #2eaadc);
+  outline-offset: 2px;
+}
+
 .editor-content p:empty::before {
   content: '';
 }
@@ -1235,9 +1283,90 @@ textarea {
   font-weight: 400;
 }
 
+.block-handle__button--drag {
+  cursor: grab;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.block-handle__button--drag:active {
+  cursor: grabbing;
+}
+
 .block-handle__button:hover {
   background: var(--hover);
   color: var(--text-primary);
+}
+
+/* ─────────────────────────── Columns ─────────────────────────── */
+
+.editor-content .columns {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.editor-content .column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.editor-content .column > .column__content {
+  min-width: 0;
+}
+
+/* Resize grip sits in the gap on the column's right edge (hidden on the last). */
+.editor-content .column > .column__resize {
+  position: absolute;
+  top: 0;
+  right: -14px;
+  width: 12px;
+  height: 100%;
+  cursor: col-resize;
+  border-radius: 3px;
+}
+
+.editor-content .columns > .column:last-child > .column__resize {
+  display: none;
+}
+
+.editor-content .column > .column__resize::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 5px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  border-radius: 2px;
+  transition: background 120ms ease;
+}
+
+.editor-content .column > .column__resize:hover::after,
+body.is-col-resizing .editor-content .column > .column__resize::after {
+  background: var(--accent, #2eaadc);
+}
+
+body.is-col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Drop indicator while dragging a block. */
+.block-drop-indicator {
+  position: absolute;
+  z-index: 16;
+  pointer-events: none;
+  background: var(--accent, #2eaadc);
+  border-radius: 2px;
+}
+
+.block-drop-indicator--column {
+  box-shadow: 0 0 0 1px var(--accent, #2eaadc);
 }
 
 /* ─────────────────────────── Bubble toolbar (selection) ─────────────────────────── */

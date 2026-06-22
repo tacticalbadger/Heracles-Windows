@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Notebooks (top-level groups)** — the sidebar is now a filing cabinet: create
+  any number of top-level **notebooks** ("New notebook"), each holding sections
+  and pages/todos. Notebooks are renamable (double-click or the `⋯` menu),
+  collapsible, drag-to-reorder, and deletable (contents move to the first
+  remaining notebook; the last notebook can't be deleted). A new note `kind`,
+  `notebook`, models them.
+- **Images in notes** — drag an image file from Finder onto a note, or paste a
+  screenshot, to insert it as an image block. Images embed as base64 data URLs so
+  notes stay fully local-first (no asset files to manage).
+- **Column layouts** — drag any block by its gutter grip (`⠿`) to the right edge
+  of another block to place it beside that block as a column; drop at the edge of
+  an existing row to add more columns, or between blocks to reorder. Column
+  widths are **resizable** by dragging the boundary, and rows auto-collapse back
+  to normal flow when reduced below two columns.
 - **Import HTML** — "New page from HTML" in the sidebar imports one or more
   `.html`/`.htm` files as pages, converting common formatting to editor content.
 - **Paste HTML** — pasting rich HTML into the editor (e.g. from a web page) is
@@ -27,13 +41,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The single hard-coded "Private" sidebar section is replaced by user-created
+  notebooks. Every page/section/todo now lives inside a notebook; a one-time
+  migration creates a default **"Notebook"**, adopts all existing top-level
+  items into it, and writes a `heracles.pre-notebooks-<timestamp>.sqlite` backup
+  first so nothing can be lost.
+- Pasting HTML that contains `<img>` now keeps it as an image block (previously
+  images were downgraded to links).
 - The editor now registers TipTap's `Link` extension so links survive import,
   paste, and editing.
-- Added a fifth drag-and-drop MIME type, `application/x-heracles-column`, for
-  column reordering on a board.
+- Added a sixth drag-and-drop MIME type, `application/x-heracles-block`, for
+  moving editor blocks (reorder / make a column). The fifth,
+  `application/x-heracles-column`, handles column reordering on a board.
 
 ### Technical
 
+- New TipTap nodes: `ImageBlock` (block image), and `ColumnBlock` / `Column`
+  with a `ColumnNodeView` (resize handle) and `columnCommands.ts`
+  (`resolveOuterBlock`, `getDropTarget`, `applyBlockDrop`, and a
+  `ColumnsNormalizer` appendTransaction plugin that drops empty columns and
+  unwraps under-filled rows). Image drops/pastes are handled in the editor's
+  `handleDrop` / `handlePaste` / `handleDOMEvents`.
+- `notes.create` accepts `kind: 'notebook'`. `electron/db.cjs` adds the
+  one-time notebook migration plus a `resolveParentId` invariant that keeps
+  notebooks at the root and every other note inside a notebook; deleting a
+  notebook reassigns its children to the first remaining notebook.
 - New conversion utilities: `renderer/src/lib/markdownImport.ts`
   (`markdownToEditorHtml`, backed by `marked`) and
   `renderer/src/lib/htmlImport.ts` (`htmlToEditorHtml`, also used by the editor's

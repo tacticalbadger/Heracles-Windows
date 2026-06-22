@@ -74,6 +74,40 @@ const initDatabase = (userDataPath) => {
     db.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'page';");
   }
 
+  // Notebook migration --------------------------------------------------------
+  // Notebooks are the top-level "drawers" of the filing cabinet: every page,
+  // section, and todo list lives inside one. If none exist yet, create a default
+  // "Notebook" and adopt all current top-level items into it. Runs once.
+  const notebookCount = db.prepare("SELECT COUNT(*) AS c FROM notes WHERE kind = 'notebook'").get().c;
+  if (notebookCount === 0) {
+    const existingCount = db.prepare('SELECT COUNT(*) AS c FROM notes').get().c;
+    // Safety net: snapshot the database before the one-time reparent so the
+    // user can never lose anything. Non-fatal if the copy fails.
+    if (existingCount > 0) {
+      try {
+        const backupPath = path.join(userDataPath, `heracles.pre-notebooks-${Date.now()}.sqlite`);
+        fs.copyFileSync(dbPath, backupPath);
+        console.log(`[heracles] Pre-notebook-migration backup written to ${backupPath}`);
+      } catch (err) {
+        console.error('[heracles] Failed to write pre-migration backup:', err);
+      }
+    }
+    const notebookId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    // Atomic: either the notebook is created AND everything is adopted, or
+    // nothing changes. The reparent only moves items — it never deletes.
+    const runNotebookMigration = db.transaction(() => {
+      db.prepare(
+        `INSERT INTO notes (id, title, content, icon, kind, parent_id, position, favorited, created_at, updated_at, archived, trashed)
+         VALUES (?, 'Notebook', '', NULL, 'notebook', NULL, 0, 0, ?, ?, 0, 0)`
+      ).run(notebookId, now, now);
+      db.prepare(
+        "UPDATE notes SET parent_id = ? WHERE parent_id IS NULL AND id != ? AND kind != 'notebook'"
+      ).run(notebookId, notebookId);
+    });
+    runNotebookMigration();
+  }
+
   // Todo-list / kanban tables -------------------------------------------------
   db.exec(`
     CREATE TABLE IF NOT EXISTS task_columns (
@@ -133,17 +167,26 @@ const createNote = ({ title, content, icon, parentId, kind }) => {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const nextKind =
-    kind === 'section' ? 'section' : kind === 'todolist' ? 'todolist' : 'page';
+    kind === 'section'
+      ? 'section'
+      : kind === 'todolist'
+        ? 'todolist'
+        : kind === 'notebook'
+          ? 'notebook'
+          : 'page';
   const nextTitle =
     title?.trim() ||
     (nextKind === 'section'
       ? 'New section'
       : nextKind === 'todolist'
         ? 'New todo list'
-        : 'Untitled');
-  const nextContent = content ?? (nextKind === 'section' || nextKind === 'todolist' ? '' : '<p></p>');
+        : nextKind === 'notebook'
+          ? 'New notebook'
+          : 'Untitled');
+  const nextContent = content ?? (nextKind === 'page' ? '<p></p>' : '');
   const nextIcon = icon ?? null;
-  const nextParentId = parentId ?? null;
+  // Notebooks are always top-level; everything else keeps its requested parent.
+  const nextParentId = nextKind === 'notebook' ? null : (parentId ?? null);
 
   // Place new note at the END of its parent's siblings.
   const siblings = orm.select().from(notes).all().filter((n) => (n.parentId ?? null) === nextParentId);
@@ -197,6 +240,26 @@ const trashNote = ({ id }) => setNoteStatus({ id, trashed: true, archived: false
 const restoreNote = ({ id }) => setNoteStatus({ id, trashed: false, archived: false });
 
 const deleteNote = ({ id }) => {
+  const existing = getNote(id);
+  if (existing && existing.kind === 'notebook') {
+    // A notebook always needs a sibling to receive its contents — refuse to
+    // delete the only one (mirrors how deleteColumn keeps a fallback column).
+    const others = orm
+      .select()
+      .from(notes)
+      .all()
+      .filter((n) => n.kind === 'notebook' && n.id !== id)
+      .sort((a, b) => a.position - b.position);
+    if (others.length === 0) {
+      return { success: false, reason: 'last-notebook' };
+    }
+    const now = new Date().toISOString();
+    orm
+      .update(notes)
+      .set({ parentId: others[0].id, updatedAt: now })
+      .where(eq(notes.parentId, id))
+      .run();
+  }
   orm.delete(notes).where(eq(notes.id, id)).run();
   return { success: true };
 };
@@ -231,13 +294,33 @@ const updateNote = ({ id, title, content, icon }) => {
   return getNote(id);
 };
 
+// The lowest-position notebook — the default home for top-level content.
+const getFirstNotebook = () =>
+  orm
+    .select()
+    .from(notes)
+    .all()
+    .filter((n) => n.kind === 'notebook')
+    .sort((a, b) => a.position - b.position)[0] ?? null;
+
+// Enforce the cabinet invariant: notebooks live at the root; everything else
+// must live inside a notebook (a non-notebook may never sit at the top level).
+const resolveParentId = (note, requestedParentId) => {
+  if (note.kind === 'notebook') return null;
+  if (requestedParentId == null) {
+    const firstNotebook = getFirstNotebook();
+    return firstNotebook ? firstNotebook.id : null;
+  }
+  return requestedParentId;
+};
+
 const setNoteParent = ({ id, parentId }) => {
   const existing = getNote(id);
   if (!existing) return null;
   const now = new Date().toISOString();
   orm
     .update(notes)
-    .set({ parentId: parentId ?? null, updatedAt: now })
+    .set({ parentId: resolveParentId(existing, parentId ?? null), updatedAt: now })
     .where(eq(notes.id, id))
     .run();
   return getNote(id);
@@ -284,7 +367,7 @@ const reorderNote = ({ id, parentId, beforeId }) => {
   const existing = getNote(id);
   if (!existing) return null;
 
-  const targetParentId = parentId ?? null;
+  const targetParentId = resolveParentId(existing, parentId ?? null);
   if (isSelfOrDescendant(targetParentId, id)) {
     return existing;
   }

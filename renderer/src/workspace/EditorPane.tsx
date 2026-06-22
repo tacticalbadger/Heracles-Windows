@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from 'react';
@@ -17,6 +18,16 @@ import Link from '@tiptap/extension-link';
 import { CodeMirrorBlock } from '../editor/CodeMirrorBlock';
 import { CalloutBlock } from '../editor/CalloutBlock';
 import { ToggleBlock } from '../editor/ToggleBlock';
+import { ImageBlock } from '../editor/ImageBlock';
+import { ColumnBlock } from '../editor/ColumnBlock';
+import { Column } from '../editor/Column';
+import {
+  ColumnsNormalizer,
+  BLOCK_DRAG_MIME,
+  getDropTarget,
+  applyBlockDrop,
+  resolveOuterBlock
+} from '../editor/columnCommands';
 import SlashCommand from '../editor/SlashCommand';
 import { BlockId } from '../editor/BlockId';
 import type { Note } from '../types/notes';
@@ -28,6 +39,20 @@ import { PAGE_DRAG_MIME } from './Sidebar';
 import { KanbanBoard } from './KanbanBoard';
 
 export type ToastTone = 'success' | 'info' | 'danger';
+
+// Pull image files out of a drag/clipboard transfer.
+const imageFilesFrom = (list: FileList | null | undefined): File[] =>
+  Array.from(list ?? []).filter((file) => file.type.startsWith('image/'));
+
+// Read an image File as a base64 data URL so it can be embedded inline in the
+// note's HTML (local-first: no asset files on disk to manage).
+const readImageAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 
 type BlockAnchor = {
   top: number;
@@ -205,6 +230,8 @@ export const EditorPane = ({
   const blockMenuSearchRef = useRef<HTMLInputElement | null>(null);
   const tabContextRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
+  // The block element currently under the gutter handle (drag source for columns).
+  const hoverBlockDomRef = useRef<HTMLElement | null>(null);
   const [blockAnchor, setBlockAnchor] = useState<BlockAnchor>({
     top: 0,
     left: 0,
@@ -221,6 +248,14 @@ export const EditorPane = ({
   );
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [pageMenuRect, setPageMenuRect] = useState<DOMRect | null>(null);
+  // Live drop indicator while dragging a block (column edge vs. reorder).
+  const [columnDrop, setColumnDrop] = useState<{
+    top: number;
+    left: number;
+    height: number;
+    width: number;
+    mode: 'column' | 'reorder';
+  } | null>(null);
   const toolbarDisabled = !note || isTrashed;
 
   const editor = useEditor(
@@ -234,6 +269,10 @@ export const EditorPane = ({
         CodeMirrorBlock,
         CalloutBlock,
         ToggleBlock,
+        ImageBlock,
+        ColumnBlock,
+        Column,
+        ColumnsNormalizer,
         SlashCommand
       ],
       content: note?.content ?? '<p></p>',
@@ -241,7 +280,69 @@ export const EditorPane = ({
         attributes: {
           class: 'editor-content'
         },
+        // Drag a block (via the gutter grip) → reorder or make a column.
+        handleDrop: (view, event) => {
+          const dragEvent = event as DragEvent;
+          if (dragEvent.dataTransfer?.types.includes(BLOCK_DRAG_MIME)) {
+            event.preventDefault();
+            setColumnDrop(null);
+            const raw = dragEvent.dataTransfer.getData(BLOCK_DRAG_MIME);
+            const sourcePos = Number(raw);
+            const target = getDropTarget(view, dragEvent.clientX, dragEvent.clientY);
+            if (Number.isFinite(sourcePos) && target) {
+              return applyBlockDrop(view, sourcePos, target);
+            }
+            return true;
+          }
+          // Drag an image file in from the OS → insert an image block at the drop point.
+          const images = imageFilesFrom((event as DragEvent).dataTransfer?.files);
+          if (images.length === 0) {
+            return false;
+          }
+          event.preventDefault();
+          const coords = view.posAtCoords({
+            left: (event as DragEvent).clientX,
+            top: (event as DragEvent).clientY
+          });
+          const dropPos = coords ? coords.pos : view.state.selection.from;
+          Promise.all(images.map(readImageAsDataUrl)).then((sources) => {
+            let tr = view.state.tr;
+            let pos = dropPos;
+            sources.forEach((src, index) => {
+              const node = view.state.schema.nodes.image.create({
+                src,
+                alt: images[index].name
+              });
+              tr = tr.insert(pos, node);
+              pos += node.nodeSize;
+            });
+            view.dispatch(tr.scrollIntoView());
+          });
+          return true;
+        },
         handlePaste: (view, event, slice) => {
+          // Pasted image data (e.g. a screenshot) → insert image block(s).
+          const images = imageFilesFrom(event.clipboardData?.files);
+          if (images.length > 0) {
+            event.preventDefault();
+            Promise.all(images.map(readImageAsDataUrl)).then((sources) => {
+              let tr = view.state.tr;
+              if (!tr.selection.empty) {
+                tr = tr.deleteSelection();
+              }
+              let pos = tr.selection.from;
+              sources.forEach((src, index) => {
+                const node = view.state.schema.nodes.image.create({
+                  src,
+                  alt: images[index].name
+                });
+                tr = tr.insert(pos, node);
+                pos += node.nodeSize;
+              });
+              view.dispatch(tr.scrollIntoView());
+            });
+            return true;
+          }
           // Check if there's HTML content in the clipboard
           const html = event.clipboardData?.getData('text/html');
           if (html && html.trim().length > 0) {
@@ -262,6 +363,48 @@ export const EditorPane = ({
           }
           // Let default paste handler process it
           return false;
+        },
+        handleDOMEvents: {
+          // Show a live indicator (column edge vs. between-blocks) while dragging a block.
+          dragover: (view, event) => {
+            if (!event.dataTransfer?.types.includes(BLOCK_DRAG_MIME)) return false;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            const container = paneBodyRef.current;
+            const target = getDropTarget(view, event.clientX, event.clientY);
+            if (!container || !target) {
+              setColumnDrop(null);
+              return true;
+            }
+            const cr = container.getBoundingClientRect();
+            const { rect } = target;
+            if (target.mode === 'column') {
+              setColumnDrop({
+                top: rect.top - cr.top + container.scrollTop,
+                left: rect.right - cr.left + container.scrollLeft,
+                height: rect.height,
+                width: 3,
+                mode: 'column'
+              });
+            } else {
+              const edgeY = target.side === 'before' ? rect.top : rect.bottom;
+              setColumnDrop({
+                top: edgeY - cr.top + container.scrollTop,
+                left: rect.left - cr.left + container.scrollLeft,
+                height: 3,
+                width: rect.width,
+                mode: 'reorder'
+              });
+            }
+            return true;
+          },
+          dragleave: (_view, event) => {
+            if (!event.dataTransfer?.types.includes(BLOCK_DRAG_MIME)) return false;
+            const related = event.relatedTarget as Node | null;
+            if (related && paneBodyRef.current?.contains(related)) return false;
+            setColumnDrop(null);
+            return false;
+          }
         }
       },
       onUpdate: ({ editor: instance }: { editor: Editor }) => {
@@ -471,6 +614,7 @@ export const EditorPane = ({
         return;
       }
 
+      hoverBlockDomRef.current = blockDom as HTMLElement;
       updateBlockAnchorFromDom(blockDom);
       setBlockHandleVisible(true);
     };
@@ -1239,6 +1383,37 @@ export const EditorPane = ({
                     left: Math.max(8, blockAnchor.left - 42)
                   }}
                 >
+                  <div
+                    className="block-handle__button block-handle__button--drag"
+                    role="button"
+                    aria-label="Drag to move or make a column"
+                    title="Drag to move · drag to a block's right edge to make a column"
+                    draggable
+                    onDragStart={(event: ReactDragEvent<HTMLDivElement>) => {
+                      const dom = hoverBlockDomRef.current;
+                      if (!dom || !editor) {
+                        event.preventDefault();
+                        return;
+                      }
+                      try {
+                        const posInside = editor.view.posAtDOM(dom, 0);
+                        const source = resolveOuterBlock(editor.state.doc, posInside);
+                        if (!source) {
+                          event.preventDefault();
+                          return;
+                        }
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData(BLOCK_DRAG_MIME, String(source.pos));
+                        event.dataTransfer.setData('text/plain', '');
+                        setBlockMenuOpen(false);
+                      } catch {
+                        event.preventDefault();
+                      }
+                    }}
+                    onDragEnd={() => setColumnDrop(null)}
+                  >
+                    ⠿
+                  </div>
                   <button
                     type="button"
                     className="block-handle__button block-handle__button--add"
@@ -1274,6 +1449,17 @@ export const EditorPane = ({
                   </button>
                 </div>
               )}
+            {columnDrop && (
+              <div
+                className={`block-drop-indicator block-drop-indicator--${columnDrop.mode}`}
+                style={{
+                  top: columnDrop.top,
+                  left: columnDrop.left,
+                  width: columnDrop.width,
+                  height: columnDrop.height
+                }}
+              />
+            )}
             {note.kind !== 'todolist' && editor && !isTrashed && blockAnchor.visible && blockMenuOpen && (
               <div
                 ref={blockMenuRef}

@@ -4,11 +4,14 @@ A local-first, hierarchical notebook for macOS. Electron shell, React renderer, 
 
 ## Features
 
-- **Hierarchical pages** — nest pages under pages or sections; drag-reorder/reparent in the sidebar
-- **Create under active context** — new pages (blank or imported) are created as children of whatever page/section is currently active
+- **Notebooks (top-level groups)** — the sidebar is a filing cabinet: create any number of notebooks, each holding sections and pages/todos; rename, collapse, drag-reorder, and delete them
+- **Hierarchical pages** — nest pages under pages or sections inside a notebook; drag-reorder/reparent in the sidebar
+- **Create under active context** — new pages (blank or imported) are created as children of whatever page/section is currently active, in its notebook
 - **Multi-pane workspace** — split panes horizontally or vertically, drag tabs/pages between panes, drop on a pane edge to split
 - **Tabbed panes** — each pane has its own tab strip; close a tab without closing the pane
-- **Rich-text editor** — TipTap with floating bubble menu (bold/italic/strike, headings), block handles (`+` / `⋮⋮`), task lists, code blocks (CodeMirror), and links
+- **Rich-text editor** — TipTap with floating bubble menu (bold/italic/strike, headings), block handles (`⠿` / `+` / `⋮⋮`), task lists, code blocks (CodeMirror), and links
+- **Images** — drag an image file onto a note (or paste a screenshot) to insert an image block; embedded inline as data URLs, so notes stay local-first
+- **Column layouts** — drag a block by its `⠿` grip to another block's right edge to make columns; add more columns by dropping at the edge, and drag the boundary to resize
 - **Import Markdown** — "New page from Markdown" turns one or more `.md` files into pages, converting headings, lists, task lists, code blocks, and links to editor content
 - **Import HTML** — "New page from HTML" imports `.html`/`.htm` files the same way, preserving common formatting
 - **Paste HTML** — pasting rich HTML (e.g. from a web page) is converted to clean editor content instead of raw markup
@@ -77,6 +80,11 @@ renderer/src/
 ├── App.tsx                Top-level state, IPC orchestration
 ├── ErrorBoundary.tsx      Global render-error recovery
 ├── editor/                TipTap extensions, slash menu, CodeMirror block
+│   ├── ImageBlock.ts      Block image node (drag/paste → inline data URL)
+│   ├── ColumnBlock.ts     Columns container node (flex row)
+│   ├── Column.ts          Single resizable column node
+│   ├── ColumnNodeView.tsx Column render + drag-to-resize handle
+│   └── columnCommands.ts  Block-drop geometry, restructuring tx, normalizer
 ├── lib/
 │   ├── markdownImport.ts  Markdown → TipTap-compatible HTML converter
 │   └── htmlImport.ts      HTML sanitizer/normalizer for import & paste
@@ -105,7 +113,7 @@ A single SQLite database file: `heracles.sqlite` inside Electron's `userData` di
 | Dev | `~/Library/Application Support/heracles/heracles.sqlite` |
 | Packaged | `~/Library/Application Support/Heracles/heracles.sqlite` |
 
-Persisted tables: **notes**, plus **task_columns**, **tasks**, and **task_comments** for the Kanban feature. Pane layout, open tabs, and sidebar collapse state live in renderer state and reset on app restart.
+Persisted tables: **notes**, plus **task_columns**, **tasks**, and **task_comments** for the Kanban feature. The `notes.kind` column is one of `page`, `section`, `todolist`, or `notebook`; notebooks are the top-level containers (`parent_id IS NULL`) and everything else lives inside one. On first launch after upgrading, a one-time migration creates a default notebook, adopts existing top-level notes into it, and writes a `heracles.pre-notebooks-<timestamp>.sqlite` backup alongside the database. Pane layout and open tabs live in renderer state; sidebar collapse state (including collapsed notebooks) is persisted in `localStorage`.
 
 To inspect:
 
@@ -117,7 +125,9 @@ sqlite3 ~/Library/Application\ Support/heracles/heracles.sqlite "SELECT id, titl
 
 - **Pane tree** is an immutable `PaneNode` tree (`leaf` or `split`) manipulated by the pure functions in `renderer/src/workspace/paneTreeOps.ts`. Splits auto-collapse when reduced to one child; removing the last note in a leaf removes the leaf.
 - **IPC** flows through `window.heracles.notes.*` and `window.heracles.tasks.*` declared in `electron/preload.cjs` and handled in `electron/main.cjs`. The renderer never touches SQLite directly. `tasks.move({ id, columnId, parentTaskId, beforeId })` handles both reordering and reparenting/promoting in one call.
-- **Drag-and-drop** uses five custom MIME types: `application/x-heracles-tab` (tab moves between panes), `application/x-heracles-page` (sidebar page onto pane / between panes), `application/x-heracles-task` (card reorder/move between columns), `application/x-heracles-subtask` (subtask reorder within a parent), and `application/x-heracles-column` (column reorder on a board).
+- **Drag-and-drop** uses six custom MIME types: `application/x-heracles-tab` (tab moves between panes), `application/x-heracles-page` (sidebar page onto pane / between panes / into a notebook), `application/x-heracles-task` (card reorder/move between columns), `application/x-heracles-subtask` (subtask reorder within a parent), `application/x-heracles-column` (column reorder on a board), and `application/x-heracles-block` (editor block reorder / make a column).
+- **Notebooks** — modeled as a `kind: 'notebook'` note pinned to the root, reusing the existing note tree (create/rename/reorder/icons/IPC). `electron/db.cjs` enforces the invariant via `resolveParentId` (notebooks stay at the root; non-notebooks can't sit at the root) and a one-time migration; deleting a notebook reassigns its children to the first remaining one. The sidebar renders notebooks as collapsible groups in place of the old "Private" section.
+- **Columns** — `ColumnBlock` (a `<div data-type="columns">` flex row) holds `Column` nodes (`data-type="column"`, with a `data-width` flex weight), so layouts round-trip through the stored note HTML with no DB change. Dragging a block emits `application/x-heracles-block`; `columnCommands.ts` computes the drop target, restructures via one mapped transaction, and a `ColumnsNormalizer` appendTransaction plugin keeps rows valid (drops empty columns, unwraps rows with <2 columns).
 - **Import & paste** — `electron/main.cjs` exposes `notes.importMarkdown()` and `notes.importHtml()` (native file dialogs that read file contents); the renderer converts them with `renderer/src/lib/markdownImport.ts` / `htmlImport.ts`. The same `htmlToEditorHtml` converter powers the editor's `handlePaste`, so pasted HTML is sanitized to supported nodes (images become links, `<pre>` becomes a CodeMirror block, checkbox lists become task lists).
 - **Subtask moves** — because the task detail modal covers the board, subtasks are moved via the `⤴` menu (not by dragging onto a column). The menu offers every column (promote to a standalone card) and a depth-indented tree of every other task (reparent), filtering out the subtask itself, its descendants, and its current parent.
 - **BubbleMenu host** — TipTap's bubble-menu plugin detaches its DOM via `element.remove()`, which clashes with React reconciliation if it has dynamic siblings. The menu is wrapped in a dedicated empty `.bubble-menu-host` div so the detachment never disturbs sibling reconciliation.

@@ -72,19 +72,13 @@ export const MovePagePicker = ({ note, notes, onClose, onSelect }: MovePagePicke
         id: n.id,
         label: n.title || 'Untitled',
         subtitle: buildBreadcrumb(n, byId),
-        icon: n.kind === 'section' ? '◈' : n.icon || '▦'
+        icon: n.kind === 'section' ? '◈' : n.kind === 'notebook' ? '▤' : n.icon || '▦'
       }));
 
-    const rootRow: Candidate | null =
-      note.parentId !== null
-        ? { id: null, label: 'No parent (top level)', subtitle: 'Move to root of Private' }
-        : null;
-
-    if (rootRow && (!term || rootRow.label.toLowerCase().includes(term))) {
-      return [rootRow, ...sortedNotes];
-    }
+    // Everything lives inside a notebook, so there is no "top level" target —
+    // a notebook is itself the top-level destination.
     return sortedNotes;
-  }, [notes, blocked, query, byId, note.parentId]);
+  }, [notes, blocked, query, byId]);
 
   useEffect(() => {
     if (activeIndex >= candidates.length) setActiveIndex(0);

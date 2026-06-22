@@ -27,6 +27,7 @@ type SidebarProps = {
   onImportHtml: () => void;
   onCreateSection: (parentId: string | null) => void;
   onCreateTodoList: (parentId: string | null) => void;
+  onCreateNotebook: () => void;
   onAddChildTodoList: (parentNote: Note) => void;
   onOpenSwitcher: () => void;
   onEmptyTrash: () => void;
@@ -59,6 +60,7 @@ type SidebarProps = {
 
 type ContextMenuState = { note: Note; x: number; y: number } | null;
 type SectionMenuState = { section: Section; x: number; y: number } | null;
+type NotebookMenuState = { notebook: Note; x: number; y: number } | null;
 type DragOverState = { noteId: string; position: DropPosition } | null;
 
 const sortNotesBy = (list: Note[], sort: SectionSort): Note[] => {
@@ -97,6 +99,7 @@ export const Sidebar = ({
   onImportHtml,
   onCreateSection,
   onCreateTodoList,
+  onCreateNotebook,
   onAddChildTodoList,
   onOpenSwitcher,
   onEmptyTrash,
@@ -150,9 +153,21 @@ export const Sidebar = ({
     return new Set();
   });
 
+  // Notebooks (top-level groups) are open by default; only collapsed ids are stored.
+  const [collapsedNotebookIds, setCollapsedNotebookIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('heracles-collapsed-notebooks');
+      if (stored) return new Set(JSON.parse(stored) as string[]);
+    } catch {
+      /* ignore */
+    }
+    return new Set();
+  });
+
   const [query, setQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
   const [sectionMenu, setSectionMenu] = useState<SectionMenuState>(null);
+  const [notebookMenu, setNotebookMenu] = useState<NotebookMenuState>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const renameInputRef = useRef<HTMLInputElement | null>(null);
@@ -180,6 +195,17 @@ export const Sidebar = ({
       /* ignore */
     }
   }, [expandedIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'heracles-collapsed-notebooks',
+        JSON.stringify(Array.from(collapsedNotebookIds))
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [collapsedNotebookIds]);
 
   useEffect(() => {
     if (renamingId && renameInputRef.current) {
@@ -299,28 +325,40 @@ export const Sidebar = ({
           note.favorited &&
           !note.archived &&
           !note.trashed &&
+          note.kind !== 'notebook' &&
           (!note.parentId || !favoritedIds.has(note.parentId))
       ),
       sectionSort.favorites
     );
   }, [notes, sectionSort.favorites]);
 
-  const privateRoots = useMemo(() => {
-    const tops = (childrenByParent.get(null) ?? []).filter((note) => !note.favorited);
-    return sortNotesBy(tops, sectionSort.private);
-  }, [childrenByParent, sectionSort.private]);
+  // Top-level groups ("drawers" of the filing cabinet), ordered manually.
+  const notebooks = useMemo(() => {
+    const tops = (childrenByParent.get(null) ?? []).filter(
+      (note) => note.kind === 'notebook'
+    );
+    return [...tops].sort(
+      (a, b) => a.position - b.position || a.title.localeCompare(b.title)
+    );
+  }, [childrenByParent]);
 
   const archivedNotes = useMemo(
     () =>
       sortNotesBy(
-        notes.filter((note) => note.archived && !note.trashed),
+        notes.filter(
+          (note) => note.archived && !note.trashed && note.kind !== 'notebook'
+        ),
         sectionSort.archive
       ),
     [notes, sectionSort.archive]
   );
 
   const trashedNotes = useMemo(
-    () => sortNotesBy(notes.filter((note) => note.trashed), sectionSort.trash),
+    () =>
+      sortNotesBy(
+        notes.filter((note) => note.trashed && note.kind !== 'notebook'),
+        sectionSort.trash
+      ),
     [notes, sectionSort.trash]
   );
 
@@ -332,6 +370,22 @@ export const Sidebar = ({
       const next = new Set(current);
       if (next.has(noteId)) next.delete(noteId);
       else next.add(noteId);
+      return next;
+    });
+
+  const toggleNotebook = (notebookId: string) =>
+    setCollapsedNotebookIds((current) => {
+      const next = new Set(current);
+      if (next.has(notebookId)) next.delete(notebookId);
+      else next.add(notebookId);
+      return next;
+    });
+
+  const expandNotebook = (notebookId: string) =>
+    setCollapsedNotebookIds((current) => {
+      if (!current.has(notebookId)) return current;
+      const next = new Set(current);
+      next.delete(notebookId);
       return next;
     });
 
@@ -439,13 +493,80 @@ export const Sidebar = ({
     event.dataTransfer.dropEffect = 'move';
   };
 
-  const handleSectionBodyDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+  // Compute before/after/inside against a notebook header row.
+  const notebookDropPosition = (
+    event: ReactDragEvent<HTMLDivElement>
+  ): DropPosition => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    const h = rect.height;
+    if (y < h * 0.25) return 'before';
+    if (y > h * 0.75) return 'after';
+    return 'inside';
+  };
+
+  const handleNotebookDragOver = (
+    notebook: Note,
+    event: ReactDragEvent<HTMLDivElement>
+  ) => {
+    if (!event.dataTransfer.types.includes(PAGE_DRAG_MIME)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    const position = notebookDropPosition(event);
+    if (
+      !dragOver ||
+      dragOver.noteId !== notebook.id ||
+      dragOver.position !== position
+    ) {
+      setDragOver({ noteId: notebook.id, position });
+    }
+  };
+
+  const handleNotebookDrop = (
+    notebook: Note,
+    event: ReactDragEvent<HTMLDivElement>
+  ) => {
+    if (!event.dataTransfer.types.includes(PAGE_DRAG_MIME)) return;
+    const sourceId = event.dataTransfer.getData(PAGE_DRAG_MIME);
+    const position = notebookDropPosition(event);
+    event.preventDefault();
+    event.stopPropagation();
+    setDragOver(null);
+    if (!sourceId || sourceId === notebook.id) return;
+    const source = notes.find((n) => n.id === sourceId);
+    if (!source) return;
+
+    if (source.kind === 'notebook') {
+      // Reorder notebooks relative to this one.
+      if (position === 'before') {
+        onMovePage(sourceId, null, notebook.id);
+      } else {
+        const idx = notebooks.findIndex((n) => n.id === notebook.id);
+        const next = notebooks[idx + 1];
+        onMovePage(sourceId, null, next && next.id !== sourceId ? next.id : null);
+      }
+      return;
+    }
+
+    // Move a document/section into this notebook (append at its root).
+    onMovePage(sourceId, notebook.id, null);
+    expandNotebook(notebook.id);
+  };
+
+  // Drop onto a notebook body's empty area / end → root of that notebook.
+  const handleNotebookBodyDrop = (
+    notebook: Note,
+    event: ReactDragEvent<HTMLDivElement>
+  ) => {
     if (!event.dataTransfer.types.includes(PAGE_DRAG_MIME)) return;
     const sourceId = event.dataTransfer.getData(PAGE_DRAG_MIME);
     event.preventDefault();
     setDragOver(null);
     if (!sourceId) return;
-    onMovePage(sourceId, null, null);
+    const source = notes.find((n) => n.id === sourceId);
+    if (source && source.kind === 'notebook') return; // can't nest a notebook
+    onMovePage(sourceId, notebook.id, null);
   };
 
   const renderTreeItem = (note: Note, depth: number): JSX.Element => {
@@ -706,6 +827,110 @@ export const Sidebar = ({
   const labelOf = (section: Section): string =>
     sectionLabels[section] ?? DEFAULT_LABELS[section];
 
+  const renderNotebook = (notebook: Note): JSX.Element => {
+    const isOpen = !collapsedNotebookIds.has(notebook.id);
+    const isRenaming = notebook.id === renamingId;
+    const children = sortNotesBy(
+      childrenByParent.get(notebook.id) ?? [],
+      sectionSort.private
+    );
+    const dragHere =
+      dragOver && dragOver.noteId === notebook.id ? dragOver.position : null;
+
+    return (
+      <div key={notebook.id} className="sidebar__section sidebar__section--notebook">
+        <div
+          className={`sidebar__section-header-row ${isOpen ? 'is-open' : ''} ${
+            dragHere ? `is-drop-${dragHere}` : ''
+          }`}
+          data-note-id={notebook.id}
+          draggable={!isRenaming}
+          onDragStart={(event) => handleItemDragStart(notebook, event)}
+          onDragOver={(event) => handleNotebookDragOver(notebook, event)}
+          onDragLeave={handleItemDragLeave}
+          onDrop={(event) => handleNotebookDrop(notebook, event)}
+        >
+          <button
+            type="button"
+            className="sidebar__section-header"
+            onClick={() => toggleNotebook(notebook.id)}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              beginRename(notebook);
+            }}
+          >
+            <span className={`sidebar__chevron ${isOpen ? 'is-open' : ''}`}>›</span>
+            {isRenaming ? (
+              <input
+                ref={renameInputRef}
+                className="sidebar__section-rename"
+                value={renameDraft}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  setRenameDraft(event.target.value)
+                }
+                onClick={(event) => event.stopPropagation()}
+                onBlur={commitRename}
+                onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitRename();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelRename();
+                  }
+                }}
+              />
+            ) : (
+              <span className="sidebar__section-label">
+                {notebook.title || 'Notebook'}
+              </span>
+            )}
+            <span className="sidebar__section-count">{children.length}</span>
+          </button>
+          <button
+            type="button"
+            className="sidebar__section-action"
+            title="Notebook options"
+            aria-label={`${notebook.title || 'Notebook'} options`}
+            onClick={(event) => {
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              setNotebookMenu({ notebook, x: rect.right, y: rect.bottom + 4 });
+            }}
+          >
+            ⋯
+          </button>
+          <button
+            type="button"
+            className="sidebar__section-action"
+            title="Add a page in this notebook"
+            aria-label={`Add page in ${notebook.title || 'Notebook'}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              expandNotebook(notebook.id);
+              onAddChildPage(notebook);
+            }}
+          >
+            ＋
+          </button>
+        </div>
+        {isOpen && (
+          <div
+            className="sidebar__section-body"
+            onDragOver={handleSectionBodyDragOver}
+            onDrop={(event) => handleNotebookBodyDrop(notebook, event)}
+          >
+            {children.length === 0 && (
+              <div className="sidebar__empty">Empty notebook</div>
+            )}
+            {children.map((child) => renderTreeItem(child, 0))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar__top">
@@ -755,6 +980,10 @@ export const Sidebar = ({
           <span className="sidebar__row-icon">◈</span>
           <span className="sidebar__row-label">New section</span>
         </button>
+        <button type="button" className="sidebar__row" onClick={onCreateNotebook}>
+          <span className="sidebar__row-icon">▤</span>
+          <span className="sidebar__row-label">New notebook</span>
+        </button>
       </div>
 
       <div className="sidebar__filter">
@@ -800,31 +1029,16 @@ export const Sidebar = ({
               </div>
             )}
 
-            <div className="sidebar__section">
-              {renderSectionHeader(
-                'private',
-                labelOf('private'),
-                privateRoots.length,
-                open.private,
-                {
-                  icon: '＋',
-                  title: 'Add a page',
-                  onClick: onCreateNote
-                }
-              )}
-              {open.private && (
-                <div
-                  className="sidebar__section-body"
-                  onDragOver={handleSectionBodyDragOver}
-                  onDrop={handleSectionBodyDrop}
-                >
-                  {privateRoots.length === 0 && (
-                    <div className="sidebar__empty">No pages yet</div>
-                  )}
-                  {privateRoots.map((note) => renderTreeItem(note, 0))}
-                </div>
-              )}
-            </div>
+            {notebooks.map((notebook) => renderNotebook(notebook))}
+
+            <button
+              type="button"
+              className="sidebar__row sidebar__new-notebook"
+              onClick={onCreateNotebook}
+            >
+              <span className="sidebar__row-icon">＋</span>
+              <span className="sidebar__row-label">New notebook</span>
+            </button>
 
             {archivedNotes.length > 0 && (
               <div className="sidebar__section">
@@ -922,6 +1136,38 @@ export const Sidebar = ({
               ? () => onCreateTodoList(null)
               : undefined
           }
+        />
+      )}
+
+      {notebookMenu && (
+        <SectionMenu
+          x={notebookMenu.x}
+          y={notebookMenu.y}
+          currentSort={sectionSort.private}
+          onSelectSort={(sort) => onChangeSectionSort('private', sort)}
+          onHide={() =>
+            setCollapsedNotebookIds((current) =>
+              new Set(current).add(notebookMenu.notebook.id)
+            )
+          }
+          hideLabel="Collapse notebook"
+          onClose={() => setNotebookMenu(null)}
+          allowRename
+          renameLabel="Rename notebook"
+          onRename={() => {
+            const nb = notebookMenu.notebook;
+            setNotebookMenu(null);
+            beginRename(nb);
+          }}
+          onCreateNote={() => onAddChildPage(notebookMenu.notebook)}
+          onCreateTodoList={() => onAddChildTodoList(notebookMenu.notebook)}
+          onCreateSection={() => onCreateSection(notebookMenu.notebook.id)}
+          onDelete={() => {
+            const nb = notebookMenu.notebook;
+            setNotebookMenu(null);
+            onDeleteNote(nb);
+          }}
+          deleteLabel="Delete notebook"
         />
       )}
     </aside>

@@ -85,6 +85,7 @@ const App = () => {
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [moveTarget, setMoveTarget] = useState<Note | null>(null);
+  const [updateReady, setUpdateReady] = useState<{ version: string | null } | null>(null);
   const [sectionLabels, setSectionLabels] = useState<Partial<Record<Section, string>>>(() => {
     try {
       const stored = localStorage.getItem('heracles-section-labels');
@@ -133,6 +134,15 @@ const App = () => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('heracles-theme', theme);
   }, [theme]);
+
+  // Show a "Restart to update" banner once a new version has downloaded.
+  useEffect(() => {
+    if (!window.heracles?.updates?.onDownloaded) return;
+    const unsubscribe = window.heracles.updates.onDownloaded((info) =>
+      setUpdateReady(info ?? { version: null })
+    );
+    return unsubscribe;
+  }, []);
 
   const dismissToast = useCallback((toastId: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== toastId));
@@ -1023,6 +1033,29 @@ const App = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {updateReady && (
+        <div className="update-banner" role="status">
+          <span className="update-banner__text">
+            A new version{updateReady.version ? ` (${updateReady.version})` : ''} is ready.
+          </span>
+          <button
+            type="button"
+            className="update-banner__action"
+            onClick={() => window.heracles?.updates?.restart()}
+          >
+            Restart to update
+          </button>
+          <button
+            type="button"
+            className="update-banner__dismiss"
+            aria-label="Dismiss"
+            onClick={() => setUpdateReady(null)}
+          >
+            ×
+          </button>
         </div>
       )}
 

@@ -10,6 +10,8 @@
     "package:mac:dmg": "npm run build && electron-builder --mac dmg",
     "package:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
     "package:win:dir": "npm run build && electron-builder --win dir --config.directories.output=app/windows",
+    "release:mac": "npm run build && electron-builder --mac",
+    "release:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
     "preview": "vite preview"
   },
   "build": {
@@ -18,10 +20,29 @@
     "directories": {
       "output": "app/macOS"
     },
+    "files": [
+      "electron/**/*",
+      "dist/renderer/**/*",
+      "package.json"
+    ],
+    "afterAllArtifactBuild": "build/notarize-dmg.cjs",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pub-622aa86bc99340e3ac5b01cb86b7d752.r2.dev/"
+      }
+    ],
     "mac": {
       "target": [
-        "dir"
-      ]
+        "zip",
+        "dmg"
+      ],
+      "identity": "Stephen Dobbs (6G8AVA2QV8)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
     },
     "win": {
       "target": [
@@ -48,6 +69,7 @@
     "@tiptap/suggestion": "^2.7.6",
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.9",
     "marked": "^12.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

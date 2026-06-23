@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 const {
   initDatabase,
   listNotes,
@@ -74,6 +75,32 @@ const createWindow = ({ initialNoteId } = {}) => {
   }
 
   return win;
+};
+
+// Background auto-update via electron-updater + GitHub Releases. Downloads new
+// versions silently; the renderer shows a "Restart to update" banner once ready.
+const setupAutoUpdates = () => {
+  if (!app.isPackaged) {
+    return; // no update feed in dev
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', (info) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('update:downloaded', { version: info?.version ?? null });
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[heracles] auto-update error:', err?.message ?? err);
+  });
+
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  check();
+  // Re-check periodically so long-running sessions still pick up releases.
+  setInterval(check, 1000 * 60 * 60);
 };
 
 app.whenReady().then(() => {
@@ -164,7 +191,20 @@ app.whenReady().then(() => {
   ipcMain.handle('tasks:updateComment', (_event, payload) => updateComment(payload));
   ipcMain.handle('tasks:deleteComment', (_event, payload) => deleteComment(payload));
 
+  // ── Auto-update ────────────────────────────────────────────────────────────
+  // Quit-and-install when the renderer's "Restart to update" button is clicked.
+  ipcMain.handle('update:restart', () => {
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  });
+  // Manual re-check (the renderer can trigger this from a menu/setting later).
+  ipcMain.handle('update:check', () => {
+    if (app.isPackaged) autoUpdater.checkForUpdates().catch(() => {});
+    return { success: true };
+  });
+
   createWindow();
+  setupAutoUpdates();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

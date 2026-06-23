@@ -1661,6 +1661,56 @@ body.is-col-resizing {
   align-items: flex-end;
 }
 
+.update-banner {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  border-radius: 10px;
+  background: var(--accent, #2eaadc);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+}
+
+.update-banner__text {
+  font-weight: 500;
+}
+
+.update-banner__action {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.update-banner__action:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.update-banner__dismiss {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.update-banner__dismiss:hover {
+  color: #fff;
+}
+
 .toast {
   background: var(--surface);
   border: 1px solid var(--border);

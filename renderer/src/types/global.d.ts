@@ -5,6 +5,11 @@ declare global {
   interface Window {
     heracles: {
       platform: string;
+      updates: {
+        onDownloaded: (callback: (info: { version: string | null }) => void) => () => void;
+        restart: () => Promise<{ success: boolean }>;
+        check: () => Promise<{ success: boolean }>;
+      };
       notes: {
         list: () => Promise<Note[]>;
         get: (id: string) => Promise<Note | null>;

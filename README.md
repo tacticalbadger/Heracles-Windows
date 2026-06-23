@@ -19,6 +19,7 @@ A local-first, hierarchical notebook for macOS. Electron shell, React renderer, 
 - **Auto-collapse panes** — deleting/trashing a page closes its tabs everywhere and collapses any pane that becomes empty, redistributing space to siblings
 - **Icon picker** per page
 - **Multiple windows** — open any page in its own window
+- **Automatic updates** — checks for new versions on launch, downloads in the background, and shows a "Restart to update" banner; signed + notarized builds published to a Cloudflare R2 bucket
 - **Error boundary** — render-error recovery without losing in-memory state
 - **Tasks / Kanban board** — turn a page into a board with custom columns; cards carry priority, due dates, labels, location, reminders, and comments
 - **Reorder columns** — drag a column left/right to rearrange the board; order is persisted
@@ -56,17 +57,45 @@ Starts Vite on `http://localhost:5173` and launches the Electron shell with DevT
 | `npm run package:mac:dmg` | Build a `.dmg` installer into `app/macOS/` |
 | `npm run package:win` | Build a Windows NSIS installer into `app/windows/` (run on Windows) |
 | `npm run package:win:dir` | Build an unpacked Windows folder into `app/windows/` |
+| `npm run release:mac` | Build a signed + notarized `zip` + `dmg` for distribution (needs `APPLE_API_*` env vars) |
+| `npm run release:win` | Build a Windows NSIS installer for distribution (run on Windows) |
 | `npm run preview` | Preview the built renderer in a browser (no Electron) |
 
 For full build/packaging/distribution instructions on both macOS and Windows
 (including code signing notes and cross-compilation via Docker), see
 [`BUILDING.md`](./BUILDING.md).
 
+## Releases & auto-update
+
+Updates are delivered with [`electron-updater`](https://www.electron.build/auto-update):
+the app polls a release feed (`latest-mac.yml` / `latest.yml`) on a **Cloudflare R2
+public bucket**, downloads new versions in the background, and prompts the user to
+restart. electron-builder's `publish` config (`generic` provider) bakes that bucket
+URL into each build's `app-update.yml`.
+
+Releasing a new version:
+
+1. **Bump `version`** in `package.json` (must be greater than the installed one).
+2. Build the signed artifacts:
+   - macOS: `APPLE_API_KEY=… APPLE_API_KEY_ID=… APPLE_API_ISSUER=… npm run release:mac`
+     (signs with Developer ID, notarizes + staples the `.app`/`.zip`/`.dmg`).
+   - Windows: `npm run release:win` on a Windows machine — see
+     [`windowsInstructions.md`](./windowsInstructions.md) for signing.
+3. **Upload** `latest-mac.yml` / `latest.yml`, the `*.zip` (+ `.blockmap`), and the
+   installer (`.dmg` / `.exe`) to the **bucket root** so they are served at the
+   public URL.
+
+For auto-update to *apply* (not just download), builds must be code-signed: macOS
+needs a notarized Developer ID build (already wired); Windows needs an Authenticode
+signature so the updater can verify the publisher — instructions in
+[`windowsInstructions.md`](./windowsInstructions.md).
+
 ## Documentation
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — notable changes per release
 - [`docs/architecture.md`](./docs/architecture.md) — goals, stack, and design notes
 - [`BUILDING.md`](./BUILDING.md) — build, package, and distribution guide
+- [`windowsInstructions.md`](./windowsInstructions.md) — sign & ship the official Windows build
 
 ## Project structure
 

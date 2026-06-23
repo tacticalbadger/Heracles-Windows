@@ -47,8 +47,9 @@ What this does:
    a `.app` directory at `app/macOS/mac-arm64/Heracles.app` (or `mac/` for
    Intel).
 
-> The bundle is **ad-hoc signed only** — no Developer ID. macOS Gatekeeper
-> will warn on first launch (see [Distribution → macOS](#macos) below).
+> `npm run package:mac` (`--dir`) is a **quick local build, ad-hoc signed only** —
+> no Developer ID, not notarized. For a distributable build use
+> `npm run release:mac` (see [Distribution → macOS](#macos)).
 
 ### Producing a `.dmg` installer
 
@@ -56,7 +57,8 @@ What this does:
 npm run package:mac:dmg
 ```
 
-Generates `app/macOS/Heracles-0.1.0-arm64.dmg`. Same signing caveat as above.
+Generates `app/macOS/Heracles-0.1.0-arm64.dmg` (ad-hoc). The **signed + notarized**
+`.dmg` (and `.zip`) come from `npm run release:mac`.
 
 ### Targeting Intel + Apple Silicon
 
@@ -163,44 +165,43 @@ canonical reference.
 
 ## Distribution
 
+Distributable builds are **signed and published to a Cloudflare R2 bucket**, and
+the app **auto-updates** from it via `electron-updater`. See the README's
+[Releases & auto-update](./README.md#releases--auto-update) section for the
+end-to-end flow (bump version → build → upload `latest-*.yml` + artifacts to the
+bucket root).
+
 ### macOS
 
-The packaged `.app` is unsigned (ad-hoc), so Gatekeeper will block it on
-download. Two ways to publish:
+`npm run release:mac` produces a **Developer ID-signed, notarized, and stapled**
+`.zip` and `.dmg`. It requires the signing identity in your keychain and notary
+credentials in the environment:
 
-1. **Zip it correctly** (preserves the bundle's extended attributes — a normal
-   `zip` will corrupt the `.app`):
+```bash
+export APPLE_API_KEY="$HOME/.appstoreconnect/private_keys/AuthKey_XXXXXXXXXX.p8"
+export APPLE_API_KEY_ID="XXXXXXXXXX"
+export APPLE_API_ISSUER="<issuer-uuid>"
+npm run release:mac
+```
 
-   ```bash
-   ditto -c -k --keepParent \
-     app/macOS/mac-arm64/Heracles.app \
-     app/macOS/Heracles-0.1.0-mac-arm64.zip
-   ```
+Config lives in `package.json` → `build.mac` (`identity`, `hardenedRuntime`,
+`entitlements` → `build/entitlements.mac.plist`, `notarize`). An
+`afterAllArtifactBuild` hook (`build/notarize-dmg.cjs`) additionally notarizes +
+staples the DMG. Verify with `spctl -a -t install Heracles.app` (→ *accepted,
+Notarized Developer ID*) and `xcrun stapler validate`.
 
-2. **Instruct users** to clear the quarantine flag after unzipping:
-
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/Heracles.app
-   ```
-
-   Or right-click → **Open** the first time instead of double-clicking.
-
-For a proper signed + notarized distribution, you'd need:
-
-- An Apple Developer ID Application certificate (`$99/year`)
-- `electron-builder` config with `mac.identity` and `notarize: true`
-- App-specific password or notarytool credentials in env
+> For a quick local run you don't need any of this — `npm run package:mac`
+> produces an ad-hoc build; clear quarantine with
+> `xattr -dr com.apple.quarantine /Applications/Heracles.app` or right-click →
+> **Open**.
 
 ### Windows
 
-The NSIS installer (`Heracles Setup 0.1.0.exe`) is also unsigned. On launch,
-Windows SmartScreen will show a "Windows protected your PC" warning. Users
-must click **More info → Run anyway**.
-
-To sign properly you need an EV or OV code-signing certificate from a CA
-(Sectigo, DigiCert, etc.) and the `electron-builder` `win.certificateFile` /
-`win.certificatePassword` settings (or `CSC_LINK` / `CSC_KEY_PASSWORD` env
-vars).
+`npm run release:win` produces the NSIS installer + `latest.yml`. For an
+**official, SmartScreen-clean, auto-update-capable** Windows build you must
+code-sign it — full instructions (certificate options, electron-builder wiring,
+verification, and uploading to the bucket) are in
+[`windowsInstructions.md`](./windowsInstructions.md).
 
 ---
 

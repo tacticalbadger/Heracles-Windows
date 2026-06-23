@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Automatic updates** — the app checks a release feed on launch (and hourly),
+  downloads new versions in the background, and shows a **"Restart to update"**
+  banner; clicking it quits and installs. Built on `electron-updater`, published
+  to a Cloudflare R2 public bucket via the `generic` provider. New IPC surface
+  `window.heracles.updates` (`onDownloaded`, `restart`, `check`).
+- **Signed & notarized macOS builds** — releases are signed with a Developer ID
+  Application certificate, run under the hardened runtime, and are notarized +
+  stapled (both the `.app`/`.zip` and the `.dmg`). This is what lets Gatekeeper
+  open the app cleanly and lets the updater refuse any build not signed by us.
 - **Notebooks (top-level groups)** — the sidebar is now a filing cabinet: create
   any number of top-level **notebooks** ("New notebook"), each holding sections
   and pages/todos. Notebooks are renamable (double-click or the `⋯` menu),
@@ -53,9 +62,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a sixth drag-and-drop MIME type, `application/x-heracles-block`, for
   moving editor blocks (reorder / make a column). The fifth,
   `application/x-heracles-column`, handles column reordering on a board.
+- macOS target now builds `zip` + `dmg` (the `zip` is what the updater applies);
+  `dir` is still used by `npm run package:mac` for quick local builds.
+
+### Fixed
+
+- electron-builder no longer packs the build-output directory back into
+  `app.asar`. A missing `files` allowlist (combined with a case-mismatched
+  output path) caused each build to bundle the previous one, snowballing the app
+  to ~1.9 GB. With the allowlist the app is back to ~300 MB.
 
 ### Technical
 
+- Auto-update: `electron-updater` wired in `electron/main.cjs`
+  (`setupAutoUpdates`, packaged-only) + `electron/preload.cjs`
+  (`window.heracles.updates`) + a "Restart to update" banner in `App.tsx`.
+  `build.publish` uses the `generic` provider against the R2 public URL.
+- Release pipeline: `build.mac` sets `hardenedRuntime`, `entitlements`
+  (`build/entitlements.mac.plist`), Developer ID `identity`, and `notarize`
+  (App Store Connect API key via `APPLE_API_*` env vars). An
+  `afterAllArtifactBuild` hook (`build/notarize-dmg.cjs`) notarizes + staples the
+  DMG and patches `latest-mac.yml`. New scripts: `release:mac`, `release:win`.
 - New TipTap nodes: `ImageBlock` (block image), and `ColumnBlock` / `Column`
   with a `ColumnNodeView` (resize handle) and `columnCommands.ts`
   (`resolveOuterBlock`, `getDropTarget`, `applyBlockDrop`, and a

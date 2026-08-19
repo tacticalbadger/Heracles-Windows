@@ -15,7 +15,7 @@ A local-first, hierarchical notebook for macOS. Electron shell, React renderer, 
 - **Import Markdown** — "New page from Markdown" turns one or more `.md` files into pages, converting headings, lists, task lists, code blocks, and links to editor content
 - **Import HTML** — "New page from HTML" imports `.html`/`.htm` files the same way, preserving common formatting
 - **Paste HTML** — pasting rich HTML (e.g. from a web page) is converted to clean editor content instead of raw markup
-- **Page states** — favorite, archive, trash (with undo), permanent delete
+- **Page states** — favorite, archive, trash (with undo), permanent delete; trash, restore, and permanent delete apply to a page's whole subtree (deleting a todo list also removes its board data)
 - **Auto-collapse panes** — deleting/trashing a page closes its tabs everywhere and collapses any pane that becomes empty, redistributing space to siblings
 - **Icon picker** per page
 - **Multiple windows** — open any page in its own window
@@ -60,6 +60,7 @@ Starts Vite on `http://localhost:5173` and launches the Electron shell with DevT
 | `npm run release:mac` | Build a signed + notarized `zip` + `dmg` for distribution (needs `APPLE_API_*` env vars) |
 | `npm run release:win` | Build a Windows NSIS installer for distribution (run on Windows) |
 | `npm run preview` | Preview the built renderer in a browser (no Electron) |
+| `npm test` | Functional test of the SQLite layer (`scripts/db-cascade-test.cjs`) |
 
 For full build/packaging/distribution instructions on both macOS and Windows
 (including code signing notes and cross-compilation via Docker), see
@@ -93,6 +94,7 @@ signature so the updater can verify the publisher — instructions in
 ## Documentation
 
 - [`CHANGELOG.md`](./CHANGELOG.md) — notable changes per release
+- [`ROADMAP.md`](./ROADMAP.md) — known gaps and planned work
 - [`docs/architecture.md`](./docs/architecture.md) — goals, stack, and design notes
 - [`BUILDING.md`](./BUILDING.md) — build, package, and distribution guide
 - [`windowsInstructions.md`](./windowsInstructions.md) — sign & ship the official Windows build
@@ -157,7 +159,7 @@ sqlite3 ~/Library/Application\ Support/heracles/heracles.sqlite "SELECT id, titl
 - **Drag-and-drop** uses six custom MIME types: `application/x-heracles-tab` (tab moves between panes), `application/x-heracles-page` (sidebar page onto pane / between panes / into a notebook), `application/x-heracles-task` (card reorder/move between columns), `application/x-heracles-subtask` (subtask reorder within a parent), `application/x-heracles-column` (column reorder on a board), and `application/x-heracles-block` (editor block reorder / make a column).
 - **Notebooks** — modeled as a `kind: 'notebook'` note pinned to the root, reusing the existing note tree (create/rename/reorder/icons/IPC). `electron/db.cjs` enforces the invariant via `resolveParentId` (notebooks stay at the root; non-notebooks can't sit at the root) and a one-time migration; deleting a notebook reassigns its children to the first remaining one. The sidebar renders notebooks as collapsible groups in place of the old "Private" section.
 - **Columns** — `ColumnBlock` (a `<div data-type="columns">` flex row) holds `Column` nodes (`data-type="column"`, with a `data-width` flex weight), so layouts round-trip through the stored note HTML with no DB change. Dragging a block emits `application/x-heracles-block`; `columnCommands.ts` computes the drop target, restructures via one mapped transaction, and a `ColumnsNormalizer` appendTransaction plugin keeps rows valid (drops empty columns, unwraps rows with <2 columns).
-- **Import & paste** — `electron/main.cjs` exposes `notes.importMarkdown()` and `notes.importHtml()` (native file dialogs that read file contents); the renderer converts them with `renderer/src/lib/markdownImport.ts` / `htmlImport.ts`. The same `htmlToEditorHtml` converter powers the editor's `handlePaste`, so pasted HTML is sanitized to supported nodes (images become links, `<pre>` becomes a CodeMirror block, checkbox lists become task lists).
+- **Import & paste** — `electron/main.cjs` exposes `notes.importMarkdown()` and `notes.importHtml()` (native file dialogs that read file contents); the renderer converts them with `renderer/src/lib/markdownImport.ts` / `htmlImport.ts`. The same `htmlToEditorHtml` converter powers the editor's `handlePaste`, so pasted HTML is sanitized to supported nodes (`<img>` becomes an image block, `<pre>` becomes a CodeMirror block, checkbox lists become task lists); internal copies (marked with `data-pm-slice`) paste natively so column layouts survive. Markdown import still converts images to links, since relative image paths can't resolve after import.
 - **Subtask moves** — because the task detail modal covers the board, subtasks are moved via the `⤴` menu (not by dragging onto a column). The menu offers every column (promote to a standalone card) and a depth-indented tree of every other task (reparent), filtering out the subtask itself, its descendants, and its current parent.
 - **BubbleMenu host** — TipTap's bubble-menu plugin detaches its DOM via `element.remove()`, which clashes with React reconciliation if it has dynamic siblings. The menu is wrapped in a dedicated empty `.bubble-menu-host` div so the detachment never disturbs sibling reconciliation.
 

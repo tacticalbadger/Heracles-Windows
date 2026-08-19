@@ -77,8 +77,9 @@ const createWindow = ({ initialNoteId } = {}) => {
   return win;
 };
 
-// Background auto-update via electron-updater + GitHub Releases. Downloads new
-// versions silently; the renderer shows a "Restart to update" banner once ready.
+// Background auto-update via electron-updater against the generic release feed
+// (Cloudflare R2 bucket baked in by electron-builder's publish config). Downloads
+// silently; the renderer shows a "Restart to update" banner once ready.
 const setupAutoUpdates = () => {
   if (!app.isPackaged) {
     return; // no update feed in dev
@@ -143,12 +144,17 @@ app.whenReady().then(() => {
     if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, files: [] };
     }
-    const files = result.filePaths.map((filePath) => {
-      const markdown = fs.readFileSync(filePath, 'utf8');
-      const base = path.basename(filePath);
-      const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
-      return { name: name || 'Untitled', markdown };
-    });
+    const files = [];
+    for (const filePath of result.filePaths) {
+      try {
+        const markdown = fs.readFileSync(filePath, 'utf8');
+        const base = path.basename(filePath);
+        const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
+        files.push({ name: name || 'Untitled', markdown });
+      } catch (err) {
+        console.error(`[heracles] Could not read ${filePath}:`, err?.message ?? err);
+      }
+    }
     return { canceled: false, files };
   });
   ipcMain.handle('notes:importHtml', async (event) => {
@@ -165,12 +171,17 @@ app.whenReady().then(() => {
     if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, files: [] };
     }
-    const files = result.filePaths.map((filePath) => {
-      const html = fs.readFileSync(filePath, 'utf8');
-      const base = path.basename(filePath);
-      const name = base.replace(/\.(html|htm)$/i, '').trim();
-      return { name: name || 'Untitled', html };
-    });
+    const files = [];
+    for (const filePath of result.filePaths) {
+      try {
+        const html = fs.readFileSync(filePath, 'utf8');
+        const base = path.basename(filePath);
+        const name = base.replace(/\.(html|htm)$/i, '').trim();
+        files.push({ name: name || 'Untitled', html });
+      } catch (err) {
+        console.error(`[heracles] Could not read ${filePath}:`, err?.message ?? err);
+      }
+    }
     return { canceled: false, files };
   });
 

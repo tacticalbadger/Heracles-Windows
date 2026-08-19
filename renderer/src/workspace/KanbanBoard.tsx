@@ -491,20 +491,13 @@ export const KanbanBoard = ({
       // Remove source from current position
       currentIds.splice(sourceIndex, 1);
 
-      // Calculate insertion index based on drop position
-      let insertIndex = targetIndex;
-      if (drop && drop.targetColumnId === targetColumn.id) {
-        if (drop.pos === 'after') {
-          insertIndex = targetIndex;
-        } else {
-          insertIndex = targetIndex - 1;
-        }
-      }
-
-      // Adjust for the removal if source was before target
-      if (sourceIndex < targetIndex && drop?.pos === 'before') {
-        insertIndex -= 1;
-      }
+      // Insert relative to the target's index *after* the removal shift.
+      const pos =
+        drop && drop.targetColumnId === targetColumn.id
+          ? drop.pos
+          : computeColumnDropPos(event);
+      const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      let insertIndex = pos === 'after' ? adjustedTarget + 1 : adjustedTarget;
 
       // Clamp insert index
       insertIndex = Math.max(0, Math.min(insertIndex, currentIds.length));

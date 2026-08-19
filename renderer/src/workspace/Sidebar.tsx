@@ -9,6 +9,7 @@ import {
   type MouseEvent as ReactMouseEvent
 } from 'react';
 import type { Note } from '../types/notes';
+import { stripHtml } from '../lib/text';
 import { SidebarItemMenu } from './SidebarItemMenu';
 import { SectionMenu, type SectionSort } from './SectionMenu';
 
@@ -302,14 +303,21 @@ export const Sidebar = ({
     };
   }, [childrenByParent]);
 
+  // Plain-text search index: strip tags once per notes change, not per keystroke
+  // (image-heavy notes carry multi-MB base64 payloads inside their HTML).
+  const searchTextById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const note of notes) {
+      map.set(note.id, `${note.title} ${stripHtml(note.content)}`.toLowerCase());
+    }
+    return map;
+  }, [notes]);
+
   const matches = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return null;
-    return notes.filter(
-      (note) =>
-        note.title.toLowerCase().includes(term) || note.content.toLowerCase().includes(term)
-    );
-  }, [notes, query]);
+    return notes.filter((note) => searchTextById.get(note.id)?.includes(term));
+  }, [notes, query, searchTextById]);
 
   const favoriteRoots = useMemo(() => {
     const favoritedIds = new Set(

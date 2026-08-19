@@ -213,6 +213,37 @@ const createNote = ({ title, content, icon, parentId, kind }) => {
   return getNote(id);
 };
 
+// All descendant ids of a note (children, grandchildren, ...), excluding the
+// note itself. Walks the parent_id tree until no new ids are found.
+const collectDescendantIds = (id) => {
+  const all = db.prepare('SELECT id, parent_id FROM notes').all();
+  const found = new Set([id]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const n of all) {
+      if (n.parent_id && found.has(n.parent_id) && !found.has(n.id)) {
+        found.add(n.id);
+        added = true;
+      }
+    }
+  }
+  found.delete(id);
+  return Array.from(found);
+};
+
+// Remove all kanban data (columns, tasks, comments) owned by the given notes.
+// Safe to call with ids that aren't todo lists — they simply have no rows.
+const deleteTaskDataForNotes = (noteIds) => {
+  if (noteIds.length === 0) return;
+  const placeholders = noteIds.map(() => '?').join(',');
+  db.prepare(
+    `DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE todo_list_id IN (${placeholders}))`
+  ).run(...noteIds);
+  db.prepare(`DELETE FROM tasks WHERE todo_list_id IN (${placeholders})`).run(...noteIds);
+  db.prepare(`DELETE FROM task_columns WHERE todo_list_id IN (${placeholders})`).run(...noteIds);
+};
+
 const setNoteStatus = ({ id, archived, trashed }) => {
   const existing = getNote(id);
   if (!existing) {
@@ -235,9 +266,52 @@ const setNoteStatus = ({ id, archived, trashed }) => {
 
 const archiveNote = ({ id, archived }) => setNoteStatus({ id, archived, trashed: false });
 
-const trashNote = ({ id }) => setNoteStatus({ id, trashed: true, archived: false });
+// Trash the whole subtree: a child left behind would be unreachable (its parent
+// no longer renders) and would be orphaned for good if the trash were emptied.
+const trashNote = ({ id }) => {
+  const existing = getNote(id);
+  if (!existing) return null;
+  const now = new Date().toISOString();
+  const ids = [id, ...collectDescendantIds(id)];
+  const stmt = db.prepare('UPDATE notes SET trashed = 1, archived = 0, updated_at = ? WHERE id = ?');
+  const run = db.transaction(() => {
+    for (const noteId of ids) stmt.run(now, noteId);
+  });
+  run();
+  return getNote(id);
+};
 
-const restoreNote = ({ id }) => setNoteStatus({ id, trashed: false, archived: false });
+const restoreNote = ({ id }) => {
+  const existing = getNote(id);
+  if (!existing) return null;
+  const now = new Date().toISOString();
+  const ids = [id, ...collectDescendantIds(id)];
+  const stmt = db.prepare('UPDATE notes SET trashed = 0, archived = 0, updated_at = ? WHERE id = ?');
+  const run = db.transaction(() => {
+    for (const noteId of ids) stmt.run(now, noteId);
+    // If the restored note's own parent chain is still trashed (or gone), hoist
+    // it to the nearest visible ancestor so it doesn't come back invisible.
+    let parentId = existing.parentId ?? null;
+    while (parentId) {
+      const parent = getNote(parentId);
+      if (!parent) {
+        parentId = null;
+        break;
+      }
+      if (!parent.trashed) break;
+      parentId = parent.parentId ?? null;
+    }
+    if ((parentId ?? null) !== (existing.parentId ?? null)) {
+      db.prepare('UPDATE notes SET parent_id = ?, updated_at = ? WHERE id = ?').run(
+        resolveParentId(existing, parentId),
+        now,
+        id
+      );
+    }
+  });
+  run();
+  return getNote(id);
+};
 
 const deleteNote = ({ id }) => {
   const existing = getNote(id);
@@ -259,14 +333,40 @@ const deleteNote = ({ id }) => {
       .set({ parentId: others[0].id, updatedAt: now })
       .where(eq(notes.parentId, id))
       .run();
+    orm.delete(notes).where(eq(notes.id, id)).run();
+    return { success: true, deletedIds: [id] };
   }
-  orm.delete(notes).where(eq(notes.id, id)).run();
-  return { success: true };
+  // Non-notebooks: delete the whole subtree plus any kanban data it owns —
+  // a child left behind would be invisible but still occupy the database.
+  const ids = [id, ...collectDescendantIds(id)];
+  const run = db.transaction(() => {
+    deleteTaskDataForNotes(ids);
+    const stmt = db.prepare('DELETE FROM notes WHERE id = ?');
+    for (const noteId of ids) stmt.run(noteId);
+  });
+  run();
+  return { success: true, deletedIds: ids };
 };
 
 const emptyTrash = () => {
-  orm.delete(notes).where(eq(notes.trashed, true)).run();
-  return { success: true };
+  const trashedIds = db
+    .prepare('SELECT id FROM notes WHERE trashed = 1')
+    .all()
+    .map((row) => row.id);
+  // Include descendants of trashed notes: data written before trash cascaded
+  // may hold untrashed children under a trashed parent.
+  const ids = new Set(trashedIds);
+  for (const id of trashedIds) {
+    for (const descendantId of collectDescendantIds(id)) ids.add(descendantId);
+  }
+  const all = Array.from(ids);
+  const run = db.transaction(() => {
+    deleteTaskDataForNotes(all);
+    const stmt = db.prepare('DELETE FROM notes WHERE id = ?');
+    for (const noteId of all) stmt.run(noteId);
+  });
+  run();
+  return { success: true, deletedIds: all };
 };
 
 const updateNote = ({ id, title, content, icon }) => {

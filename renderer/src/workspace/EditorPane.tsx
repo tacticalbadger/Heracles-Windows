@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { BubbleMenu, EditorContent, useEditor } from '@tiptap/react';
 import { type Editor } from '@tiptap/core';
+import { DOMParser as PMDOMParser } from 'prosemirror-model';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -343,22 +344,21 @@ export const EditorPane = ({
             });
             return true;
           }
-          // Check if there's HTML content in the clipboard
+          // Rich HTML from outside the app → sanitize/convert it to supported
+          // nodes (task lists, CodeMirror blocks, image blocks) before insert.
+          // Internal copies carry data-pm-slice and paste natively unchanged.
           const html = event.clipboardData?.getData('text/html');
-          if (html && html.trim().length > 0) {
-            // Convert HTML to editor-compatible format and insert
+          if (html && html.trim().length > 0 && !html.includes('data-pm-slice')) {
             const converted = htmlToEditorHtml(html);
             if (converted && converted !== '<p></p>') {
-              view.dispatch(
-                view.state.tr.replaceSelectionWith(
-                  view.state.schema.nodeFromJSON({
-                    type: 'paragraph',
-                    content: []
-                  })
-                )
+              event.preventDefault();
+              const dom = new DOMParser().parseFromString(converted, 'text/html');
+              const fragment = PMDOMParser.fromSchema(view.state.schema).parseSlice(
+                dom.body,
+                { preserveWhitespace: true }
               );
-              // Let TipTap handle the converted HTML
-              return false;
+              view.dispatch(view.state.tr.replaceSelection(fragment).scrollIntoView());
+              return true;
             }
           }
           // Let default paste handler process it

@@ -12,7 +12,9 @@
     "package:win:dir": "npm run build && electron-builder --win dir --config.directories.output=app/windows",
     "release:mac": "npm run build && electron-builder --mac",
     "release:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node scripts/db-cascade-test.cjs",
+    "postinstall": "electron-builder install-app-deps"
   },
   "build": {
     "appId": "com.heracles.notes",
@@ -86,5 +88,11 @@
     "typescript": "^5.6.3",
     "vite": "^8.0.13",
     "wait-on": "^8.0.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.10.0": true,
+    "electron@41.6.1": true,
+    "electron-winstaller@5.4.0": true,
+    "fsevents@2.3.3": true
   }
 }

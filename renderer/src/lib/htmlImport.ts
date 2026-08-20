@@ -26,14 +26,21 @@ export const htmlToEditorHtml = (html: string): string => {
   // Remove script and style tags entirely
   doc.querySelectorAll('script, style, noscript, iframe, object, embed').forEach((el) => el.remove());
 
-  // Convert images to links (editor has no image node)
+  // Keep images: the editor renders them as block image nodes. Strip everything
+  // except src/alt/title; drop images with no usable source entirely.
   doc.querySelectorAll('img').forEach((img) => {
     const src = img.getAttribute('src') || '';
-    const alt = img.getAttribute('alt') || src || 'image';
-    const link = doc.createElement('a');
-    link.setAttribute('href', src);
-    link.textContent = alt;
-    img.replaceWith(link);
+    if (!src) {
+      img.remove();
+      return;
+    }
+    const alt = img.getAttribute('alt');
+    const title = img.getAttribute('title');
+    const clean = doc.createElement('img');
+    clean.setAttribute('src', src);
+    if (alt) clean.setAttribute('alt', alt);
+    if (title) clean.setAttribute('title', title);
+    img.replaceWith(clean);
   });
 
   // Convert checkboxes in lists to task items

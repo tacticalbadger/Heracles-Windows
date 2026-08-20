@@ -5,6 +5,11 @@ declare global {
   interface Window {
     heracles: {
       platform: string;
+      updates: {
+        onDownloaded: (callback: (info: { version: string | null }) => void) => () => void;
+        restart: () => Promise<{ success: boolean }>;
+        check: () => Promise<{ success: boolean }>;
+      };
       notes: {
         list: () => Promise<Note[]>;
         get: (id: string) => Promise<Note | null>;
@@ -13,7 +18,7 @@ declare global {
           content?: string;
           icon?: string | null;
           parentId?: string | null;
-          kind?: 'page' | 'section' | 'todolist';
+          kind?: 'page' | 'section' | 'todolist' | 'notebook';
         }) => Promise<Note>;
         update: (payload: {
           id: string;
@@ -24,8 +29,10 @@ declare global {
         archive: (payload: { id: string; archived: boolean }) => Promise<Note | null>;
         trash: (payload: { id: string }) => Promise<Note | null>;
         restore: (payload: { id: string }) => Promise<Note | null>;
-        remove: (payload: { id: string }) => Promise<{ success: boolean }>;
-        emptyTrash: () => Promise<{ success: boolean }>;
+        remove: (payload: {
+          id: string;
+        }) => Promise<{ success: boolean; deletedIds?: string[] }>;
+        emptyTrash: () => Promise<{ success: boolean; deletedIds?: string[] }>;
         setParent: (payload: { id: string; parentId: string | null }) => Promise<Note | null>;
         setFavorited: (payload: { id: string; favorited: boolean }) => Promise<Note | null>;
         reorder: (payload: {

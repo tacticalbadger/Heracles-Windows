@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Automatic updates** — the app checks a release feed on launch (and hourly),
+  downloads new versions in the background, and shows a **"Restart to update"**
+  banner; clicking it quits and installs. Built on `electron-updater`, published
+  to a Cloudflare R2 public bucket via the `generic` provider. New IPC surface
+  `window.heracles.updates` (`onDownloaded`, `restart`, `check`).
+- **Signed & notarized macOS builds** — releases are signed with a Developer ID
+  Application certificate, run under the hardened runtime, and are notarized +
+  stapled (both the `.app`/`.zip` and the `.dmg`). This is what lets Gatekeeper
+  open the app cleanly and lets the updater refuse any build not signed by us.
+- **Notebooks (top-level groups)** — the sidebar is now a filing cabinet: create
+  any number of top-level **notebooks** ("New notebook"), each holding sections
+  and pages/todos. Notebooks are renamable (double-click or the `⋯` menu),
+  collapsible, drag-to-reorder, and deletable (contents move to the first
+  remaining notebook; the last notebook can't be deleted). A new note `kind`,
+  `notebook`, models them.
+- **Images in notes** — drag an image file from Finder onto a note, or paste a
+  screenshot, to insert it as an image block. Images embed as base64 data URLs so
+  notes stay fully local-first (no asset files to manage).
+- **Column layouts** — drag any block by its gutter grip (`⠿`) to the right edge
+  of another block to place it beside that block as a column; drop at the edge of
+  an existing row to add more columns, or between blocks to reorder. Column
+  widths are **resizable** by dragging the boundary, and rows auto-collapse back
+  to normal flow when reduced below two columns.
 - **Import HTML** — "New page from HTML" in the sidebar imports one or more
   `.html`/`.htm` files as pages, converting common formatting to editor content.
 - **Paste HTML** — pasting rich HTML into the editor (e.g. from a web page) is
@@ -27,13 +50,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The single hard-coded "Private" sidebar section is replaced by user-created
+  notebooks. Every page/section/todo now lives inside a notebook; a one-time
+  migration creates a default **"Notebook"**, adopts all existing top-level
+  items into it, and writes a `heracles.pre-notebooks-<timestamp>.sqlite` backup
+  first so nothing can be lost.
+- Pasting HTML that contains `<img>` now keeps it as an image block (previously
+  images were downgraded to links).
 - The editor now registers TipTap's `Link` extension so links survive import,
   paste, and editing.
-- Added a fifth drag-and-drop MIME type, `application/x-heracles-column`, for
-  column reordering on a board.
+- Added a sixth drag-and-drop MIME type, `application/x-heracles-block`, for
+  moving editor blocks (reorder / make a column). The fifth,
+  `application/x-heracles-column`, handles column reordering on a board.
+- macOS target now builds `zip` + `dmg` (the `zip` is what the updater applies);
+  `dir` is still used by `npm run package:mac` for quick local builds.
+
+### Fixed
+
+- **Deleting a page no longer orphans its children.** Permanent delete and
+  "Empty trash" now remove the whole subtree, plus any kanban data (columns,
+  tasks, comments) owned by deleted todo lists. Previously children stayed in
+  the database invisibly, and a deleted todo list leaked its board rows forever.
+- **Trash and restore now cascade.** Trashing a page trashes its subtree (so
+  children don't silently vanish from the sidebar), restoring brings the
+  subtree back, and restoring a child whose parent is still in the trash hoists
+  it to its nearest visible ancestor instead of leaving it unreachable.
+- **Pasted HTML is actually converted now.** The paste handler computed the
+  sanitized conversion and then discarded it, inserting a spurious empty
+  paragraph and pasting the raw clipboard HTML instead. Pasted HTML now becomes
+  supported nodes (task lists, CodeMirror code blocks, image blocks), and
+  internal editor copies still paste natively so column layouts survive.
+- **HTML import/paste keeps images.** `htmlToEditorHtml` still downgraded
+  `<img>` to links even though the editor has an image block; images are now
+  preserved (with `src`/`alt`/`title` sanitized) as promised in this changelog.
+- **Kanban column drag-reorder off-by-one.** Dropping a column on the left half
+  of a target could land it one slot too far left (or make the move a no-op).
+- **Duplicate preserves the note's kind.** Duplicating a todo list previously
+  produced an empty *page*, silently dropping the board; it now duplicates the
+  board itself — columns, cards, subtasks, and their fields (comments are not
+  copied). Duplicating a section stays a section.
+- **Sidebar filter matches text, not markup.** Filtering pages no longer
+  searches raw note HTML, which matched base64 image data and got slower as
+  images were added; both the filter and ⌘K search now match rendered text only.
+- **Unsaved edits flush on window close.** The 600 ms autosave debounce could
+  drop the last edit if the window closed quickly; pending saves now flush on
+  `beforeunload`.
+- **Import dialogs skip unreadable files** instead of failing the whole import.
+- electron-builder no longer packs the build-output directory back into
+  `app.asar`. A missing `files` allowlist (combined with a case-mismatched
+  output path) caused each build to bundle the previous one, snowballing the app
+  to ~1.9 GB. With the allowlist the app is back to ~300 MB.
 
 ### Technical
 
+- Auto-update: `electron-updater` wired in `electron/main.cjs`
+  (`setupAutoUpdates`, packaged-only) + `electron/preload.cjs`
+  (`window.heracles.updates`) + a "Restart to update" banner in `App.tsx`.
+  `build.publish` uses the `generic` provider against the R2 public URL.
+- Release pipeline: `build.mac` sets `hardenedRuntime`, `entitlements`
+  (`build/entitlements.mac.plist`), Developer ID `identity`, and `notarize`
+  (App Store Connect API key via `APPLE_API_*` env vars). An
+  `afterAllArtifactBuild` hook (`build/notarize-dmg.cjs`) notarizes + staples the
+  DMG and patches `latest-mac.yml`. New scripts: `release:mac`, `release:win`.
+- New TipTap nodes: `ImageBlock` (block image), and `ColumnBlock` / `Column`
+  with a `ColumnNodeView` (resize handle) and `columnCommands.ts`
+  (`resolveOuterBlock`, `getDropTarget`, `applyBlockDrop`, and a
+  `ColumnsNormalizer` appendTransaction plugin that drops empty columns and
+  unwraps under-filled rows). Image drops/pastes are handled in the editor's
+  `handleDrop` / `handlePaste` / `handleDOMEvents`.
+- `notes.create` accepts `kind: 'notebook'`. `electron/db.cjs` adds the
+  one-time notebook migration plus a `resolveParentId` invariant that keeps
+  notebooks at the root and every other note inside a notebook; deleting a
+  notebook reassigns its children to the first remaining notebook.
 - New conversion utilities: `renderer/src/lib/markdownImport.ts`
   (`markdownToEditorHtml`, backed by `marked`) and
   `renderer/src/lib/htmlImport.ts` (`htmlToEditorHtml`, also used by the editor's

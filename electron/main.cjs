@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 const {
   initDatabase,
   listNotes,
@@ -76,6 +77,33 @@ const createWindow = ({ initialNoteId } = {}) => {
   return win;
 };
 
+// Background auto-update via electron-updater against the generic release feed
+// (Cloudflare R2 bucket baked in by electron-builder's publish config). Downloads
+// silently; the renderer shows a "Restart to update" banner once ready.
+const setupAutoUpdates = () => {
+  if (!app.isPackaged) {
+    return; // no update feed in dev
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', (info) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send('update:downloaded', { version: info?.version ?? null });
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[heracles] auto-update error:', err?.message ?? err);
+  });
+
+  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  check();
+  // Re-check periodically so long-running sessions still pick up releases.
+  setInterval(check, 1000 * 60 * 60);
+};
+
 app.whenReady().then(() => {
   initDatabase(app.getPath('userData'));
 
@@ -116,12 +144,17 @@ app.whenReady().then(() => {
     if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, files: [] };
     }
-    const files = result.filePaths.map((filePath) => {
-      const markdown = fs.readFileSync(filePath, 'utf8');
-      const base = path.basename(filePath);
-      const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
-      return { name: name || 'Untitled', markdown };
-    });
+    const files = [];
+    for (const filePath of result.filePaths) {
+      try {
+        const markdown = fs.readFileSync(filePath, 'utf8');
+        const base = path.basename(filePath);
+        const name = base.replace(/\.(md|markdown|mdown|mkd|mkdn|txt)$/i, '').trim();
+        files.push({ name: name || 'Untitled', markdown });
+      } catch (err) {
+        console.error(`[heracles] Could not read ${filePath}:`, err?.message ?? err);
+      }
+    }
     return { canceled: false, files };
   });
   ipcMain.handle('notes:importHtml', async (event) => {
@@ -138,12 +171,17 @@ app.whenReady().then(() => {
     if (result.canceled || result.filePaths.length === 0) {
       return { canceled: true, files: [] };
     }
-    const files = result.filePaths.map((filePath) => {
-      const html = fs.readFileSync(filePath, 'utf8');
-      const base = path.basename(filePath);
-      const name = base.replace(/\.(html|htm)$/i, '').trim();
-      return { name: name || 'Untitled', html };
-    });
+    const files = [];
+    for (const filePath of result.filePaths) {
+      try {
+        const html = fs.readFileSync(filePath, 'utf8');
+        const base = path.basename(filePath);
+        const name = base.replace(/\.(html|htm)$/i, '').trim();
+        files.push({ name: name || 'Untitled', html });
+      } catch (err) {
+        console.error(`[heracles] Could not read ${filePath}:`, err?.message ?? err);
+      }
+    }
     return { canceled: false, files };
   });
 
@@ -164,7 +202,20 @@ app.whenReady().then(() => {
   ipcMain.handle('tasks:updateComment', (_event, payload) => updateComment(payload));
   ipcMain.handle('tasks:deleteComment', (_event, payload) => deleteComment(payload));
 
+  // ── Auto-update ────────────────────────────────────────────────────────────
+  // Quit-and-install when the renderer's "Restart to update" button is clicked.
+  ipcMain.handle('update:restart', () => {
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  });
+  // Manual re-check (the renderer can trigger this from a menu/setting later).
+  ipcMain.handle('update:check', () => {
+    if (app.isPackaged) autoUpdater.checkForUpdates().catch(() => {});
+    return { success: true };
+  });
+
   createWindow();
+  setupAutoUpdates();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

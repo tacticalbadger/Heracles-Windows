@@ -19,6 +19,17 @@ contextBridge.exposeInMainWorld('heracles', {
     importMarkdown: () => ipcRenderer.invoke('notes:importMarkdown'),
     importHtml: () => ipcRenderer.invoke('notes:importHtml')
   },
+  updates: {
+    // Fires when a new version has finished downloading and is ready to install.
+    // Returns an unsubscribe function.
+    onDownloaded: (callback) => {
+      const handler = (_event, info) => callback(info);
+      ipcRenderer.on('update:downloaded', handler);
+      return () => ipcRenderer.removeListener('update:downloaded', handler);
+    },
+    restart: () => ipcRenderer.invoke('update:restart'),
+    check: () => ipcRenderer.invoke('update:check')
+  },
   tasks: {
     listColumns: (payload) => ipcRenderer.invoke('tasks:listColumns', payload),
     createColumn: (payload) => ipcRenderer.invoke('tasks:createColumn', payload),

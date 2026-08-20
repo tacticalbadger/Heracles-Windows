@@ -18,8 +18,13 @@ type SectionMenuProps = {
   onClose: () => void;
   allowRename?: boolean;
   onRename?: () => void;
+  renameLabel?: string;
+  hideLabel?: string;
   onCreateNote?: () => void;
   onCreateTodoList?: () => void;
+  onCreateSection?: () => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
 };
 
 export const SectionMenu = ({
@@ -31,8 +36,13 @@ export const SectionMenu = ({
   onClose,
   allowRename = false,
   onRename,
+  renameLabel = 'Rename section',
+  hideLabel = 'Hide section',
   onCreateNote,
-  onCreateTodoList
+  onCreateTodoList,
+  onCreateSection,
+  onDelete,
+  deleteLabel = 'Delete'
 }: SectionMenuProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState({ left: x, top: y });
@@ -81,7 +91,7 @@ export const SectionMenu = ({
       style={{ left: position.left, top: position.top, right: 'auto' }}
       onClick={(event) => event.stopPropagation()}
     >
-      {(onCreateNote || onCreateTodoList) && (
+      {(onCreateNote || onCreateTodoList || onCreateSection) && (
         <>
           <div className="page-menu__title">Add</div>
           {onCreateNote && (
@@ -108,6 +118,19 @@ export const SectionMenu = ({
                 ☰
               </span>
               <span className="page-menu__label">New todo list</span>
+            </button>
+          )}
+          {onCreateSection && (
+            <button
+              type="button"
+              className="page-menu__item"
+              onClick={run(onCreateSection)}
+              role="menuitem"
+            >
+              <span className="page-menu__icon" aria-hidden>
+                ◈
+              </span>
+              <span className="page-menu__label">New section</span>
             </button>
           )}
           <div className="page-menu__divider" />
@@ -139,7 +162,7 @@ export const SectionMenu = ({
           <span className="page-menu__icon" aria-hidden>
             ✎
           </span>
-          <span className="page-menu__label">Rename section</span>
+          <span className="page-menu__label">{renameLabel}</span>
         </button>
       )}
       <button
@@ -151,8 +174,24 @@ export const SectionMenu = ({
         <span className="page-menu__icon" aria-hidden>
           ⊘
         </span>
-        <span className="page-menu__label">Hide section</span>
+        <span className="page-menu__label">{hideLabel}</span>
       </button>
+      {onDelete && (
+        <>
+          <div className="page-menu__divider" />
+          <button
+            type="button"
+            className="page-menu__item page-menu__item--danger"
+            onClick={run(onDelete)}
+            role="menuitem"
+          >
+            <span className="page-menu__icon" aria-hidden>
+              ⌫
+            </span>
+            <span className="page-menu__label">{deleteLabel}</span>
+          </button>
+        </>
+      )}
     </div>
   );
 };

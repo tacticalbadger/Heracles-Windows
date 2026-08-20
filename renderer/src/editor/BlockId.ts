@@ -28,7 +28,8 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'horizontalRule',
         'codeMirrorBlock',
         'calloutBlock',
-        'toggleBlock'
+        'toggleBlock',
+        'image'
       ],
       attributeName: 'blockId'
     };

@@ -11,6 +11,7 @@ import {
 import type { Note } from './types/notes';
 import { markdownToEditorHtml } from './lib/markdownImport';
 import { htmlToEditorHtml } from './lib/htmlImport';
+import { stripHtml } from './lib/text';
 import { Sidebar, type Section } from './workspace/Sidebar';
 import type { SectionSort } from './workspace/SectionMenu';
 import { MovePagePicker } from './workspace/MovePagePicker';
@@ -57,8 +58,6 @@ type SaveState = {
 const sortNotes = (items: Note[]) =>
   [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
-const stripHtml = (value: string) => value.replace(/<[^>]*>/g, ' ');
-
 const formatDate = (value: string) => {
   const date = new Date(value);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -85,6 +84,7 @@ const App = () => {
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [moveTarget, setMoveTarget] = useState<Note | null>(null);
+  const [updateReady, setUpdateReady] = useState<{ version: string | null } | null>(null);
   const [sectionLabels, setSectionLabels] = useState<Partial<Record<Section, string>>>(() => {
     try {
       const stored = localStorage.getItem('heracles-section-labels');
@@ -127,12 +127,23 @@ const App = () => {
 
   const switcherInputRef = useRef<HTMLInputElement | null>(null);
   const saveTimers = useRef(new Map<string, number>());
+  // Payloads waiting on the save debounce, flushed if the window closes early.
+  const pendingSaves = useRef(new Map<string, { content: string; title: string }>());
   const initRan = useRef(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('heracles-theme', theme);
   }, [theme]);
+
+  // Show a "Restart to update" banner once a new version has downloaded.
+  useEffect(() => {
+    if (!window.heracles?.updates?.onDownloaded) return;
+    const unsubscribe = window.heracles.updates.onDownloaded((info) =>
+      setUpdateReady(info ?? { version: null })
+    );
+    return unsubscribe;
+  }, []);
 
   const dismissToast = useCallback((toastId: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== toastId));
@@ -175,23 +186,34 @@ const App = () => {
       if (!isMounted) return;
 
       let initial = stored;
-      if (initial.length === 0) {
+      // Seed a welcome page (inside the default notebook) when there is no
+      // openable document yet. The notebook itself is created by the DB migration.
+      const hasDocument = initial.some(
+        (note) => note.kind === 'page' || note.kind === 'todolist'
+      );
+      if (!hasDocument) {
+        const firstNotebook = initial.find((note) => note.kind === 'notebook');
         const seed = await window.heracles.notes.create({
           title: 'Welcome to Heracles',
           content:
-            '<h1>Welcome to Heracles</h1><p>Use / to open the slash menu.</p><p>Use ⌘K to search.</p>'
+            '<h1>Welcome to Heracles</h1><p>Use / to open the slash menu.</p><p>Use ⌘K to search.</p>',
+          parentId: firstNotebook ? firstNotebook.id : null
         });
-        initial = [seed];
+        initial = [...initial, seed];
       }
 
       const sorted = sortNotes(initial);
 
       // Allow main process to seed an initial note via location hash (#note=ID).
+      // Only open documents — notebooks and sections aren't editable.
       const hashMatch = window.location.hash.match(/note=([^&]+)/);
       const requestedNoteId = hashMatch ? decodeURIComponent(hashMatch[1]) : null;
+      const firstOpenable = sorted.find(
+        (note) => note.kind === 'page' || note.kind === 'todolist'
+      );
       const firstId =
         (requestedNoteId && sorted.find((note) => note.id === requestedNoteId)?.id) ||
-        sorted[0]?.id ||
+        firstOpenable?.id ||
         null;
       const newLeaf = createLeaf(firstId ? [firstId] : [], firstId);
       setNotes(sorted);
@@ -356,12 +378,16 @@ const App = () => {
     );
   }, []);
 
-  // Close all tabs for a note in every pane, collapsing emptied panes.
+  // Close all tabs for the given notes in every pane, collapsing emptied panes.
   // Does not modify the notes list.
   const closeNoteTabsEverywhere = useCallback(
-    (noteId: string) => {
+    (noteIds: string | string[]) => {
+      const ids = Array.isArray(noteIds) ? noteIds : [noteIds];
       setPaneTree((current) => {
-        const next = removeNoteFromTree(current, noteId);
+        let next: PaneNode | null = current;
+        for (const id of ids) {
+          next = removeNoteFromTree(ensureLeaf(next), id);
+        }
         const safe = ensureLeaf(next);
         setActiveLeafId(ensureActiveLeafExists(safe));
         return safe;
@@ -370,13 +396,63 @@ const App = () => {
     [ensureActiveLeafExists]
   );
 
-  const removeNoteEverywhere = useCallback(
-    (noteId: string) => {
-      setNotes((current) => current.filter((note) => note.id !== noteId));
-      closeNoteTabsEverywhere(noteId);
+  // All descendant ids of a note in the current state (children, grandchildren, ...).
+  const collectDescendantIds = useCallback(
+    (noteId: string): string[] => {
+      const found = new Set([noteId]);
+      let added = true;
+      while (added) {
+        added = false;
+        for (const note of notes) {
+          if (note.parentId && found.has(note.parentId) && !found.has(note.id)) {
+            found.add(note.id);
+            added = true;
+          }
+        }
+      }
+      found.delete(noteId);
+      return Array.from(found);
     },
-    [closeNoteTabsEverywhere]
+    [notes]
   );
+
+  // Walk up from a note to the notebook that contains it.
+  const findNotebookOf = useCallback(
+    (noteId: string | null): string | null => {
+      if (!noteId) return null;
+      const byId = new Map(notes.map((note) => [note.id, note]));
+      let current = byId.get(noteId);
+      while (current) {
+        if (current.kind === 'notebook') return current.id;
+        current = current.parentId ? byId.get(current.parentId) : undefined;
+      }
+      return null;
+    },
+    [notes]
+  );
+
+  // The notebook new top-level content should land in: the active note's
+  // notebook, falling back to the first notebook.
+  const resolveNotebookId = useCallback((): string | null => {
+    const fromActive = findNotebookOf(activeNoteId);
+    if (fromActive) return fromActive;
+    const firstNotebook = notes.find(
+      (note) => note.kind === 'notebook' && !note.archived && !note.trashed
+    );
+    return firstNotebook ? firstNotebook.id : null;
+  }, [activeNoteId, findNotebookOf, notes]);
+
+  const handleCreateNotebook = useCallback(async () => {
+    if (!window.heracles?.notes) return;
+    const created = await window.heracles.notes.create({
+      title: 'New notebook',
+      kind: 'notebook'
+    });
+    const refreshed = await window.heracles.notes.list();
+    setNotes(refreshed);
+    setAutoRenameId(created.id);
+    pushToast('Notebook created', 'success');
+  }, [pushToast]);
 
   const handleNewNote = useCallback(async () => {
     if (!window.heracles?.notes) return;
@@ -384,13 +460,13 @@ const App = () => {
     const created = await window.heracles.notes.create({
       title: 'Untitled',
       content: '<p></p>',
-      parentId: activeNoteId
+      parentId: activeNoteId ?? resolveNotebookId()
     });
     setNotes((current) => sortNotes([created, ...current]));
     openNoteInLeaf(created.id);
     setAutoRenameId(created.id);
     pushToast('New page created', 'success');
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
 
   const handleImportMarkdown = useCallback(async () => {
     if (!window.heracles?.notes?.importMarkdown) return;
@@ -403,7 +479,7 @@ const App = () => {
       const note = await window.heracles.notes.create({
         title: file.name,
         content,
-        parentId: activeNoteId
+        parentId: activeNoteId ?? resolveNotebookId()
       });
       created.push(note);
     }
@@ -417,7 +493,7 @@ const App = () => {
         : `Imported ${created.length} pages`,
       'success'
     );
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
 
   const handleImportHtml = useCallback(async () => {
     if (!window.heracles?.notes?.importHtml) return;
@@ -430,7 +506,7 @@ const App = () => {
       const note = await window.heracles.notes.create({
         title: file.name,
         content,
-        parentId: activeNoteId
+        parentId: activeNoteId ?? resolveNotebookId()
       });
       created.push(note);
     }
@@ -444,7 +520,71 @@ const App = () => {
         : `Imported ${created.length} pages`,
       'success'
     );
-  }, [activeNoteId, openNoteInLeaf, pushToast]);
+  }, [activeNoteId, resolveNotebookId, openNoteInLeaf, pushToast]);
+
+  // Copy a todo list's board (columns, tasks, subtasks, fields) onto a fresh
+  // duplicate. Comments are not copied — they read as a dated conversation.
+  const duplicateBoard = useCallback(async (sourceListId: string, destListId: string) => {
+    const tasksApi = window.heracles?.tasks;
+    if (!tasksApi) return;
+
+    const [sourceColumns, sourceTasks, seededColumns] = await Promise.all([
+      tasksApi.listColumns({ todoListId: sourceListId }),
+      tasksApi.list({ todoListId: sourceListId }),
+      tasksApi.listColumns({ todoListId: destListId })
+    ]);
+
+    const columnIdMap = new Map<string, string>();
+    for (const column of sourceColumns) {
+      const created = await tasksApi.createColumn({
+        todoListId: destListId,
+        name: column.name
+      });
+      columnIdMap.set(column.id, created.id);
+    }
+    // Drop the default columns seeded on creation, now that the real ones exist.
+    for (const column of seededColumns) {
+      await tasksApi.deleteColumn({ id: column.id });
+    }
+
+    // Create tasks parents-first so subtasks can reference their new parent id.
+    const taskIdMap = new Map<string, string>();
+    const byParent = new Map<string | null, typeof sourceTasks>();
+    for (const task of sourceTasks) {
+      const key = task.parentTaskId ?? null;
+      const list = byParent.get(key) ?? [];
+      list.push(task);
+      byParent.set(key, list);
+    }
+    const copyLevel = async (parentKey: string | null) => {
+      const level = [...(byParent.get(parentKey) ?? [])].sort(
+        (a, b) => a.position - b.position
+      );
+      for (const task of level) {
+        const created = await tasksApi.create({
+          todoListId: destListId,
+          columnId: task.columnId ? columnIdMap.get(task.columnId) ?? null : null,
+          parentTaskId: task.parentTaskId ? taskIdMap.get(task.parentTaskId) ?? null : null,
+          title: task.title,
+          description: task.description,
+          priority: task.priority
+        });
+        taskIdMap.set(task.id, created.id);
+        const extras: Parameters<typeof tasksApi.update>[0] = { id: created.id };
+        if (task.completed) extras.completed = true;
+        if (task.dueDate) extras.dueDate = task.dueDate;
+        if (task.deadline) extras.deadline = task.deadline;
+        if (task.labels.length > 0) extras.labels = task.labels;
+        if (task.reminders.length > 0) extras.reminders = task.reminders;
+        if (task.location) extras.location = task.location;
+        if (Object.keys(extras).length > 1) {
+          await tasksApi.update(extras);
+        }
+        await copyLevel(task.id);
+      }
+    };
+    await copyLevel(null);
+  }, []);
 
   const handleDuplicateNote = useCallback(
     async (note: Note, target?: 'current' | 'right' | 'down') => {
@@ -453,8 +593,13 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: note.title ? `${note.title} (copy)` : 'Untitled',
         content: note.content,
-        icon: note.icon
+        icon: note.icon,
+        kind: note.kind,
+        parentId: note.parentId ?? resolveNotebookId()
       });
+      if (note.kind === 'todolist') {
+        await duplicateBoard(note.id, created.id);
+      }
       setNotes((current) => sortNotes([created, ...current]));
 
       if (target === 'right') {
@@ -466,7 +611,7 @@ const App = () => {
       }
       pushToast('Duplicated', 'success');
     },
-    [activeLeafId, handleSplitLeaf, openNoteInLeaf, pushToast]
+    [activeLeafId, duplicateBoard, handleSplitLeaf, openNoteInLeaf, pushToast, resolveNotebookId]
   );
 
   const handleCopyNoteLink = useCallback(
@@ -501,17 +646,22 @@ const App = () => {
       if (!window.heracles?.notes) return;
       const updated = await window.heracles.notes.trash({ id: note.id });
       if (updated) {
-        replaceNote(updated);
-        // Close the trashed note's tab(s) and collapse any pane that becomes empty.
-        closeNoteTabsEverywhere(note.id);
+        // Trash cascades to the subtree in the DB — refresh, then close every
+        // affected tab and collapse any pane that becomes empty.
+        const refreshed = await window.heracles.notes.list();
+        setNotes(refreshed);
+        closeNoteTabsEverywhere([note.id, ...collectDescendantIds(note.id)]);
         pushToast(
           'Moved to trash',
           'info',
           {
             label: 'Undo',
             onAction: () => {
-              window.heracles.notes.restore({ id: note.id }).then((restored) => {
-                if (restored) replaceNote(restored);
+              window.heracles.notes.restore({ id: note.id }).then(async (restored) => {
+                if (restored) {
+                  const list = await window.heracles.notes.list();
+                  setNotes(list);
+                }
               });
             }
           },
@@ -519,7 +669,7 @@ const App = () => {
         );
       }
     },
-    [closeNoteTabsEverywhere, pushToast, replaceNote]
+    [closeNoteTabsEverywhere, collectDescendantIds, pushToast]
   );
 
   const handleRestoreNote = useCallback(
@@ -527,29 +677,50 @@ const App = () => {
       if (!window.heracles?.notes) return;
       const updated = await window.heracles.notes.restore({ id: note.id });
       if (updated) {
-        replaceNote(updated);
+        // Restore cascades to the subtree (and may reparent) — refresh.
+        const refreshed = await window.heracles.notes.list();
+        setNotes(refreshed);
         pushToast('Restored', 'success');
       }
     },
-    [pushToast, replaceNote]
+    [pushToast]
   );
 
   const handleDeleteNote = useCallback(
     async (note: Note) => {
       if (!window.heracles?.notes) return;
-      await window.heracles.notes.remove({ id: note.id });
-      removeNoteEverywhere(note.id);
+      const result = await window.heracles.notes.remove({ id: note.id });
+      if (result && result.success === false) {
+        pushToast("You can't delete your only notebook", 'danger');
+        return;
+      }
+      if (note.kind === 'notebook') {
+        // The notebook's contents were reassigned to another notebook in the DB —
+        // refresh so the moved items show under their new home.
+        const refreshed = await window.heracles.notes.list();
+        setNotes(refreshed);
+        pushToast('Notebook deleted', 'danger');
+        return;
+      }
+      // Delete cascades to the subtree in the DB — mirror it in the UI.
+      const deletedIds = result?.deletedIds ?? [note.id];
+      setNotes((current) => current.filter((item) => !deletedIds.includes(item.id)));
+      closeNoteTabsEverywhere(deletedIds);
       pushToast('Deleted permanently', 'danger');
     },
-    [pushToast, removeNoteEverywhere]
+    [closeNoteTabsEverywhere, pushToast]
   );
 
   const handleEmptyTrash = useCallback(async () => {
     if (!window.heracles?.notes) return;
-    await window.heracles.notes.emptyTrash();
-    setNotes((current) => current.filter((note) => !note.trashed));
+    const result = await window.heracles.notes.emptyTrash();
+    const deletedIds = result?.deletedIds ?? [];
+    setNotes((current) =>
+      current.filter((note) => !note.trashed && !deletedIds.includes(note.id))
+    );
+    if (deletedIds.length > 0) closeNoteTabsEverywhere(deletedIds);
     pushToast('Trash emptied', 'danger');
-  }, [pushToast]);
+  }, [closeNoteTabsEverywhere, pushToast]);
 
   const handleContentChange = useCallback(
     (noteId: string, content: string, title: string) => {
@@ -568,7 +739,9 @@ const App = () => {
       const existing = saveTimers.current.get(noteId);
       if (existing) window.clearTimeout(existing);
 
+      pendingSaves.current.set(noteId, { content, title });
       const timeout = window.setTimeout(async () => {
+        pendingSaves.current.delete(noteId);
         const result = await window.heracles.notes.update({ id: noteId, content, title });
         if (result) {
           setSaveState({ status: 'saved', noteId, lastSavedAt: result.updatedAt });
@@ -580,6 +753,19 @@ const App = () => {
     },
     []
   );
+
+  // Flush debounced saves when the window closes so the last edit isn't lost.
+  useEffect(() => {
+    const flush = () => {
+      if (!window.heracles?.notes) return;
+      for (const [noteId, payload] of pendingSaves.current) {
+        window.heracles.notes.update({ id: noteId, ...payload });
+      }
+      pendingSaves.current.clear();
+    };
+    window.addEventListener('beforeunload', flush);
+    return () => window.removeEventListener('beforeunload', flush);
+  }, []);
 
   const handleSidebarSelect = useCallback(
     (noteId: string, openInNewPane?: boolean) => {
@@ -727,14 +913,14 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: 'New section',
         kind: 'section',
-        parentId
+        parentId: parentId ?? resolveNotebookId()
       });
       const refreshed = await window.heracles.notes.list();
       setNotes(refreshed);
       setAutoRenameId(created.id);
       pushToast('Section created', 'success');
     },
-    [pushToast]
+    [resolveNotebookId, pushToast]
   );
 
   const handleCreateTodoList = useCallback(
@@ -743,14 +929,14 @@ const App = () => {
       const created = await window.heracles.notes.create({
         title: 'New todo list',
         kind: 'todolist',
-        parentId
+        parentId: parentId ?? resolveNotebookId()
       });
       setNotes((current) => sortNotes([created, ...current]));
       openNoteInLeaf(created.id);
       setAutoRenameId(created.id);
       pushToast('Todo list created', 'success');
     },
-    [openNoteInLeaf, pushToast]
+    [resolveNotebookId, openNoteInLeaf, pushToast]
   );
 
   const handleAddChildTodoList = useCallback(
@@ -795,7 +981,9 @@ const App = () => {
 
   const switcherNotes = useMemo(() => {
     const term = switcherQuery.trim().toLowerCase();
-    const base = notes.filter((note) => !note.trashed && note.kind !== 'section');
+    const base = notes.filter(
+      (note) => !note.trashed && note.kind !== 'section' && note.kind !== 'notebook'
+    );
     if (!term) return sortNotes(base).slice(0, 10);
     return sortNotes(
       base.filter((note) => `${note.title} ${stripHtml(note.content)}`.toLowerCase().includes(term))
@@ -838,6 +1026,7 @@ const App = () => {
         onMovePage={handleMovePage}
         onCreateSection={handleCreateSection}
         onCreateTodoList={handleCreateTodoList}
+        onCreateNotebook={handleCreateNotebook}
         onAddChildTodoList={handleAddChildTodoList}
         sectionSort={sectionSort}
         onChangeSectionSort={handleChangeSectionSort}
@@ -958,6 +1147,29 @@ const App = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {updateReady && (
+        <div className="update-banner" role="status">
+          <span className="update-banner__text">
+            A new version{updateReady.version ? ` (${updateReady.version})` : ''} is ready.
+          </span>
+          <button
+            type="button"
+            className="update-banner__action"
+            onClick={() => window.heracles?.updates?.restart()}
+          >
+            Restart to update
+          </button>
+          <button
+            type="button"
+            className="update-banner__dismiss"
+            aria-label="Dismiss"
+            onClick={() => setUpdateReady(null)}
+          >
+            ×
+          </button>
         </div>
       )}
 

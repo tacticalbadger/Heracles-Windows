@@ -1,6 +1,8 @@
-# Heracles
+# Heracles (Windows)
 
-A local-first, hierarchical notebook for macOS. Electron shell, React renderer, TipTap rich-text editor, SQLite storage.
+A local-first, hierarchical notebook for Windows. Electron shell, React renderer, TipTap rich-text editor, SQLite storage.
+
+This is the Windows platform repository — see [Sibling repositories](#sibling-repositories) for how it relates to the macOS repo. Windows packaging and signing are documented in [`windowsInstructions.md`](./windowsInstructions.md).
 
 ## Features
 
@@ -98,6 +100,20 @@ signature so the updater can verify the publisher — instructions in
 - [`docs/architecture.md`](./docs/architecture.md) — goals, stack, and design notes
 - [`BUILDING.md`](./BUILDING.md) — build, package, and distribution guide
 - [`windowsInstructions.md`](./windowsInstructions.md) — sign & ship the official Windows build
+
+## Sibling repositories
+
+Heracles ships from two platform repositories that share this codebase:
+
+- [Heracles](https://github.com/mattdobbs/Heracles) — macOS (signed + notarized builds, R2 auto-update feed)
+- [Heracles-Windows](https://github.com/mattdobbs/Heracles-Windows) — Windows (NSIS installer; signing per `windowsInstructions.md`)
+
+Everything outside platform packaging config is shared code. Apply changes —
+and their documentation updates — to both repositories together: commit to one,
+then merge or cherry-pick into the other (the repos share git history, so
+`git merge` works cleanly). Platform-specific bits (electron-builder
+`mac`/`win`/`nsis` config, signing setup, this README's intro) stay in their
+own repo.
 
 ## Project structure
 

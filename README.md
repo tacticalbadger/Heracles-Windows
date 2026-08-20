@@ -99,6 +99,20 @@ signature so the updater can verify the publisher — instructions in
 - [`BUILDING.md`](./BUILDING.md) — build, package, and distribution guide
 - [`windowsInstructions.md`](./windowsInstructions.md) — sign & ship the official Windows build
 
+## Sibling repositories
+
+Heracles ships from two platform repositories that share this codebase:
+
+- [Heracles](https://github.com/mattdobbs/Heracles) — macOS (signed + notarized builds, R2 auto-update feed)
+- [Heracles-Windows](https://github.com/mattdobbs/Heracles-Windows) — Windows (NSIS installer; signing per `windowsInstructions.md`)
+
+Everything outside platform packaging config is shared code. Apply changes —
+and their documentation updates — to both repositories together: commit to one,
+then merge or cherry-pick into the other (the repos share git history, so
+`git merge` works cleanly). Platform-specific bits (electron-builder
+`mac`/`win`/`nsis` config, signing setup, the README intro) stay in their
+own repo.
+
 ## Project structure
 
 ```

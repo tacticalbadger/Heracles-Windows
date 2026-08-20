@@ -106,19 +106,19 @@ Bucket details:
 - **Public download URL** (what clients read): `https://pub-622aa86bc99340e3ac5b01cb86b7d752.r2.dev/`
 - **S3-compatible upload endpoint**: `https://b9d2073cb737c168f67215026b0c9b64.r2.cloudflarestorage.com` , bucket name `heracles`
 
-Upload with the AWS CLI (needs an R2 API token — Access Key ID + Secret, kept out
-of the repo):
+Upload with the bundled script (needs an R2 API token — Access Key ID + Secret,
+kept out of the repo):
 ```powershell
-$env:AWS_ACCESS_KEY_ID="<r2-access-key-id>"
-$env:AWS_SECRET_ACCESS_KEY="<r2-secret>"
-cd app\windows
-aws s3 cp "latest.yml" s3://heracles/ --endpoint-url https://b9d2073cb737c168f67215026b0c9b64.r2.cloudflarestorage.com
-aws s3 cp "Heracles Setup <version>.exe" s3://heracles/ --endpoint-url https://b9d2073cb737c168f67215026b0c9b64.r2.cloudflarestorage.com
-aws s3 cp "Heracles Setup <version>.exe.blockmap" s3://heracles/ --endpoint-url https://b9d2073cb737c168f67215026b0c9b64.r2.cloudflarestorage.com
+$env:R2_ACCESS_KEY_ID="<r2-access-key-id>"
+$env:R2_SECRET_ACCESS_KEY="<r2-secret>"
+npm run release:upload
 ```
-(Or `npx wrangler r2 object put heracles/<file> --file <file> --remote`.) Give
-`latest.yml` a short/no cache (or purge Cloudflare cache) so clients see the new
-version promptly.
+It finds the current version's artifacts in `app\windows`, uploads them plus
+`latest.yml` to the bucket root (feed last, with `Cache-Control: no-cache` so
+clients see the new version promptly), and verifies the public URL. Add
+`-- --dry-run` to preview. The AWS CLI (`aws s3 cp … --endpoint-url
+https://b9d2073cb737c168f67215026b0c9b64.r2.cloudflarestorage.com`) or
+`npx wrangler r2 object put` still work as manual alternatives.
 
 > macOS and Windows share one bucket. `latest-mac.yml` serves Mac clients,
 > `latest.yml` serves Windows clients — never overwrite one with the other.
@@ -128,7 +128,7 @@ version promptly.
 - [ ] Signing credentials present in the environment (Option A/B/C).
 - [ ] `npm run release:win` succeeded.
 - [ ] `signtool verify /pa` reports **Valid** with the expected publisher.
-- [ ] `latest.yml`, the `.exe`, and the `.exe.blockmap` uploaded to the bucket root.
+- [ ] `npm run release:upload` succeeded (`latest.yml`, `.exe`, `.exe.blockmap` at the bucket root).
 - [ ] `latest.yml` not cached stale.
 
 ## Security notes

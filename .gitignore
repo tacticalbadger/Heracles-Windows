@@ -11,3 +11,6 @@ App/
 
 # Vite renderer build output
 dist/
+
+# R2 release-upload credentials (see scripts/upload-release.cjs)
+.env.r2

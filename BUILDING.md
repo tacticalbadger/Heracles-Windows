@@ -168,8 +168,15 @@ canonical reference.
 Distributable builds are **signed and published to a Cloudflare R2 bucket**, and
 the app **auto-updates** from it via `electron-updater`. See the README's
 [Releases & auto-update](./README.md#releases--auto-update) section for the
-end-to-end flow (bump version → build → upload `latest-*.yml` + artifacts to the
-bucket root).
+end-to-end flow: bump version → build → `npm run release:upload`.
+
+`release:upload` (`scripts/upload-release.cjs`) discovers the current version's
+artifacts in `app/macOS` or `app/windows`, uploads them plus the update feed to
+the bucket root over R2's S3 API (feeds last, so clients never see a version
+whose artifacts aren't up yet; feeds get `Cache-Control: no-cache`), and
+verifies the public URL responds. It needs an R2 API token in
+`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` (env vars or a git-ignored
+`.env.r2` at the repo root); `-- --dry-run` previews without uploading.
 
 ### macOS
 

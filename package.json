@@ -14,6 +14,7 @@
     "package:win:dir": "npm run build && electron-builder --win dir --config.directories.output=app/windows",
     "release:mac": "npm run build && electron-builder --mac",
     "release:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
+    "release:upload": "node scripts/upload-release.cjs",
     "preview": "vite preview",
     "test": "node scripts/db-cascade-test.cjs",
     "postinstall": "electron-builder install-app-deps"

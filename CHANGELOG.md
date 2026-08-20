@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`npm run release:upload`** — uploads a built release (installer, zip,
+  blockmaps, and the `latest-*.yml` update feed) to the Cloudflare R2 bucket
+  that serves auto-updates, replacing the manual dashboard/AWS-CLI step. Signs
+  R2's S3 API directly with Node built-ins (no CLI or SDK required); reads an
+  R2 API token from `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` or a git-ignored
+  `.env.r2`. Uploads feeds last so clients never see a half-published release,
+  marks feeds `no-cache`, skips artifacts that don't match the current
+  `package.json` version, and supports `--dry-run`.
+
 - **Automatic updates** — the app checks a release feed on launch (and hourly),
   downloads new versions in the background, and shows a **"Restart to update"**
   banner; clicking it quits and installs. Built on `electron-updater`, published

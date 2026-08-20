@@ -59,6 +59,7 @@ Starts Vite on `http://localhost:5173` and launches the Electron shell with DevT
 | `npm run package:win:dir` | Build an unpacked Windows folder into `app/windows/` |
 | `npm run release:mac` | Build a signed + notarized `zip` + `dmg` for distribution (needs `APPLE_API_*` env vars) |
 | `npm run release:win` | Build a Windows NSIS installer for distribution (run on Windows) |
+| `npm run release:upload` | Upload the built release + update feed to the R2 bucket |
 | `npm run preview` | Preview the built renderer in a browser (no Electron) |
 | `npm test` | Functional test of the SQLite layer (`scripts/db-cascade-test.cjs`) |
 
@@ -82,9 +83,12 @@ Releasing a new version:
      (signs with Developer ID, notarizes + staples the `.app`/`.zip`/`.dmg`).
    - Windows: `npm run release:win` on a Windows machine — see
      [`windowsInstructions.md`](./windowsInstructions.md) for signing.
-3. **Upload** `latest-mac.yml` / `latest.yml`, the `*.zip` (+ `.blockmap`), and the
+3. **Upload** with `npm run release:upload` — it pushes the update feed
+   (`latest-mac.yml` / `latest.yml`), the `*.zip` (+ `.blockmap`), and the
    installer (`.dmg` / `.exe`) to the **bucket root** so they are served at the
-   public URL.
+   public URL. It signs requests against R2's S3 API directly (no CLI needed);
+   put an R2 API token in `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` env vars
+   or a git-ignored `.env.r2` file. Pass `-- --dry-run` to preview.
 
 For auto-update to *apply* (not just download), builds must be code-signed: macOS
 needs a notarized Developer ID build (already wired); Windows needs an Authenticode

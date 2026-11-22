@@ -476,7 +476,56 @@ colour). The figures above are counts over the saved pictures
 
 ### Scheduled toasts
 
-Not run yet.
+Run 2026-11-22, with a throwaway program under its own identity
+(`com.heracles.notes.spike`) so nothing of the real app's was touched.
+
+**Reminders can be handed to Windows by an app with no installer.** A
+toast scheduled for 15 s ahead was on screen at its due time with no
+process of the program running (seen in a picture of the screen corner:
+the banner, under the name "Heracles (spike)", with "Book ferry" and
+"Reminder"). Windows then kept it in the notification centre.
+
+What it took:
+
+- One registry key, written by the app at start, no administrator needed:
+  `HKCU\Software\Classes\AppUserModelId\<identity>` with `DisplayName`.
+  That alone is enough for the banner, for the name shown on it, and for
+  the notification centre to keep it. No Start Menu shortcut, no COM
+  activator, no package. (An `IconUri` value would give it the app's icon
+  in place of the generic one; not tried.)
+- `SetCurrentProcessExplicitAppUserModelID(<identity>)` in the process.
+- `ToastNotificationManager.CreateToastNotifier(<identity>)`, then
+  `AddToSchedule(new ScheduledToastNotification(xml, when))`. The WinRT
+  types come with the `net10.0-windows10.0.22621.0` target the app already
+  has. `GetScheduledToastNotifications()` lists what is pending, which is
+  what `ReminderPlan` needs to compare against; a `Tag` and `Group` on each
+  identify it.
+- The link scheme: `HKCU\Software\Classes\<scheme>` with `URL Protocol` and
+  `shell\open\command` = `"<exe>" "%1"`. Opening a link of that scheme
+  started the program with the link as its argument.
+- The toast's XML: `<toast activationType="protocol" launch="<link>">`, so
+  a click opens the link and needs no code of the app's running.
+
+Things to know:
+
+- Before the identity's first toast, `notifier.Setting` throws "Element not
+  found" and the history is empty. After the first one Windows knows the
+  app (`Setting` reads `Enabled`) and keeps its toasts. Do not read
+  `Setting` to decide whether to schedule.
+- Windows makes two keys of its own for the identity
+  (`…\Notifications\Settings\<identity>` and
+  `…\PushNotifications\Backup\<identity>`). The spike's were deleted
+  afterwards along with its own two.
+- A banner stays about six seconds, then lives in the notification centre.
+  `scenario="reminder"` keeps a banner up until dismissed, but needs a
+  button on it; not tried.
+- Whether Do Not Disturb was on could not be read. It was evidently off.
+
+How the check was made, since it nearly went wrong twice: a picture of the
+screen corner before and during. Take it with the thread made DPI-aware
+(`SetThreadDpiAwarenessContext(-4)`) and real pixel coordinates; without
+that the picture is of the middle of the screen and shows nothing. UI
+Automation did not find the banner at all, by window or by its text.
 
 ## Not verified
 
@@ -485,6 +534,12 @@ Not run yet.
 - Windows 10. Everything so far ran on Windows 11.
 - A PC with nothing installed. The packages are self-contained and have
   only been started on the machine that built them.
+- **Clicking a reminder.** The toast spike proved the two halves apart: the
+  banner appears, and opening a link of the app's scheme starts the app
+  with that link. A click on the banner itself was not made: UI Automation
+  could not find the banner, and a real click on the owner's desktop was
+  not taken. The owner should click one by hand when reminders are built.
+- Reminders with Do Not Disturb on, and on Windows 10.
 - Typing through a real input method (composition, candidate windows), and
   real key presses. The text-input spike sent finished text to the box
   through `TextCompositionManager`, which a script can do; an input method
@@ -553,5 +608,11 @@ As of 2026-11-22, on the branch `port`.
   library draws them in colour, including inside a subclass of the standard
   `RichTextBox`. Whether to take the library is the owner's decision.
 
-Next: the last spike (scheduled toasts)
+- **Spike 4 of 4 is done**: Windows delivers a scheduled reminder for an
+  app with no installer, with the app closed, given one registry key the
+  app writes itself. Clicking the banner is not verified.
+
+Next: the owner's word on replacing `main` on GitHub, and on the emoji
+library. Then the plan for stage 2 (model and shell), which reads "Spike
+findings" above.
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

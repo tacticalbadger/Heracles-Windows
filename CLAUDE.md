@@ -325,7 +325,11 @@ Not run yet.
 
 ## Not verified
 
-Nothing is listed yet because nothing has been built.
+- The x64 build has only run under emulation, on the ARM64 dev machine.
+  It has never run on x64 hardware.
+- Windows 10. Everything so far ran on Windows 11.
+- A PC with nothing installed. The packages are self-contained and have
+  only been started on the machine that built them.
 
 ## Current state (update in every commit)
 
@@ -364,5 +368,18 @@ As of 2026-11-22, on the branch `port`.
   ("file error: Cannot create a file when that file already exists") and
   keeps running; `make-fixture.ps1` refuses while that instance is up.
 
-Next: packages for both architectures, then the spikes
+- **Packages build for both processors.** `tools\build.ps1 core package`
+  and `tools\build.ps1 core package -Arch x64` give self-contained zips of
+  about 60 MB each and `SHA256SUMS` under `build\release`. The x64 core
+  cross-compiles from ARM64 with the installed tools (the bundled SQLite
+  included) and needs nothing extra. Each packaged build was started on the
+  fixture and its window read (`1 note`), the x64 one under emulation, and
+  the headers of `Heracles.exe` and `heracles_core.dll` in each package name
+  the right processor. Neither package names the build machine's profile
+  folder (the package step checks). After packaging for x64, run
+  `tools\build.ps1 core` once more so the bindings match this machine's DLL.
+  There is no `publish.ps1` yet: nothing is released until the app does
+  something.
+
+Next: the spikes
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

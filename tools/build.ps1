@@ -231,7 +231,7 @@ function Build-App {
     $number = Get-BuildNumber
     Step "app: dotnet build ($Configuration, $Rid, $Version build $number)"
     $project = Join-Path $App 'Heracles\Heracles.csproj'
-    Invoke-Native 'dotnet build' { dotnet build $project -c $Configuration -r $Rid -o $OutDir "-p:HeraclesBuild=$number" --nologo -v minimal }
+    Invoke-Native 'dotnet build' { dotnet build $project -c $Configuration -r $Rid -o $OutDir --no-incremental "-p:HeraclesBuild=$number" --nologo -v minimal }
     Write-Host "ok: $Exe"
     if ($Restart) { Start-App }
 }
@@ -276,7 +276,7 @@ function New-Package {
         dotnet publish $project -c Release -r $Rid --self-contained true "-p:HeraclesBuild=$number" `
             -p:DebugType=none -p:DebugSymbols=false -o $stage --nologo -v minimal
     }
-    foreach ($needed in 'Heracles.exe', 'Heracles.dll', 'heracles_core.dll') {
+    foreach ($needed in 'Heracles.exe', 'Heracles.dll', 'heracles_core.dll', 'Emoji.Wpf.dll') {
         if (-not (Test-Path (Join-Path $stage $needed))) { throw "the package is missing $needed" }
     }
     $packed = Get-PeArchitecture (Join-Path $stage 'heracles_core.dll')
@@ -316,7 +316,10 @@ function Test-All {
     finally { Pop-Location }
     Step 'test: dotnet test'
     $tests = Join-Path $App 'Heracles.Tests\Heracles.Tests.csproj'
-    Invoke-Native 'dotnet test' { dotnet test $tests --nologo -v minimal }
+    # Compiled afresh every time: this machine's clock steps backwards now and
+    # then, and an incremental build then runs the old tests without a word.
+    Invoke-Native 'dotnet build' { dotnet build $tests --no-incremental --nologo -v quiet }
+    Invoke-Native 'dotnet test' { dotnet test $tests --no-build --nologo -v minimal }
 }
 
 function Clear-All {

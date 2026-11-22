@@ -236,3 +236,43 @@ public sealed class SidebarRowsTests
         Assert.Null(SidebarRows.RowFor(rows, null));
     }
 }
+
+public sealed class PaneSharesTests
+{
+    private static void Same(double[] expected, IReadOnlyList<double> actual)
+    {
+        Assert.Equal(expected.Length, actual.Count);
+        for (var index = 0; index < expected.Length; index++) Assert.Equal(expected[index], actual[index], 6);
+    }
+
+    [Fact]
+    public void SharesWithRoomAreLeftAsTheyAre()
+    {
+        Same([0.5, 0.5], PaneHost.Shares([0.5, 0.5]));
+        Same([0.3, 0.7], PaneHost.Shares([0.3, 0.7]));
+    }
+
+    [Fact]
+    public void NoPaneIsDraggedSmallerThanTheSmallestShare()
+    {
+        Same([0.12, 0.88], PaneHost.Shares([0.05, 0.95]));
+        Same([0.88, 0.12], PaneHost.Shares([1.0, 0.0]));
+    }
+
+    [Fact]
+    public void WhatSmallPanesAreGivenComesFromTheOnesWithRoom()
+    {
+        var shares = PaneHost.Shares([0.02, 0.03, 0.95]);
+
+        Same([0.12, 0.12, 0.76], shares);
+        Assert.Equal(1.0, shares.Sum(), 6);
+    }
+
+    [Fact]
+    public void TooManyPanesForTheRuleKeepWhatTheyHave()
+    {
+        var nine = Enumerable.Repeat(1.0 / 9, 9).ToArray();
+
+        Same(nine, PaneHost.Shares(nine));
+    }
+}

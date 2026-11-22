@@ -24,7 +24,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'click', 'clickat', 'drag', 'keys', 'text', 'foreground')]
+    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'focus', 'click', 'clickat', 'drag', 'keys', 'text', 'foreground')]
     [string]$Action,
     [string]$Id,
     [string]$Name,
@@ -102,10 +102,20 @@ function Find-Element {
 }
 
 function Describe($element) {
-    try { $null = $element.Current.ControlType } catch { return "(element is gone)" }
+    # An element that has gone (a chosen menu item, a closed window) answers
+    # with an error, or with nothing where its properties were.
+    try { return (Describe-Live $element) } catch { return "(element is gone)" }
+}
+
+function Describe-Live($element) {
     $c = $element.Current
+    # A menu item that was just chosen is gone by the time it is described,
+    # and sometimes answers with nothing at all in place of an error.
+    if (-not $c.ControlType) { return "(element is gone)" }
     $r = $c.BoundingRectangle
-    $rect = if (-not ($r -is [System.Windows.Rect]) -or $r.IsEmpty) { 'offscreen' } else { '{0},{1} {2}x{3}' -f [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height }
+    # An element that was shown and then hidden keeps its last rectangle, so
+    # the rectangle alone does not say whether it can be seen.
+    $rect = if ($c.IsOffscreen -or -not ($r -is [System.Windows.Rect]) -or $r.IsEmpty) { 'offscreen' } else { '{0},{1} {2}x{3}' -f [int]$r.X, [int]$r.Y, [int]$r.Width, [int]$r.Height }
     $extra = ''
     if ($c.HelpText) { $extra += " help='$($c.HelpText)'" }
     if ($c.ItemStatus) { $extra += " status='$($c.ItemStatus)'" }
@@ -210,6 +220,11 @@ switch ($Action) {
         $element = Find-Element
         $element.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
         Write-Host "selected: $(Describe $element)"
+    }
+    'focus' {
+        $element = Find-Element
+        $element.SetFocus()
+        Write-Host "focused: $(Describe $element)"
     }
     'setvalue' {
         $element = Find-Element

@@ -37,4 +37,7 @@ internal static class AppPaths
     public static string DataDirectory => Current.DataDirectory;
 
     public static string LogPath => Current.LogPath;
+
+    /// <summary>The windows that were open, kept beside the library they show.</summary>
+    public static string WindowsPath => Path.Combine(DataDirectory, "windows.json");
 }

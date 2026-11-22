@@ -8,7 +8,8 @@ This repository is the Windows app. It is a native app, written in C# (WPF) over
 
 The native Windows app is being built. **There is nothing to download yet.**
 
-- What exists today: the Rust core, building and tested on Windows, and a window that opens the library through it. No notes can be read or written from the app yet.
+- What exists today: you can browse a library. The sidebar, panes and tabs, split views, several windows, search, Quick Open, icons, renaming, favorites, archive and trash all work.
+- What is missing: the editor. A note's text is shown but cannot be changed yet, and boards are not there. Those are the next stages.
 - The Electron app that used to live in this repository is gone. Its source is in the Mac repository's history.
 - The plan and its order of work are in [`docs/superpowers/specs/2026-11-22-native-windows-app-design.md`](./docs/superpowers/specs/2026-11-22-native-windows-app-design.md).
 

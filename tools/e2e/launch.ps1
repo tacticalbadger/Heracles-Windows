@@ -13,7 +13,11 @@
     build than build\app, such as a packaged one. -DataDir points the app at
     another library folder, for checking what it does with one it cannot use.
 
-    The app takes no arguments yet.
+    -Again starts a second copy without closing the first, which is how the
+    hand-over between copies is checked.
+
+    App arguments: a heracles:// link, --new-window, --e2e-seed (a few notes
+    of every kind, in an empty test library only).
 #>
 [CmdletBinding()]
 param(
@@ -21,6 +25,8 @@ param(
     [int]$Wait = 3,
     [string]$Exe,
     [string]$DataDir,
+    # Start a second copy while one is running, to see it hand over to the first.
+    [switch]$Again,
     # The only positional parameter: without that, an app argument typed at a
     # PowerShell prompt lands in -Fixture and -Wait.
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
@@ -57,7 +63,7 @@ $OutDir = Split-Path -Parent $Exe
 $running = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -and ($_.Path -ieq $Exe) } catch { $false }
     })
-if ($running.Count -gt 0) {
+if ($running.Count -gt 0 -and -not $Again) {
     $running | Stop-Process -Force
     $running | ForEach-Object { try { $_.WaitForExit(5000) | Out-Null } catch { } }
 }

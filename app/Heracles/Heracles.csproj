@@ -28,6 +28,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Colour emoji in icons and read-only text: WPF draws them in one
+         colour (see "Colour emoji" in CLAUDE.md). The package targets .NET
+         Core 3.1 and works from .NET 10. -->
+    <PackageReference Include="Emoji.Wpf" Version="0.3.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Heracles.Tests" />
   </ItemGroup>
 

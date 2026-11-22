@@ -84,17 +84,30 @@ core/                     heracles-core (Rust, edition 2024, UniFFI 0.32)
   uniffi.toml             C# namespace Heracles.Core, class CoreApi
 Cargo.toml, Cargo.lock    workspace with the one member; output in target\
 app/
-  Heracles/               the WPF project (net10.0-windows10.0.22621.0):
-                          App.xaml(.cs) startup, MainWindow, Support/
-                          (AppPaths, Log)
+  Heracles/               the WPF project (net10.0-windows10.0.22621.0)
+    App.xaml(.cs)         startup, single instance, the windows, errors
+    SingleInstance.cs     one process per library; hand-over by named pipe
+    MainWindow.xaml(.cs)  one window: menus, shortcuts, saved layout
+    Model/                AppModel (the change feed), Library, Navigation
+                          (AppLink, NavigationPolicy)
+    Workspaces/           PaneTree (immutable), Workspace, PaneNodeView
+                          (PaneHost), PaneLeafView, TabDrag
+    Sidebar/              SidebarRows (logic), SidebarView, SwitcherView
+                          (Quick Open), NoteIcon
+    Notes/                NoteDetailView, IconPicker, ReadOnlyDocument
+    Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
+                          (shared view helpers, LandmarkPeer), Prompts,
+                          E2eSeed
   Heracles.Tests/         xunit tests: the crossing into the core
-                          (BindingTests), AppPaths, Log
+                          (BindingTests) and every class with logic
   Generated/, runtimes/   produced by the core build, not in git
   Directory.Build.props   version from VERSION, build number, PathMap
   nuget.config            pins nuget.org
 tools/build.ps1           targets core, app, test, run, package, clean
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
-                          and synthetic input), adapted from Toolbox
+                          and synthetic input), adapted from Toolbox;
+                          ui-check (helpers) and check-shell (the scripted
+                          check of the window)
 tools/                    (to come) publish.ps1
 docs/                     the design, the plans, the Mac's rewrite notes
 VERSION                   marketing version; build number = commit count
@@ -183,9 +196,25 @@ tools\e2e\make-fixture.ps1            # an empty library folder and no log -> bu
 tools\e2e\launch.ps1                  # (re)start the built app on the fixture
 tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.0-win-x64\Heracles.exe   # a packaged build instead
 tools\e2e\launch.ps1 -DataDir <path>  # another library folder (to see what the app does with a bad one)
+tools\e2e\launch.ps1 --e2e-seed       # ...with a few notes of every kind in it
+tools\e2e\launch.ps1 -Again --new-window   # a second copy while one runs: it hands over
 tools\e2e\capture.ps1                 # PNG of every Heracles window -> build\e2e\shots
-tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, click, clickat, drag, keys, text
+tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, focus, click, clickat, drag, keys, text
+tools\e2e\check-shell.ps1             # the scripted check of the window: 30 checks, exit code = failures
 ```
+
+**Run `tools\e2e\check-shell.ps1` after any change to the window.** It
+resets the fixture, seeds it, and drives the sidebar, tabs and panes,
+search, Quick Open, the icon picker, renaming, the trash, a second window,
+the hand-over from a second copy, and the layout coming back after a
+restart, all through UI Automation patterns (no mouse, no keys, no
+clipboard). It found a crash on Split Right that 139 unit tests did not.
+New checks use the helpers in `tools\e2e\ui-check.ps1` (`Test-Ui`,
+`Find-Ui`, `Find-UiShown`, `Get-UiId`, `Invoke-UiMenu`, `Set-UiFocus`).
+
+App arguments: a `heracles://` link, `--new-window`, and `--e2e-seed` (a
+testing aid that does nothing unless `HERACLES_DATA_DIR` is set and the
+library is empty).
 
 `launch.ps1` sets `HERACLES_DATA_DIR` (`build\e2e\data`) and
 `HERACLES_LOG_PATH` (`build\e2e\heracles.log`) for the run; the real library
@@ -195,13 +224,30 @@ Two different builds must not run on the fixture at once: stop the first by
 path before launching the second.
 
 How things are checked: assertions go through the log and the automation
-tree (`ui.ps1 find -Id LibraryStatus`); screenshots are for looks.
+tree (`ui.ps1 find -Id Sidebar`); screenshots are for looks, and are worth
+looking at (one showed Quick Open white on white in dark mode).
 
-- Log lines: `Heracles <version> (build <n>)` first, then
-  `library: opened, <n> notes` or `library: could not be opened: <reason>`.
-- Automation ids: `LibraryStatus` (its name is `1 note` or `<n> notes`),
-  `StartupError` (its name is the reason; present only when the library did
-  not open, and then `LibraryStatus` is absent).
+- Log lines: `Heracles <version> (build <n>)` first; `instance: first` or
+  `instance: handed over to the running app`; `seed: created <n> notes`;
+  `library: opened, <n> notes` or `library: could not be opened: <reason>`;
+  `window: opened (<n> open)`, `window: closed (<n> open)`;
+  `instance: second launch: <args>`; `error shown: <text>`; `exit`.
+- Automation ids. Sidebar: `Sidebar` (the list), rows `note:<id>` (in the
+  tree), `favorite:<id>`, `archived:<id>`, `trashed:<id>`, headers
+  `notebook:<id>`, `section:favorites|archive|trash`, `toggle:<id>`,
+  `SidebarSearch`, results `hit:<id>`, `NewMenu`. Panes: `Pane:<leafId>`,
+  `Tab:<leafId>:<noteId>`, `TabClose:<leafId>:<noteId>`,
+  `EmptyPane:<leafId>`, `Divider:<splitId>:<n>`. A note: `NoteTitle:<leafId>`,
+  `NoteIcon:<leafId>`, `NoteText:<leafId>` (its name is the note's text).
+  Quick Open: `Switcher`, `SwitcherQuery`, `SwitcherResult:<noteId>`. Icon
+  picker: `IconPicker`, `Icon:<emoji>`, `IconTyped`, `IconRemove`. Dialogs:
+  `PromptTitle`, `PromptInput`, `PromptOk`, `PromptCancel`, `ErrorText`,
+  `ErrorOk`. `StartupError` shows only when the library did not open. Menu
+  items go by name (`ui.ps1 expand -Name View`, then `invoke -Name 'Split
+  Right'`).
+- A hidden element is still in the tree, marked `[offscreen]`; so is a row
+  scrolled out of view. `Find-Ui` asks whether something exists,
+  `Find-UiShown` whether it can be seen.
 - `invoke`, `setvalue`, `select`, `expand` touch neither mouse nor keyboard.
   `click`, `drag`, `keys`, `text` are real input on the owner's desktop.
 - `ui.ps1 find` throws when the element is not there, which ends a chain of
@@ -259,6 +305,46 @@ Each cost real time there. They apply here unchanged.
 Not carried, because nothing here hosts a native child window: the airspace
 rules, the Mica backdrop problem, and everything about the RDP control.
 
+## Found on Windows (each cost real time)
+
+- **A view moved to a new parent must leave the old one first**, whatever
+  kind of parent it had. `PaneHost` took panes out of grids but not out of
+  its own `Child`, and the app died on the first Split Right ("already the
+  logical child of another element").
+- **Panels and borders do not exist for UI Automation.** A `DockPanel`,
+  `Border` or `Grid` has no automation peer, so an id put on one is never
+  found. A container that must be findable overrides
+  `OnCreateAutomationPeer` to return a `LandmarkPeer` (`Support/Ui.cs`), or
+  is a `Landmark`.
+- **A hidden element keeps its last rectangle** in UI Automation. Whether
+  it can be seen is its `IsOffscreen` flag, not its rectangle.
+- **`SystemColors.WindowBrushKey` is white in dark mode too**, and a
+  `Popup` does not inherit the window's text colour. Anything that floats
+  (Quick Open, a popup) takes `Ui.AsSurface`, which uses the Fluent theme's
+  own brushes (`SolidBackgroundFillColorBaseBrush`,
+  `TextFillColorPrimaryBrush`). Lines between things use `Ui.Hairline`.
+- **A list gives no selection change for the row already selected.** A
+  click on the highlighted row therefore did nothing in Quick Open. Quick
+  Open keeps its own highlight and treats any selection as a choice; the
+  sidebar handles a click on the selected row by hand.
+- **A value set through UI Automation does not move the keyboard**, so a
+  title set that way never lost focus and was never committed. The title
+  box commits at once when it is changed without having the keyboard.
+- A list row under the Fluent theme is about 44 px high by default.
+  `Ui.Row` makes the rows this app uses.
+- `Emoji.Wpf` clashes with anything of ours named `Emoji`: write
+  `global::Emoji.Wpf.…`. WPF's `WindowState` clashes with anything of ours
+  of that name: the saved one is `SavedWindow`.
+- xunit's `Assert.Equal` on an `ImmutableArray<T>` compares the structs, not
+  their items. Compare `.ToArray()`.
+- In PowerShell 5.1 under `Set-StrictMode`, `.Count` on a function's result
+  fails when the function returned one thing. Wrap it: `@(Get-Things).Count`.
+  A function named like an alias (`Diff`) never runs. `Write-Host` output is
+  captured only with `6>&1`.
+- `tools\build.ps1` now compiles the C# afresh every time
+  (`--no-incremental`), because of this machine's clock (see above). A bare
+  `dotnet build` or `dotnet test` still trusts the clock.
+
 ## For the Mac repository
 
 Core changes made here that the Mac repository can take. Each is portable:
@@ -286,12 +372,13 @@ Windows-only switch except where a comment says so.
 
 ## Parity with the Mac app
 
-The checklist. Nothing is built yet.
+The checklist. Ticked means built and checked through the tests or the
+harness; "Not verified" below says what the checks could not reach.
 
-- [ ] Sidebar: notebooks, nested notes, favorites, archive, trash, search
-- [ ] Panes and tabs: splits within splits, draggable dividers, tabs that
+- [x] Sidebar: notebooks, nested notes, favorites, archive, trash, search
+- [x] Panes and tabs: splits within splits, draggable dividers, tabs that
       move between panes, Ctrl-click to open beside, layout kept per window
-- [ ] Multiple windows on one shared model, kept in step by the change feed
+- [x] Multiple windows on one shared model, kept in step by the change feed
 - [ ] The native block editor: paragraph, headings, bullet, numbered and
       task lists, quote, callout, toggle, code block, divider, image, columns
 - [ ] Editor behaviour: Markdown as you type, slash menu, block handle,
@@ -304,8 +391,11 @@ The checklist. Nothing is built yet.
 - [ ] Reminders delivered by Windows, whether or not the app is running
 - [ ] Import of Markdown and HTML files; export as Markdown
 - [ ] The Electron library imported on first start, with a summary
-- [ ] Quick Open, the icon picker, the menu bar with a Format menu
-- [ ] `heracles://note/<id>` links, with `#block=<id>`
+- [x] Quick Open, the icon picker, the menu bar (its Format menu comes with
+      the editor)
+- [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
+      handed over between copies; not yet registered with Windows, and
+      nothing scrolls to a block until the editor exists)
 - [ ] Nothing lost on quit: closing and quitting wait for every editor
 - [ ] Packages for ARM64 and x64, and a release script
 
@@ -544,14 +634,40 @@ Automation did not find the banner at all, by window or by its text.
   real key presses. The text-input spike sent finished text to the box
   through `TextCompositionManager`, which a script can do; an input method
   it cannot.
+- **Everything in the window that needs a real mouse or keyboard**: the
+  context menus (sidebar rows, tabs), dragging a tab within and between
+  panes, dragging a divider, Ctrl-click to open beside, the arrow keys and
+  Enter in Quick Open, and every keyboard shortcut. The scripted check
+  reaches the same code through the menus and automation where it can
+  (Split Right, Close Tab, Quick Open, Move to Trash); the rest is written
+  and has never been used.
+- Deleting a note for good while it is open in two windows, through the
+  window. The model and workspace tests cover it; the only way to it in the
+  window is a context menu.
+- The window in light mode. Every picture was taken with Windows in dark
+  mode. The colours come from the theme, which is the reason to expect
+  light to work and not evidence that it does.
+- A window saved on a second display that is then unplugged.
 
 ## Current state (update in every commit)
 
-As of 2026-11-22, on `main`. **This commit replaced `main` on GitHub** (a
-force-push, on the owner's word): the Electron app and its history are no
-longer there. Any other clone of this repository must `git fetch origin`
-and `git reset --hard origin/main` before it is used, and must never push
-its old history.
+As of 2026-11-22, on `main`. `main` on GitHub was replaced earlier this day
+(commit `9b56acf`, a force-push on the owner's word): the Electron app and
+its history are no longer there. Any other clone of this repository must
+`git fetch origin` and `git reset --hard origin/main` before it is used,
+and must never push its old history. **The commits of stage 2 are local:
+nothing after `9b56acf` has been pushed.**
+
+**Stage 2 (model and shell) is built: the app can be browsed.** One process
+per library; any number of windows on one model; a sidebar (favorites,
+notebooks with their trees, archive, trash, search); panes with tabs,
+splits within splits and draggable dividers; Quick Open; the icon picker
+with colour emoji; the note actions and menus; the layout of every window
+remembered. A note's content is shown as plain text that cannot be changed:
+the editor is stage 3 and 4. A todo list says its board is still to come.
+Verified by 139 .NET tests, 203 Rust tests, and the 30 checks of
+`tools\e2e\check-shell.ps1`. What follows below is the record of stages 0
+and 1.
 
 - The history was restarted. The first commit is the Mac repository's tree
   at `5dd0252`, unchanged; the second removes what Windows does not use and
@@ -623,5 +739,7 @@ Decided by the owner on 2026-11-22: the earlier account name stays in
 `LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
 the Mac repository. Do not change either.
 
-Next: stage 2 (model and shell), which reads "Spike findings" above.
-(`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).
+Next: stage 3, the editor's document model in C#, translated test first
+from the Mac's `Editor/EditorBlock.swift`, `EditorDocument+*.swift`,
+`RichText.swift` and their tests. Then stage 4, the editor's views, which
+reads "Spike findings" above. Plans are in `docs/superpowers/plans/`.

@@ -1,16 +1,35 @@
 <Window x:Class="Heracles.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Heracles" Width="1200" Height="800"
+        Title="Heracles" Width="1200" Height="800" MinWidth="400" MinHeight="300"
         WindowStartupLocation="CenterScreen">
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="640">
-        <TextBlock x:Name="LibraryStatus" AutomationProperties.AutomationId="LibraryStatus"
-                   FontSize="20" HorizontalAlignment="Center" />
-        <TextBlock x:Name="StartupErrorTitle" Text="The library could not be opened"
-                   FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"
-                   Visibility="Collapsed" />
-        <TextBlock x:Name="StartupError" AutomationProperties.AutomationId="StartupError"
-                   Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center"
-                   Visibility="Collapsed" />
-    </StackPanel>
+    <Grid>
+        <DockPanel x:Name="Shell">
+            <Menu x:Name="MenuBar" DockPanel.Dock="Top" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="260" MinWidth="200" MaxWidth="520" />
+                    <ColumnDefinition Width="5" />
+                    <ColumnDefinition Width="*" MinWidth="200" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="SidebarHost" Grid.Column="0" />
+                <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                              Background="#4D808080"
+                              Focusable="False" AutomationProperties.AutomationId="SidebarDivider" />
+                <Border x:Name="PaneArea" Grid.Column="2" />
+            </Grid>
+        </DockPanel>
+
+        <!-- Quick Open lies over the window. A click beside it puts it away. -->
+        <Grid x:Name="Overlay" Visibility="Collapsed" Background="#01000000" />
+
+        <!-- Shown in place of everything else when the library could not be opened. -->
+        <StackPanel x:Name="StartupFailure" Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="640">
+            <TextBlock Text="The library could not be opened" FontSize="20" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <TextBlock x:Name="StartupError" AutomationProperties.AutomationId="StartupError"
+                       Margin="0,8,0,0" TextWrapping="Wrap" TextAlignment="Center" />
+        </StackPanel>
+    </Grid>
 </Window>

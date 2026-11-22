@@ -369,54 +369,6 @@ impl Store {
         })
     }
 
-    pub fn update_task(&self, id: &str, patch: TaskPatch) -> Result<Task> {
-        self.write(|tx, changes| {
-            let task = require_task(tx, id)?;
-            let optional = |value: Option<String>| value.map_or(SqlValue::Null, SqlValue::Text);
-
-            let mut fields: Vec<(&str, SqlValue)> = Vec::new();
-            if let Some(title) = patch.title {
-                fields.push(("title", SqlValue::Text(title)));
-            }
-            if let Some(description) = patch.description {
-                fields.push(("description", SqlValue::Text(description)));
-            }
-            if let Some(completed) = patch.completed {
-                fields.push(("completed", SqlValue::Integer(completed.into())));
-            }
-            if let Some(due_date) = patch.due_date {
-                fields.push(("due_date", optional(due_date)));
-            }
-            if let Some(deadline) = patch.deadline {
-                fields.push(("deadline", optional(deadline)));
-            }
-            if let Some(priority) = patch.priority {
-                fields.push(("priority", SqlValue::Integer(check_priority(priority)?.into())));
-            }
-            if let Some(labels) = patch.labels {
-                fields.push(("labels", SqlValue::Text(to_json(&labels))));
-            }
-            if let Some(reminders) = patch.reminders {
-                fields.push(("reminders", SqlValue::Text(to_json(&reminders))));
-            }
-            if let Some(location) = patch.location {
-                fields.push(("location", optional(location)));
-            }
-            if fields.is_empty() {
-                return Ok(task);
-            }
-            fields.push(("updated_at", SqlValue::Text(now())));
-
-            let assignments: Vec<String> =
-                fields.iter().enumerate().map(|(index, (name, _))| format!("{name} = ?{}", index + 2)).collect();
-            let sql = format!("UPDATE tasks SET {} WHERE id = ?1", assignments.join(", "));
-            let values = std::iter::once(SqlValue::Text(id.to_string())).chain(fields.into_iter().map(|(_, v)| v));
-            tx.execute(&sql, params_from_iter(values))?;
-            changes.board(&task.todo_list_id);
-            require_task(tx, id)
-        })
-    }
-
     /// Delete a task with its subtasks and comments. Returns every task id
     /// that was removed.
     pub fn delete_task(&self, id: &str) -> Result<Vec<String>> {
@@ -521,6 +473,56 @@ impl Store {
 
 // Exported from `ffi.rs` with owned arguments.
 impl Store {
+    /// Change the fields a patch names, and leave the rest alone. Exported
+    /// from `ffi.rs` as a flat record: see `TaskPatchRecord`.
+    pub fn update_task(&self, id: &str, patch: TaskPatch) -> Result<Task> {
+        self.write(|tx, changes| {
+            let task = require_task(tx, id)?;
+            let optional = |value: Option<String>| value.map_or(SqlValue::Null, SqlValue::Text);
+
+            let mut fields: Vec<(&str, SqlValue)> = Vec::new();
+            if let Some(title) = patch.title {
+                fields.push(("title", SqlValue::Text(title)));
+            }
+            if let Some(description) = patch.description {
+                fields.push(("description", SqlValue::Text(description)));
+            }
+            if let Some(completed) = patch.completed {
+                fields.push(("completed", SqlValue::Integer(completed.into())));
+            }
+            if let Some(due_date) = patch.due_date {
+                fields.push(("due_date", optional(due_date)));
+            }
+            if let Some(deadline) = patch.deadline {
+                fields.push(("deadline", optional(deadline)));
+            }
+            if let Some(priority) = patch.priority {
+                fields.push(("priority", SqlValue::Integer(check_priority(priority)?.into())));
+            }
+            if let Some(labels) = patch.labels {
+                fields.push(("labels", SqlValue::Text(to_json(&labels))));
+            }
+            if let Some(reminders) = patch.reminders {
+                fields.push(("reminders", SqlValue::Text(to_json(&reminders))));
+            }
+            if let Some(location) = patch.location {
+                fields.push(("location", optional(location)));
+            }
+            if fields.is_empty() {
+                return Ok(task);
+            }
+            fields.push(("updated_at", SqlValue::Text(now())));
+
+            let assignments: Vec<String> =
+                fields.iter().enumerate().map(|(index, (name, _))| format!("{name} = ?{}", index + 2)).collect();
+            let sql = format!("UPDATE tasks SET {} WHERE id = ?1", assignments.join(", "));
+            let values = std::iter::once(SqlValue::Text(id.to_string())).chain(fields.into_iter().map(|(_, v)| v));
+            tx.execute(&sql, params_from_iter(values))?;
+            changes.board(&task.todo_list_id);
+            require_task(tx, id)
+        })
+    }
+
     /// Every kind of move: reorder within a column or parent, change column,
     /// promote a subtask to a card, or put a task under another. Give a
     /// parent for a subtask, otherwise a column. `before_id` is the sibling

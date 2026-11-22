@@ -145,25 +145,20 @@ pub struct NewTask {
 
 /// Fields to change on a task. `None` leaves a field alone. For the fields
 /// that can be empty, `Some(None)` clears the value.
-#[derive(Debug, Clone, Default, uniffi::Record)]
+///
+/// This is the Rust shape. It crosses to the interface as
+/// `ffi::TaskPatchRecord`, because an optional of an optional has no
+/// counterpart in some of the languages the core is bound to.
+#[derive(Debug, Clone, Default)]
 pub struct TaskPatch {
-    #[uniffi(default = None)]
     pub title: Option<String>,
-    #[uniffi(default = None)]
     pub description: Option<String>,
-    #[uniffi(default = None)]
     pub completed: Option<bool>,
-    #[uniffi(default = None)]
     pub due_date: Option<Option<String>>,
-    #[uniffi(default = None)]
     pub deadline: Option<Option<String>>,
-    #[uniffi(default = None)]
     pub priority: Option<u8>,
-    #[uniffi(default = None)]
     pub labels: Option<Vec<String>>,
-    #[uniffi(default = None)]
     pub reminders: Option<Vec<String>>,
-    #[uniffi(default = None)]
     pub location: Option<Option<String>>,
 }
 

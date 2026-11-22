@@ -37,12 +37,33 @@ pub fn html_to_document(html: &str) -> String {
 /// The file a document's image `src` names, if it names a local one.
 fn local_image_file(src: &str, folder: &Path) -> Option<PathBuf> {
     let path = match url_scheme(src).as_deref() {
-        Some("file") => PathBuf::from(decoded(src[5..].trim_start_matches("//").trim_start_matches("localhost"))),
+        Some("file") => file_url_path(&src[5..])?,
         Some(_) => return None,
         None => folder.join(decoded(src.split(['?', '#']).next().unwrap_or(src))),
     };
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     IMAGE_TYPES.iter().any(|(known, _)| *known == extension).then_some(path)
+}
+
+/// The path a `file:` URL names, given what follows the scheme. `None` when
+/// the URL names a file on another machine: only this one's files are read.
+fn file_url_path(rest: &str) -> Option<PathBuf> {
+    let path = match rest.strip_prefix("//") {
+        Some(after) => {
+            let (host, path) = after.split_at(after.find('/').unwrap_or(after.len()));
+            if !host.is_empty() && !host.eq_ignore_ascii_case("localhost") {
+                return None;
+            }
+            path
+        }
+        None => rest,
+    };
+    let path = decoded(path);
+    // Windows writes a drive as `file:///C:/…`, with a slash before the
+    // drive letter that is not part of the path.
+    let bytes = path.as_bytes();
+    let has_drive = bytes.len() >= 3 && bytes[0] == b'/' && bytes[1].is_ascii_alphabetic() && bytes[2] == b':';
+    Some(PathBuf::from(if cfg!(windows) && has_drive { &path[1..] } else { &path[..] }))
 }
 
 fn decoded(path: &str) -> String {
@@ -149,5 +170,38 @@ impl Store {
             self.copy_images_out(child, assets)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_url_with_another_machine_in_it_is_not_local() {
+        assert_eq!(file_url_path("//fileserver/share/pic.png"), None);
+    }
+
+    #[test]
+    fn percent_encoding_is_undone() {
+        let path = file_url_path("///tmp/my%20pic.png").unwrap();
+        assert!(path.to_string_lossy().ends_with("my pic.png"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_file_urls_name_absolute_paths() {
+        for url in ["///tmp/a/pic.png", "//localhost/tmp/a/pic.png", "/tmp/a/pic.png"] {
+            assert_eq!(file_url_path(url), Some(PathBuf::from("/tmp/a/pic.png")), "{url}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_file_urls_name_a_drive() {
+        for url in ["///C:/Users/a/pic.png", "//localhost/C:/Users/a/pic.png", "/C:/Users/a/pic.png"] {
+            assert_eq!(file_url_path(url), Some(PathBuf::from("C:/Users/a/pic.png")), "{url}");
+        }
+        assert_eq!(file_url_path("///c:/a/pic.png"), Some(PathBuf::from("c:/a/pic.png")));
     }
 }

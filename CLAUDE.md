@@ -82,7 +82,7 @@ core/                     heracles-core (Rust, edition 2024, UniFFI 0.32)
   src/legacy.rs           the Electron library importer
   src/changes.rs          the change feed
   src/ffi.rs              what crosses to the interface
-  uniffi.toml             C# namespace Heracles.Core, class CoreApi (to come)
+  uniffi.toml             C# namespace Heracles.Core, class CoreApi
 Cargo.toml, Cargo.lock    workspace with the one member; output in target\
 app/                      (to come)
   Heracles/               the WPF project (net10.0-windows10.0.22621.0)
@@ -204,7 +204,28 @@ rules, the Mica backdrop problem, and everything about the RDP control.
 
 ## For the Mac repository
 
-Core changes made here that the Mac repository can take. None yet.
+Core changes made here that the Mac repository can take. Each is portable:
+the core's own tests pass with it on Windows, and nothing is behind a
+Windows-only switch except where a comment says so.
+
+1. **`file://` picture URLs** (`core/src/transfer.rs`, one line of
+   `core/tests/import_export.rs`). `file_url_path` reads the URL properly: a
+   host other than this machine is not local (it used to be read as a
+   relative path), and on Windows the slash before a drive letter is
+   dropped. No change in behaviour for `file:///abs/path` on the Mac. Take
+   as is.
+2. **The exported task patch is flat** (`core/src/ffi.rs`,
+   `core/src/model.rs`, `core/src/store/tasks.rs`). The Rust `TaskPatch`
+   and every Rust test are unchanged. What crosses the binding is now
+   `TaskPatchRecord`, exported under the name `TaskPatch`: `due_date`,
+   `deadline` and `location` are plain optionals, each with a
+   `clear_due_date` / `clear_deadline` / `clear_location` flag that wins.
+   **The Mac's Swift must change where it builds a `TaskPatch`:**
+   `dueDate: .some(x)` becomes `dueDate: x`, and `dueDate: .some(nil)`
+   becomes `clearDueDate: true` (the same for `deadline` and `location`).
+   Why: C# has no optional of an optional string, so the generated C# for
+   the old shape did not compile.
+3. `core/uniffi.toml` is new and only read by the C# generator.
 
 ## Parity with the Mac app
 
@@ -260,16 +281,19 @@ Nothing is listed yet because nothing has been built.
 As of 2026-11-22, on the branch `port`.
 
 - The history was restarted. The first commit is the Mac repository's tree
-  at `5dd0252`, unchanged; this commit removes what Windows does not use and
+  at `5dd0252`, unchanged; the second removes what Windows does not use and
   adds these notes, the README, the design and the first plan.
-- **Nothing builds an app yet.** The core builds and 194 of its 195 tests
-  pass on Windows; the one that fails is a `file://` path the core reads the
-  Unix way, and is the next thing fixed.
+- **The core is ready for Windows.** `cargo test --locked`: 203 tests, all
+  passing (the Mac's 195, with the one that failed here fixed, plus 8 new).
+  Two changes, both listed under "For the Mac repository": `file://`
+  picture URLs, and a task patch that C# can express.
+- **Nothing builds an app yet.** The C# bindings have not been generated
+  from this core in the repository; that comes with the build script.
 - `main` on GitHub still holds the Electron app. It is replaced only when
   the owner says so.
 - A bundle of the old history is beside this checkout
   (`..\Heracles-Windows-old-history.bundle`), for the owner to keep or
   delete. The old history must never be pushed again.
 
-Next: the core's Windows fixes, then the build script and an empty window
+Next: the build script, the bindings and an empty window, then the harness
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

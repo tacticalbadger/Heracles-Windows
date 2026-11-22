@@ -80,7 +80,8 @@ fn images_beside_the_file_come_into_the_image_store() {
     let setup = setup();
     write(&setup.files.join("pics/map one.png"), PNG);
     write(&setup.files.join("abs.png"), b"another picture");
-    let absolute = format!("file://{}", setup.files.join("abs.png").to_string_lossy());
+    let on_disk = setup.files.join("abs.png").to_string_lossy().replace('\\', "/");
+    let absolute = format!("file:///{}", on_disk.trim_start_matches('/'));
     let markdown = format!(
         "![relative](pics/map%20one.png)\n\n![absolute]({absolute})\n\n![remote](https://example.com/a.png)\n\n![missing](pics/nope.png)\n"
     );

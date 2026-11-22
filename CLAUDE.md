@@ -64,6 +64,14 @@ Claude's calls, open to change:
   C# cannot express the nested optional the Mac's binding uses.
 - Supported from Windows 10 version 2004.
 - The application identity is `com.heracles.notes.native`.
+- How the Mac editor's Swift value types are carried into C#
+  (`app/Heracles/Editor/`): `RichText`, `TextStyle`, `TextLink`,
+  `JsonValue` and `EditorSelection` are immutable with structural equality
+  (a Swift `mutating func` on `RichText` returns a new one); `Block` and
+  `EditorDocument` are mutable classes changed in place as on the Mac, with
+  `Clone()` (deep) wherever Swift copies by assigning and `SameAs()` for
+  comparison; `BlockIDs` passed `inout` is the class `BlockIds`; a Swift
+  `Range<Int>` is `int start, int end`.
 
 Out of scope, because the Mac has not built them either: updating itself,
 syntax colouring in code blocks, find within a note, selecting text across
@@ -95,6 +103,11 @@ app/
     Sidebar/              SidebarRows (logic), SidebarView, SwitcherView
                           (Quick Open), NoteIcon
     Notes/                NoteDetailView, IconPicker, ReadOnlyDocument
+    Editor/               the editor's document model, no WPF in it:
+                          JsonValue, RichText, EditorBlock (Block,
+                          EditorDocument and its stored JSON, BlockIds),
+                          EditorSelection, EditorDocument.Tree (so far
+                          only finding a block)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -337,6 +350,15 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   of that name: the saved one is `SavedWindow`.
 - xunit's `Assert.Equal` on an `ImmutableArray<T>` compares the structs, not
   their items. Compare `.ToArray()`.
+- **Backslashes and `\u` escapes in a file written through a shell
+  here-document do not arrive as typed**: one level is taken off on the
+  way, so a test meant to hold the six characters backslash-u-D-8-3-D held
+  an emoji, and failed for a reason that was not in the code. Write such
+  files with the editor tools, and build a string that must contain a
+  backslash from its character code (`(char)92`).
+- `System.Text.Json` writes every character outside the basic plane (an
+  emoji) as two escapes, whatever encoder it is given. `JsonValue.Text`
+  puts them back, to match what the Mac and the core write.
 - In PowerShell 5.1 under `Set-StrictMode`, `.Count` on a function's result
   fails when the function returned one thing. Wrap it: `@(Get-Things).Count`.
   A function named like an alias (`Diff`) never runs. `Write-Host` output is
@@ -755,7 +777,23 @@ Decided by the owner on 2026-11-22: the earlier account name stays in
 `LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
 the Mac repository. Do not change either.
 
-Next: stage 3, the editor's document model in C#, translated test first
-from the Mac's `Editor/EditorBlock.swift`, `EditorDocument+*.swift`,
-`RichText.swift` and their tests. Then stage 4, the editor's views, which
-reads "Spike findings" above. Plans are in `docs/superpowers/plans/`.
+**Stage 3 (the editor's document model) is under way: two of its three
+tasks are done.** Plan: `docs/superpowers/plans/2026-11-22-windows-stage-3-editor-model.md`.
+
+- Done, each translated from the Mac with its tests: `JsonValue` and
+  `RichText` (Task 1); `Block`, `EditorDocument` read from and written to
+  the stored JSON, `BlockIds`, `EditorSelection` (Task 2). 185 .NET tests
+  pass. Nothing in the app uses the model yet: a note is still shown
+  through `ReadOnlyDocument`.
+- **Next: Task 3**, the largest. Translate
+  `macos/Sources/HeraclesApp/Editor/EditorDocument+Tree.swift` (114 lines)
+  and `EditorDocument+Editing.swift` (656 lines) into
+  `EditorDocument.Tree.cs` (begun: `AllBlocks`, `Block(id)`, `Contains`) and
+  `EditorDocument.Editing.cs`, after translating
+  `macos/Tests/HeraclesAppTests/EditorDocumentTests.swift` (98 tests) into
+  `app/Heracles.Tests/Editor/EditorDocumentTests.cs`. The test builders
+  (`P`, `Bullet`, `Doc`, `Outline`, `Shape`…) are already in
+  `EditorTestSupport.cs`. Then Task 4 (verify the stage).
+
+After stage 3: stage 4, the editor's views, which reads "Spike findings"
+above. Plans are in `docs/superpowers/plans/`.

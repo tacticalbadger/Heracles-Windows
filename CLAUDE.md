@@ -149,6 +149,13 @@ Things that bite on this machine:
   do not write to the clipboard.
 - With `core.autocrlf` on (this machine's setting), git warns that LF will
   become CRLF. `.gitattributes` decides: LF everywhere, CRLF for `.ps1`.
+- **The clock steps backwards now and then** (two minutes, seen
+  2026-11-22; seven, in the Toolbox notes). A file edited just after such a
+  step is older than the output built just before it, so `dotnet build`
+  decides nothing changed and **runs the old program** with no warning. If
+  a change seems to have had no effect, compare the times of the source and
+  the output, and rebuild with `--no-incremental` (or `tools\build.ps1
+  clean`). Do not read much into gaps between log timestamps either.
 
 ## Everyday commands
 
@@ -423,7 +430,49 @@ must be checked for drag-and-drop of text inside a box.
 
 ### Colour emoji
 
-Not run yet.
+Run 2026-11-22. The test: draw `💡 📓 ✅ 🧭` on white, save the picture,
+count pixels whose red, green and blue differ by more than 40.
+
+**WPF on .NET 10 draws emoji in one colour.** `TextBlock` and
+`RichTextBox`, with Segoe UI Emoji named or found by fallback, at 14, 20
+and 32 px: outline glyphs, 0 coloured pixels.
+
+**Finding: colour with a library.** `Emoji.Wpf` 0.3.4 (Sam Hocevar,
+https://github.com/samhocevar/emoji.wpf, licence WTFPL) draws the same
+text with 5538 coloured pixels, on this ARM64 machine, from .NET 10.
+
+- It restores from nuget.org and builds for `win-arm64` with no warnings.
+  The package targets .NET Core 3.1 and .NET Framework 4.0, not current
+  .NET; it loads and works all the same. It adds four assemblies, 1.7 MB:
+  `Emoji.Wpf.dll`, `Typography.OpenFont.dll`, `Typography.GlyphLayout.dll`,
+  `Stfu.dll`. The licences of the two Typography assemblies were not read.
+- Drawn in colour, each seen in the saved picture: its own `TextBlock` at
+  all three sizes; a standard `Image` given an emoji through the attached
+  property `Emoji.Wpf.Image.Source`; a **subclass of the standard
+  `RichTextBox`** with an `EmojiInline` placed among ordinary runs, and the
+  same after `FlowDocumentExtensions.SubstituteGlyphs`. So the editor's own
+  text box class can stay; the library's `RichTextBox` is not needed.
+- Where it fits with no cost: sidebar icons, the callout's emoji, the icon
+  picker, tab titles, and blocks drawn as static text. All of those are
+  pictures or read-only text.
+- Where it has a cost: emoji inside a text box being edited. An
+  `EmojiInline` is an embedded element, not text: `TextRange.Text` gives a
+  space for it, it spans 3 pointer positions, and its real text (1 or 2
+  UTF-16 units, more for joined sequences) is in its `Text` property. The
+  offset mapping and the text walk would have to count it by that text, and
+  the caret, selection and copy around embedded elements were not tried.
+  Emoji typed into a box arrive as ordinary text and stay one colour until
+  the block is redrawn from the model.
+
+**For the owner to decide** (the design leaves this choice to the owner):
+take the library, or live with one colour. Claude's suggestion: take it for
+icons, callouts and static text now; leave emoji inside a text box in one
+colour until the editor works, then try the inline there.
+
+A caution about the spike itself: its per-row pixel counts were taken
+before the library had drawn (they read 0 for rows the picture shows in
+colour). The figures above are counts over the saved pictures
+(`build\spikes\emoji\native.png`, `build\spikes\emoji\lib\library.png`).
 
 ### Scheduled toasts
 
@@ -500,5 +549,9 @@ As of 2026-11-22, on the branch `port`.
   caret, holding the typing style itself and redrawing a block's text where
   WPF chose another style.
 
-Next: the other two spikes
+- **Spike 3 of 4 is done**: WPF draws emoji in one colour; the `Emoji.Wpf`
+  library draws them in colour, including inside a subclass of the standard
+  `RichTextBox`. Whether to take the library is the owner's decision.
+
+Next: the last spike (scheduled toasts)
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

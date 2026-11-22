@@ -36,8 +36,8 @@ if (-not (Test-Path (Join-Path $Fixture 'data'))) { throw "no fixture at $Fixtur
 $Fixture = (Resolve-Path $Fixture).Path
 
 # The app is started from its own folder, so a relative path would mean
-# something else to it than it does here.
-if ($DataDir) { $DataDir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $DataDir)) }
+# something else to it than it does here. Combine leaves a full path as it is.
+if ($DataDir) { $DataDir = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Get-Location).Path, $DataDir)) }
 else { $DataDir = Join-Path $Fixture 'data' }
 
 if ($Exe) {

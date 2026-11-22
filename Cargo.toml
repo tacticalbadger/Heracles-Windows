@@ -1,8 +1,8 @@
-# Rust workspace for the native rewrite (docs/review-and-native-rewrite.md).
-# The Electron app in electron/ and renderer/ is unaffected by this file.
+# Rust workspace of the Windows app's core: heracles-core, the same crate the
+# Mac app uses (docs/review-and-native-rewrite.md). tools\build.ps1 builds it.
 [workspace]
 resolver = "3"
-members = ["core", "tools/bindgen"]
+members = ["core"]
 
 [profile.release]
 lto = "thin"

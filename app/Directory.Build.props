@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <!-- The marketing version lives in the VERSION file at the repo root.
+         tools\build.ps1 passes the build number (the commit count). -->
+    <HeraclesVersion>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\VERSION').Trim())</HeraclesVersion>
+    <HeraclesBuild Condition="'$(HeraclesBuild)' == ''">0</HeraclesBuild>
+    <Version>$(HeraclesVersion)</Version>
+    <FileVersion>$(HeraclesVersion).$(HeraclesBuild)</FileVersion>
+    <InformationalVersion>$(HeraclesVersion) (build $(HeraclesBuild))</InformationalVersion>
+    <Company>Heracles</Company>
+    <Product>Heracles</Product>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <!-- The compiler writes where it was run into an assembly (the path of
+         its debug file, at least). This checkout's folder is under the
+         profile folder, which is the account name, and builds are handed
+         to other people: it is written as "heracles" instead. -->
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))=heracles</PathMap>
+    <!-- Keep the commit hash out of the product version string. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

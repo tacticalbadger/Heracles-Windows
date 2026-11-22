@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- The Windows SDK part of the framework name brings the WinRT
+         projection that scheduled notifications (reminders) need. -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <SelfContained>false</SelfContained>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Heracles</AssemblyName>
+    <RootNamespace>Heracles</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The UniFFI bindings marshal buffers with pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- WPF0001: the Fluent theme (ThemeMode) is still flagged as evaluation API. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Both produced by "tools\build.ps1 core"; neither is in git. -->
+    <Compile Include="..\Generated\heracles_core.cs" Link="Core\heracles_core.cs" />
+    <Content Include="..\runtimes\$(RuntimeIdentifier)\native\heracles_core.dll" Link="heracles_core.dll"
+             Condition="'$(RuntimeIdentifier)' != ''" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Heracles.Tests" />
+  </ItemGroup>
+
+</Project>

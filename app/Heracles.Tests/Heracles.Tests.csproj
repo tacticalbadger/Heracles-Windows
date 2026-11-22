@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests for the app's own logic and for the crossing into the Rust core.
+       Run with "tools\build.ps1 test" (after the Rust tests), or "dotnet
+       test" in this folder once "tools\build.ps1 core" has run. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Heracles.Tests</AssemblyName>
+    <RootNamespace>Heracles.Tests</RootNamespace>
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <!-- The tests call the core, so they need its DLL for the machine they
+       run on. -->
+  <PropertyGroup>
+    <CoreRid Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">win-arm64</CoreRid>
+    <CoreRid Condition="'$(CoreRid)' == ''">win-x64</CoreRid>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="..\runtimes\$(CoreRid)\native\heracles_core.dll" Link="heracles_core.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A WPF project's implicit usings leave this one out. -->
+    <Using Include="System.IO" />
+    <Using Include="Xunit" />
+    <Using Include="Heracles.Core" />
+    <Using Include="Heracles.Support" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Heracles\Heracles.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -8,7 +8,7 @@ This repository is the Windows app. It is a native app, written in C# (WPF) over
 
 The native Windows app is being built. **There is nothing to download yet.**
 
-- What exists today: the Rust core, building and tested on Windows.
+- What exists today: the Rust core, building and tested on Windows, and a window that opens the library through it. No notes can be read or written from the app yet.
 - The Electron app that used to live in this repository is gone. Its source is in the Mac repository's history.
 - The plan and its order of work are in [`docs/superpowers/specs/2026-11-22-native-windows-app-design.md`](./docs/superpowers/specs/2026-11-22-native-windows-app-design.md).
 
@@ -34,21 +34,28 @@ You need, on Windows 10 or 11 (x64 or ARM64):
 - The .NET 10 SDK
 - `uniffi-bindgen-cs`: `cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag v0.12.0+v0.32.0`
 
-Today the core can be built and tested on its own:
+From PowerShell, in the repository's folder:
 
 ```powershell
-cargo test
+tools\build.ps1            # the core and its C# bindings, then the app -> build\app\win-<arch>\Heracles.exe
+tools\build.ps1 test       # the core's tests (Rust), then the app's (.NET)
+tools\build.ps1 run        # start the built app
+tools\build.ps1 core package            # a zip for this PC's processor -> build\release
+tools\build.ps1 core package -Arch x64  # and for the other one
 ```
 
-The app's build script, `tools\build.ps1`, arrives with the app's skeleton.
+Run `tools\build.ps1 core` again after any change to the Rust interface: the bindings and the DLL are generated, not kept in git.
 
 ## Project structure
 
 ```
-core/        heracles-core: the app's data layer (Rust), shared with the Mac app
-docs/        the design, the implementation plans, and the notes on the native rewrite
-CLAUDE.md    working notes: decisions, conventions, and the current state
-VERSION      the app's version
+core/              heracles-core: the app's data layer (Rust), shared with the Mac app
+app/Heracles/      the Windows app (C#, WPF)
+app/Heracles.Tests/  its tests
+tools/build.ps1    builds, tests and packages
+docs/              the design, the implementation plans, and the notes on the native rewrite
+CLAUDE.md          working notes: decisions, conventions, and the current state
+VERSION            the app's version
 ```
 
 ## Related repository

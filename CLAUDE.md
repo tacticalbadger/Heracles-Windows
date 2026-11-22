@@ -84,11 +84,17 @@ core/                     heracles-core (Rust, edition 2024, UniFFI 0.32)
   src/ffi.rs              what crosses to the interface
   uniffi.toml             C# namespace Heracles.Core, class CoreApi
 Cargo.toml, Cargo.lock    workspace with the one member; output in target\
-app/                      (to come)
-  Heracles/               the WPF project (net10.0-windows10.0.22621.0)
-  Heracles.Tests/         xunit tests
+app/
+  Heracles/               the WPF project (net10.0-windows10.0.22621.0):
+                          App.xaml(.cs) startup, MainWindow, Support/
+                          (AppPaths, Log)
+  Heracles.Tests/         xunit tests: the crossing into the core
+                          (BindingTests), AppPaths, Log
   Generated/, runtimes/   produced by the core build, not in git
-tools/                    (to come) build.ps1, publish.ps1, e2e/
+  Directory.Build.props   version from VERSION, build number, PathMap
+  nuget.config            pins nuget.org
+tools/build.ps1           targets core, app, test, run, package, clean
+tools/                    (to come) publish.ps1, e2e/
 docs/                     the design, the plans, the Mac's rewrite notes
 VERSION                   marketing version; build number = commit count
 ```
@@ -145,11 +151,24 @@ Things that bite on this machine:
 ## Everyday commands
 
 ```powershell
-cargo test --locked            # the core: every test binary must say ok
+tools\build.ps1                 # core (release DLL + C# bindings), then the app
+tools\build.ps1 app -Restart    # rebuild the app, close the running build, start the new one
+tools\build.ps1 test            # cargo test --locked, then dotnet test on app\Heracles.Tests
+tools\build.ps1 run             # starts it on the real library, not a fixture
+tools\build.ps1 core package    # self-contained zip for this machine -> build\release
+tools\build.ps1 clean
+cargo test --locked             # the core alone: every test binary must say ok
 ```
 
-The app's commands (`tools\build.ps1`, `tools\e2e\*.ps1`) are added here as
-they are written.
+Run `core` after ANY Rust API change (bindings and DLL are generated).
+
+To keep a build's output in a file, start the script in a child shell and
+let `cmd` redirect:
+`cmd /c "powershell -NoProfile -ExecutionPolicy Bypass -File tools\build.ps1 test > out.log 2>&1"`.
+Redirecting inside PowerShell 5.1 (`*>` or `2>&1`) turns cargo's progress
+lines, which go to stderr, into errors, and the script stops on the first.
+
+The harness commands (`tools\e2e\*.ps1`) are added here as they are written.
 
 ## Conventions
 
@@ -287,13 +306,25 @@ As of 2026-11-22, on the branch `port`.
   passing (the Mac's 195, with the one that failed here fixed, plus 8 new).
   Two changes, both listed under "For the Mac repository": `file://`
   picture URLs, and a task patch that C# can express.
-- **Nothing builds an app yet.** The C# bindings have not been generated
-  from this core in the repository; that comes with the build script.
+- **There is an app, and it does one thing.** `tools\build.ps1` builds the
+  core, generates the C# bindings and builds `Heracles.exe`. The window
+  opens the library and says how many notes it holds (`LibraryStatus`), or
+  says why it could not be opened (`StartupError`). Paths come from
+  `AppPaths` (`HERACLES_DATA_DIR`, `HERACLES_LOG_PATH` override them). The
+  log's first line is `Heracles <version> (build <n>)`, then
+  `library: opened, <n> notes` or `library: could not be opened: <reason>`.
+- Verified: 203 Rust tests and 14 .NET tests pass (`tools\build.ps1 test`).
+  The .NET tests go through the bindings: records, optionals, the clear
+  flags, bytes, errors by case, the change feed, the feed arriving on the
+  thread that wrote, a library folder with spaces and non-ASCII letters, a
+  file where the folder should be. The app was started once on a scratch
+  library and its log read. A core build started from Git Bash (an emulated
+  x64 shell) still put an ARM64 DLL in the ARM64 slot.
 - `main` on GitHub still holds the Electron app. It is replaced only when
   the owner says so.
 - A bundle of the old history is beside this checkout
   (`..\Heracles-Windows-old-history.bundle`), for the owner to keep or
   delete. The old history must never be pushed again.
 
-Next: the build script, the bindings and an empty window, then the harness
+Next: the end-to-end harness, packages for both architectures, the spikes
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

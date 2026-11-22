@@ -356,7 +356,70 @@ includes garbage not yet collected and says little.
 
 ### Offsets and marks
 
-Not run yet.
+Run 2026-11-22: a scripted program driving a real `RichTextBox` with
+`TextCompositionManager.StartComposition` and `EditingCommands`. The block
+was one paragraph: plain `ab`, bold `cd`, a line break, italic `e😀f`, a
+code run, a link run.
+
+**(a) The mapping works.** A model offset counts UTF-16 units, as on the
+Mac. In the paragraph:
+
+- Each UTF-16 unit of a `Run`'s text is one. A `LineBreak` is one (the
+  model's `\n`). The edges of elements (`Run`, `Span`, the paragraph) are
+  none.
+- `PointerAt(offset)` walks the paragraph counting those; at a boundary
+  between two runs it returns the end of the earlier run. An offset between
+  the two halves of a character outside the basic plane snaps to the
+  character's start.
+- `OffsetOf(pointer)` is the same walk the other way.
+- Checked: every offset round-trips; the caret set at any offset reports
+  that offset back; offsets on either side of the line break land on the
+  right side of it.
+
+**(b) Decision: diff at the caret.** Three ways of learning what was typed
+were run against eleven edits and the Mac editor's rule for the style of
+typed text (`RichText.style(before:)`):
+
+| Way | Right | Wrong |
+|---|---|---|
+| Read the marks back from the runs (a model style carried on each `Run` in an attached property) | 6 | 5 |
+| Diff the text by common prefix and suffix | 10 | 1 |
+| Diff the text anchored at the caret (what follows the caret is unchanged) | 11 | 0 |
+
+Why reading back fails, each seen in the run:
+
+- Typing at the end of a link extends the link. The model says text typed
+  after a link is not linked.
+- Typing at the boundary between two runs goes into the **later** run, even
+  when the caret was put at the end of the earlier one. The model says the
+  earlier style.
+- A style the user has just switched on, with nothing selected, exists only
+  as the editor's intention. WPF has no public typing attributes to hold it.
+- Typing into an empty paragraph makes a `Run` with no attached property.
+
+The plain diff fails where the same letter stands on both sides of the
+caret (`cc|cc`): it cannot tell where the new one went. The caret can.
+
+So the editor does what the Mac does with typing attributes, but holds the
+typing style itself: on each change it finds the changed range by the diff
+anchored at the caret, applies it to the model with the typing style (the
+pending style if there is one, else the model's rule), and then, **if the
+box shows the text otherwise than the model says, redraws the paragraph's
+inlines from the model and puts the caret back.** Run as a handler of
+`TextChanged`, two keys at a time, in seven places (the four above, an
+empty block, the middle of a run, after a line break): model, box text, box
+formatting and caret were right every time, with no exception from changing
+the document inside the handler. A redraw was needed for 4 of 11 single
+edits; at a run boundary it is needed on every key.
+
+Also seen: an attached property on a `Run` survives typing inside the run
+and deleting across runs, so it is usable for other purposes.
+
+Not done here, for the editor-views plan to mind: nothing may be redrawn
+while an input method has text in composition (the Mac checks
+`hasMarkedText()`); and the caret-anchored diff assumes the caret ends
+where the edit ended, which holds for typing, deleting and pasting, and
+must be checked for drag-and-drop of text inside a box.
 
 ### Colour emoji
 
@@ -373,6 +436,10 @@ Not run yet.
 - Windows 10. Everything so far ran on Windows 11.
 - A PC with nothing installed. The packages are self-contained and have
   only been started on the machine that built them.
+- Typing through a real input method (composition, candidate windows), and
+  real key presses. The text-input spike sent finished text to the box
+  through `TextCompositionManager`, which a script can do; an input method
+  it cannot.
 
 ## Current state (update in every commit)
 
@@ -428,5 +495,10 @@ As of 2026-11-22, on the branch `port`.
   block is far too slow, so the editor gives text boxes only to blocks near
   the viewport, and spell-checks only the block being typed in.
 
-Next: the other three spikes
+- **Spike 2 of 4 is done**: model offsets map onto a `RichTextBox` both
+  ways, and the editor learns what was typed by a diff anchored at the
+  caret, holding the typing style itself and redrawing a block's text where
+  WPF chose another style.
+
+Next: the other two spikes
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

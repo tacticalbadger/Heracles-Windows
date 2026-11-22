@@ -309,7 +309,50 @@ Filled in by the first plan's spikes. The later plans read these.
 
 ### Many rich-text boxes
 
-Not run yet.
+Run 2026-11-22 on the ARM64 dev machine (Release build, .NET 10, 200 %
+scaling, a 1200 by 800 window). Each block was one paragraph of about 200
+characters in three runs. "Open" is from the start of building the page to
+the first idle moment after it was drawn. Medians of three runs.
+
+| Page | Open | Private memory at open | Frames in a 3 s scroll |
+|---|---|---|---|
+| 100 rich-text boxes, spelling on | 2.2 s | 167 MB | 325 |
+| 500 rich-text boxes, spelling on | 9.9 s | 480 MB | 185 |
+| 500 rich-text boxes, spelling off | 1.5 s | 242 MB | 275 |
+| 2000 rich-text boxes, spelling on | 43.6 s | 1680 MB | 85 |
+| 500 static text blocks | 0.34 s | 86 MB | 278 |
+| 2000 static text blocks | 0.99 s | 120 MB | 157 |
+| 500 blocks: 40 text boxes, the rest static, spelling off | 0.46 s | 100 MB | 280 |
+| 500 blocks: 40 text boxes, the rest static, spelling on | 1.3 s | 128 MB | 259 |
+| 2000 blocks: 40 text boxes, the rest static, spelling off | 1.1 s | 139 MB | 159 |
+| (an empty window) | 0.13 s | 52 MB | |
+
+**Decision: windowed.** A `RichTextBox` for every block fails the target
+(at 500 blocks: open within 0.5 s, 250 MB, 120 frames) by a factor of
+twenty with spelling on and three with it off. The editor gives a text box
+only to blocks near the viewport and draws the rest as static text.
+
+What the editor-views plan must take from this:
+
+- A `RichTextBox` costs about 3 ms and 0.4 MB to create and lay out. A
+  `TextBlock` with the same runs costs about 0.6 ms and 0.07 MB.
+- **Spell-checking is most of the cost**: about 17 ms and 0.5 MB more per
+  box. Even 40 boxes with spelling on push a 500-block page to 1.3 s. Turn
+  spelling on for the block being typed in, not for every box.
+- With about two screens of text boxes (40) and the rest static, a
+  500-block note opens in under half a second and a 2000-block one in about
+  a second. Scrolling stayed smooth in every windowed case.
+- **The two kinds of block must measure the same height.** In the spike
+  they did not: the same paragraph was 60 px tall as a `RichTextBox` and
+  43 px as a `TextBlock`. Unless that is made equal (line height, padding),
+  the page jumps when a block changes from one to the other.
+- Beyond a few thousand blocks even static text is slow to lay out all at
+  once. That is not a problem to solve now.
+
+Not measured: the cost of swapping blocks between the two kinds while
+scrolling, and typing latency in a long note. Memory after scrolling the
+whole page was two to seven times the figure at open, but that number
+includes garbage not yet collected and says little.
 
 ### Offsets and marks
 
@@ -381,5 +424,9 @@ As of 2026-11-22, on the branch `port`.
   There is no `publish.ps1` yet: nothing is released until the app does
   something.
 
-Next: the spikes
+- **Spike 1 of 4 is done** (see "Spike findings"): a text box for every
+  block is far too slow, so the editor gives text boxes only to blocks near
+  the viewport, and spell-checks only the block being typed in.
+
+Next: the other three spikes
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

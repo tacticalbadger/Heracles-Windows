@@ -62,7 +62,10 @@ public partial class App : Application
         {
             Store = new Store(AppPaths.DataDirectory);
             if (e.Args.Contains(E2eSeed.Argument)) E2eSeed.Run(Store);
-            Model = new AppModel(Store);
+            // A change made on another thread comes back to this one through
+            // the dispatcher, named here so it does not depend on what the
+            // thread's synchronization context happens to be at start-up.
+            Model = new AppModel(Store, action => Dispatcher.BeginInvoke(DispatcherPriority.Normal, action));
             Log.Info($"library: opened, {Store.ListNotes().Length} notes");
         }
         // Whatever stopped the library opening (the folder cannot be used, the

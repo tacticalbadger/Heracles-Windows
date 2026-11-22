@@ -649,6 +649,21 @@ Automation did not find the banner at all, by window or by its text.
   light to work and not evidence that it does.
 - A window saved on a second display that is then unplugged.
 
+## Known faults
+
+Found and not yet fixed. Each is small; none loses data.
+
+- The sidebar is rebuilt on every change, which puts it back at the top.
+  With a library longer than one screen, renaming a note scrolls the
+  sidebar away from it. Keep the scroll position across `Refresh`.
+- The sidebar has no keyboard navigation of its own beyond the list's
+  (no left and right to fold and unfold).
+- A `file://` picture URL written with two slashes before a drive
+  (`file://C:/x.png`) is read as naming another machine and the picture is
+  left as written, not imported.
+- `tools\e2e\capture.ps1` still looks for Windows Security dialog windows,
+  which Toolbox needed and Heracles does not. Harmless.
+
 ## Current state (update in every commit)
 
 As of 2026-11-22, on `main`. `main` on GitHub was replaced earlier this day
@@ -665,9 +680,10 @@ splits within splits and draggable dividers; Quick Open; the icon picker
 with colour emoji; the note actions and menus; the layout of every window
 remembered. A note's content is shown as plain text that cannot be changed:
 the editor is stage 3 and 4. A todo list says its board is still to come.
-Verified by 139 .NET tests, 203 Rust tests, and the 30 checks of
-`tools\e2e\check-shell.ps1`. What follows below is the record of stages 0
-and 1.
+Verified from a clean build by 139 .NET tests, 203 Rust tests, and the 30
+checks of `tools\e2e\check-shell.ps1`, which were also run against both
+packaged builds (`win-arm64`, and `win-x64` under emulation). What follows
+below is the record of stages 0 and 1.
 
 - The history was restarted. The first commit is the Mac repository's tree
   at `5dd0252`, unchanged; the second removes what Windows does not use and

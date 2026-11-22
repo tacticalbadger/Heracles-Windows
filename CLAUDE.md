@@ -463,10 +463,11 @@ text with 5538 coloured pixels, on this ARM64 machine, from .NET 10.
   Emoji typed into a box arrive as ordinary text and stay one colour until
   the block is redrawn from the model.
 
-**For the owner to decide** (the design leaves this choice to the owner):
-take the library, or live with one colour. Claude's suggestion: take it for
-icons, callouts and static text now; leave emoji inside a text box in one
-colour until the editor works, then try the inline there.
+**Decided: colour emoji, with the library** (owner, 2026-11-22). How it is
+staged is Claude's suggestion, not contested: the library for icons,
+callouts and static text from the start; emoji inside a text box being
+edited stay one colour until the editor works, and the inline is tried
+there then.
 
 A caution about the spike itself: its per-row pixel counts were taken
 before the library had drawn (they read 0 for rows the picture shows in
@@ -618,12 +619,9 @@ its old history.
   app with no installer, with the app closed, given one registry key the
   app writes itself. Clicking the banner is not verified.
 
-For the owner to decide:
+Decided by the owner on 2026-11-22: the earlier account name stays in
+`LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
+the Mac repository. Do not change either.
 
-- Whether to take the `Emoji.Wpf` library (see "Colour emoji").
-- Whether the old account name stays in `LICENSE` and in one link in
-  `docs/review-and-native-rewrite.md`, as it does in the Mac repository.
-
-Next: the plan for stage 2 (model and shell), which reads "Spike findings"
-above.
+Next: stage 2 (model and shell), which reads "Spike findings" above.
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

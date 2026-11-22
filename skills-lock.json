@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "prompt-improver": {
+      "source": "dotneet/claude-code-marketplace",
+      "sourceType": "github",
+      "skillPath": "prompt/skills/prompt-improver/SKILL.md",
+      "computedHash": "7111adb20ba1fe46e6911b52005745dcd69832f5c9c0abc7a14db09d25dac727"
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "name": "heracles",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --config vite.config.ts\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "package:mac": "npm run build && electron-builder --mac --dir",
+    "package:mac:dmg": "npm run build && electron-builder --mac dmg",
+    "package:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
+    "package:win:dir": "npm run build && electron-builder --win dir --config.directories.output=app/windows",
+    "release:mac": "npm run build && electron-builder --mac",
+    "release:win": "npm run build && electron-builder --win nsis --config.directories.output=app/windows",
+    "release:upload": "node scripts/upload-release.cjs",
+    "preview": "vite preview",
+    "test": "node scripts/db-cascade-test.cjs",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.heracles.notes",
+    "productName": "Heracles",
+    "directories": {
+      "output": "app/macOS"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/renderer/**/*",
+      "package.json"
+    ],
+    "afterAllArtifactBuild": "build/notarize-dmg.cjs",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pub-622aa86bc99340e3ac5b01cb86b7d752.r2.dev/"
+      }
+    ],
+    "mac": {
+      "target": [
+        "zip",
+        "dmg"
+      ],
+      "identity": "Stephen Dobbs (6G8AVA2QV8)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.6.0",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.26.3",
+    "@tiptap/core": "^2.7.6",
+    "@tiptap/extension-link": "^2.27.2",
+    "@tiptap/extension-task-item": "^2.7.6",
+    "@tiptap/extension-task-list": "^2.7.6",
+    "@tiptap/react": "^2.7.6",
+    "@tiptap/starter-kit": "^2.7.6",
+    "@tiptap/suggestion": "^2.7.6",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.9",
+    "marked": "^12.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tippy.js": "^6.3.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^5.0.2",
+    "concurrently": "^9.0.1",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.8.1",
+    "typescript": "^5.6.3",
+    "vite": "^8.0.13",
+    "wait-on": "^8.0.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.10.0": true,
+    "electron@41.6.1": true,
+    "electron-winstaller@5.4.0": true,
+    "fsevents@2.3.3": true
+  }
+}

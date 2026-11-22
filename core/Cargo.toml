@@ -1,0 +1,29 @@
+[package]
+name = "heracles-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Storage, document model, search, import and change feed for Heracles."
+
+[lib]
+name = "heracles_core"
+# lib: Rust tests and tools. staticlib: linked into Heracles.app.
+# cdylib: read by uniffi-bindgen to generate the Swift bindings.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+scraper = "0.29"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+ego-tree = "0.11"
+uuid = { version = "1", features = ["v4"] }
+thiserror = "2"
+uniffi = "0.32"
+rusqlite = { version = "0.43", features = ["bundled", "backup"] }
+time = "0.3"
+sha2 = "0.11"
+base64 = "0.23"
+
+[dev-dependencies]
+tempfile = "3"

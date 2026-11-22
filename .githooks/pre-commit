@@ -1,0 +1,25 @@
+#!/bin/sh
+
+MAX_SIZE_MB=10
+MAX_SIZE_BYTES=$((MAX_SIZE_MB * 1024 * 1024))
+
+large_files=""
+
+for file in $(git diff --cached --name-only --diff-filter=AM); do
+  if [ -f "$file" ]; then
+    size=$(wc -c <"$file")
+    if [ "$size" -gt "$MAX_SIZE_BYTES" ]; then
+      size_mb=$((size / 1024 / 1024))
+      large_files="$large_files\n$file (${size_mb}MB)"
+    fi
+  fi
+done
+
+if [ -n "$large_files" ]; then
+  echo "Commit blocked: files exceed ${MAX_SIZE_MB}MB:"
+  printf "%b\n" "$large_files"
+  echo "Add them to .gitignore or use Git LFS."
+  exit 1
+fi
+
+exit 0

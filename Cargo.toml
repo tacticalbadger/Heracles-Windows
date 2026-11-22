@@ -1,0 +1,10 @@
+# Rust workspace for the native rewrite (docs/review-and-native-rewrite.md).
+# The Electron app in electron/ and renderer/ is unaffected by this file.
+[workspace]
+resolver = "3"
+members = ["core", "tools/bindgen"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"

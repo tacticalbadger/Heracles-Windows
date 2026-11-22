@@ -30,9 +30,8 @@ the design is silent, do what the Mac app does. Two places to read it:
 The design is `docs/superpowers/specs/2026-11-22-native-windows-app-design.md`.
 The plans are in `docs/superpowers/plans/`, one per stage.
 
-**One branch.** Commit when the owner asks. Push when the owner says. (While
-the history is being rebuilt the branch is `port`; it becomes `main` when
-the owner says to replace `main` on GitHub.)
+**One branch: `main`.** Commit when the owner asks. Push when the owner
+says.
 
 ## Decisions
 
@@ -547,7 +546,11 @@ Automation did not find the banner at all, by window or by its text.
 
 ## Current state (update in every commit)
 
-As of 2026-11-22, on the branch `port`.
+As of 2026-11-22, on `main`. **This commit replaced `main` on GitHub** (a
+force-push, on the owner's word): the Electron app and its history are no
+longer there. Any other clone of this repository must `git fetch origin`
+and `git reset --hard origin/main` before it is used, and must never push
+its old history.
 
 - The history was restarted. The first commit is the Mac repository's tree
   at `5dd0252`, unchanged; the second removes what Windows does not use and
@@ -570,11 +573,14 @@ As of 2026-11-22, on the branch `port`.
   file where the folder should be. The app was started once on a scratch
   library and its log read. A core build started from Git Bash (an emulated
   x64 shell) still put an ARM64 DLL in the ARM64 slot.
-- `main` on GitHub still holds the Electron app. It is replaced only when
-  the owner says so.
-- A bundle of the old history is beside this checkout
+- A bundle of the old history is beside this checkout on the dev machine
   (`..\Heracles-Windows-old-history.bundle`), for the owner to keep or
-  delete. The old history must never be pushed again.
+  delete. The old history must never be pushed again. GitHub keeps the old
+  commits reachable by hash for some time; GitHub Support removes them on
+  request.
+- **Nothing has been released.** There is no GitHub Release and no
+  `publish.ps1`: the app only opens a library and counts its notes. The
+  first release is 0.2.0, when the app is usable (stage 7 of the design).
 
 - **The harness works** (`tools\e2e`). Checked through it: the window's
   `LibraryStatus` reads `1 note` on a new fixture; pointed at a file where
@@ -612,7 +618,12 @@ As of 2026-11-22, on the branch `port`.
   app with no installer, with the app closed, given one registry key the
   app writes itself. Clicking the banner is not verified.
 
-Next: the owner's word on replacing `main` on GitHub, and on the emoji
-library. Then the plan for stage 2 (model and shell), which reads "Spike
-findings" above.
+For the owner to decide:
+
+- Whether to take the `Emoji.Wpf` library (see "Colour emoji").
+- Whether the old account name stays in `LICENSE` and in one link in
+  `docs/review-and-native-rewrite.md`, as it does in the Mac repository.
+
+Next: the plan for stage 2 (model and shell), which reads "Spike findings"
+above.
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

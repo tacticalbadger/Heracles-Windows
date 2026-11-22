@@ -94,7 +94,9 @@ app/
   Directory.Build.props   version from VERSION, build number, PathMap
   nuget.config            pins nuget.org
 tools/build.ps1           targets core, app, test, run, package, clean
-tools/                    (to come) publish.ps1, e2e/
+tools/e2e/                make-fixture, launch, capture, ui (UI Automation
+                          and synthetic input), adapted from Toolbox
+tools/                    (to come) publish.ps1
 docs/                     the design, the plans, the Mac's rewrite notes
 VERSION                   marketing version; build number = commit count
 ```
@@ -168,7 +170,37 @@ let `cmd` redirect:
 Redirecting inside PowerShell 5.1 (`*>` or `2>&1`) turns cargo's progress
 lines, which go to stderr, into errors, and the script stops on the first.
 
-The harness commands (`tools\e2e\*.ps1`) are added here as they are written.
+## End-to-end checks
+
+```powershell
+tools\e2e\make-fixture.ps1            # an empty library folder and no log -> build\e2e
+tools\e2e\launch.ps1                  # (re)start the built app on the fixture
+tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.0-win-x64\Heracles.exe   # a packaged build instead
+tools\e2e\launch.ps1 -DataDir <path>  # another library folder (to see what the app does with a bad one)
+tools\e2e\capture.ps1                 # PNG of every Heracles window -> build\e2e\shots
+tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, click, clickat, drag, keys, text
+```
+
+`launch.ps1` sets `HERACLES_DATA_DIR` (`build\e2e\data`) and
+`HERACLES_LOG_PATH` (`build\e2e\heracles.log`) for the run; the real library
+is never touched. It closes a previous instance of the same build first.
+`make-fixture.ps1` refuses while a build started from `build\` is running.
+Two different builds must not run on the fixture at once: stop the first by
+path before launching the second.
+
+How things are checked: assertions go through the log and the automation
+tree (`ui.ps1 find -Id LibraryStatus`); screenshots are for looks.
+
+- Log lines: `Heracles <version> (build <n>)` first, then
+  `library: opened, <n> notes` or `library: could not be opened: <reason>`.
+- Automation ids: `LibraryStatus` (its name is `1 note` or `<n> notes`),
+  `StartupError` (its name is the reason; present only when the library did
+  not open, and then `LibraryStatus` is absent).
+- `invoke`, `setvalue`, `select`, `expand` touch neither mouse nor keyboard.
+  `click`, `drag`, `keys`, `text` are real input on the owner's desktop.
+- `ui.ps1 find` throws when the element is not there, which ends a chain of
+  commands on one line. Put a check that is expected to find nothing last,
+  or in a `try`.
 
 ## Conventions
 
@@ -326,5 +358,11 @@ As of 2026-11-22, on the branch `port`.
   (`..\Heracles-Windows-old-history.bundle`), for the owner to keep or
   delete. The old history must never be pushed again.
 
-Next: the end-to-end harness, packages for both architectures, the spikes
+- **The harness works** (`tools\e2e`). Checked through it: the window's
+  `LibraryStatus` reads `1 note` on a new fixture; pointed at a file where
+  the folder should be, the window shows `StartupError` with the reason
+  ("file error: Cannot create a file when that file already exists") and
+  keeps running; `make-fixture.ps1` refuses while that instance is up.
+
+Next: packages for both architectures, then the spikes
 (`docs/superpowers/plans/2026-11-22-windows-stage-0-1-repo-skeleton-spikes.md`).

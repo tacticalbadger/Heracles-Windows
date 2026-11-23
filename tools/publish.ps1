@@ -67,6 +67,12 @@ function Stop-Publish([string]$why) {
 }
 
 function Invoke-Git {
+    # Whether git failed is its exit code. Windows PowerShell makes an error
+    # of anything a program writes to stderr, sent to $null or not, and with
+    # errors set to stop that ends the script: a warning from git, or a
+    # message from the server while a tag is pushed, would end a release
+    # half made. The setting is this function's own and goes when it returns.
+    $ErrorActionPreference = 'Continue'
     $output = & git -C $Root @args 2>$null
     if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed (exit code $LASTEXITCODE)" }
     return $output
@@ -241,8 +247,13 @@ if ($null -ne $existing) {
     Send-Files $release
 }
 else {
-    # A draft is not found by its tag, only in the list.
-    $draft = @(Invoke-GitHub 'Get' "$api/releases?per_page=100") | Where-Object { $_.draft -and $_.tag_name -eq $Tag } | Select-Object -First 1
+    # A draft is not found by its tag, only in the list. Windows PowerShell
+    # hands a list from GitHub over as one object, not release by release
+    # (and an empty list as one empty object, which has no "draft" to ask
+    # for: the first release of a repository stopped here). Sent through a
+    # script block it comes apart into its releases, or into nothing.
+    $releases = @(Invoke-GitHub 'Get' "$api/releases?per_page=100" | ForEach-Object { $_ })
+    $draft = $releases | Where-Object { $_.draft -and $_.tag_name -eq $Tag } | Select-Object -First 1
     if ($null -ne $draft) {
         Step "Carrying on with the draft of $Tag"
         $release = Invoke-GitHub 'Patch' "$api/releases/$($draft.id)" @{ name = $title; body = $notes; prerelease = [bool]$Prerelease }

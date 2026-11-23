@@ -638,6 +638,20 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   fails when the function returned one thing. Wrap it: `@(Get-Things).Count`.
   A function named like an alias (`Diff`) never runs. `Write-Host` output is
   captured only with `6>&1`.
+- **`Invoke-RestMethod` in PowerShell 5.1 hands a JSON list over as one
+  object**, not item by item, and an empty list as one empty object. Piped
+  straight into `Where-Object`, the filter is asked once, about the whole
+  list: under `Set-StrictMode` an empty list is an error ("the property
+  cannot be found"), and a list of several comes back whole or not at all.
+  Take it apart first: `@(Invoke-RestMethod ... | ForEach-Object { $_ })`.
+  The first real run of `tools\publish.ps1` stopped on this, at the list of
+  releases, which is empty before a repository's first release. Nothing had
+  been sent yet. (The Toolbox port's script has the same line.)
+- **Under `$ErrorActionPreference = 'Stop'`, a program that writes to stderr
+  ends the script, even with `2>$null`**, whatever its exit code. A script
+  that must outlive a warning from git sets the preference to `Continue`
+  inside the function that calls git and reads `$LASTEXITCODE`
+  (`Invoke-Git` in `tools\publish.ps1`).
 - `tools\build.ps1` now compiles the C# afresh every time
   (`--no-incremental`), because of this machine's clock (see above). A bare
   `dotnet build` or `dotnet test` still trusts the clock.
@@ -717,8 +731,7 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Nothing lost on quit: closing a tab, a pane or a window, and
       quitting, save every editor first
 - [x] Packages for ARM64 and x64, and a release script (both packages
-      built, started and checked; the script has only ever run dry: the
-      release is the owner's to make)
+      built, started and checked, and released as 0.2.0 on 2026-11-23)
 
 ## Spike findings
 
@@ -1003,6 +1016,11 @@ swaps in the text box and puts the caret where the click was.
 - Windows 10. Everything so far ran on Windows 11.
 - A PC with nothing installed. The packages are self-contained and have
   only been started on the machine that built them.
+- **A download.** The files of the 0.2.0 release are byte for byte the
+  packages that were checked (GitHub's digests match `SHA256SUMS`), but
+  nobody has downloaded one from the release page, unblocked it and started
+  it. What Windows says to this app when it comes from the web (the release
+  notes say "More info", then "Run anyway") has not been seen.
 - **Clicking a reminder.** The toast spike proved the two halves apart: the
   banner appears, and opening a link of the app's scheme starts the app
   with that link. A click on the banner itself was not made: UI Automation
@@ -1121,13 +1139,16 @@ As of 2026-11-23, on `main`. `main` on GitHub was replaced on 2026-11-22
 (commit `9b56acf`, a force-push on the owner's word): the Electron app and
 its history are no longer there. Any other clone of this repository must
 `git fetch origin` and `git reset --hard origin/main` before it is used,
-and must never push its old history. **Stage 2 and the first two tasks of
-stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
-after that stays local until he says push: `git log origin/main..HEAD`
-lists it.
+and must never push its old history. **All of `main` was pushed on
+2026-11-23, this commit included, and 0.2.0 was released, on the owner's
+word.** What is committed after that stays local until he says push:
+`git log origin/main..HEAD` lists it.
 
-**Where things stand: the app is built. All seven stages of the design are
-done but for the release itself, which is the owner's to make.** The app
+**Where things stand: the app is built and released. All seven stages of
+the design are done, and 0.2.0 is on GitHub** (2026-11-23:
+https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.0,
+the tag `v0.2.0` at commit `4fd1a3d`, build 44, with the zips for ARM64 and
+x64 and `SHA256SUMS`). The app
 does what the Mac app does: one process per library, any number of
 windows, a sidebar, panes and tabs, Quick Open; a native block editor with
 the Mac editor's behaviour (every kind of block, Markdown as it is typed,
@@ -1143,10 +1164,12 @@ platform: `HERACLES_TEST_TOASTS=1` runs it), 114 scripted checks of the
 real window by automation (`check-shell.ps1` 30, `check-editor.ps1` 15,
 `check-boards.ps1` 39, `check-transfer.ps1` 10, `check-legacy.ps1` 20) and
 23 by a real mouse and keyboard (`check-input.ps1`). Both packages were
-built, and each was started and checked: see "Stage 7" at the end.
+built, each was started and checked, and they are the files of the
+release: see "Stage 7" at the end.
 
 **What that does not say** is under "Not verified", and three entries
-matter. No person has used the app yet. A script used it for a minute with
+matter. The release changes none of them: it was made, on the owner's
+word, before any of the three was tried. No person has used the app yet. A script used it for a minute with
 a real mouse and keyboard (`check-input.ps1`: typing, keys, clicks and
 drags, and it found a fault no test could have), but it did only what it
 was written to do: the block handle, the context menus, selecting with the
@@ -1159,22 +1182,23 @@ one, is imported for the first time: only made-up ones have been.
 
 **What is left, and it is the owner's**:
 
-1. *Use it.* Start a build on the real library (`tools\build.ps1 run`, or
-   a package). That first start imports an Electron library if one is
-   there, shows the summary, and registers the app's links and reminders
-   with Windows. Ten minutes of typing, dragging blocks by their handles,
-   right-clicking things, copying and pasting. Give a task a reminder two
-   minutes ahead, close the app, and click the banner when it comes. What
-   goes wrong goes in "Known faults", or gets fixed.
-2. *Push.* Everything since stage 3's second task is local:
-   `git log origin/main..HEAD` lists it.
-3. *Release*, when he says so. From the commit that was pushed:
-   `tools\build.ps1 core package -Arch x64`, then
-   `tools\build.ps1 core package` (this machine's last, so the bindings
-   match its DLL), then `tools\publish.ps1 -DryRun`, and when that reads
-   right, `tools\publish.ps1`. The packages must be built from the very
-   commit that is pushed (the build number is the commit count, and the
-   script refuses any other), so a commit made after packaging means
+1. *Use it.* Start a build on the real library (`tools\build.ps1 run`, a
+   package, or the release's zip). That first start imports an Electron
+   library if one is there, shows the summary, and registers the app's
+   links and reminders with Windows. Ten minutes of typing, dragging blocks
+   by their handles, right-clicking things, copying and pasting. Give a
+   task a reminder two minutes ahead, close the app, and click the banner
+   when it comes. What goes wrong goes in "Known faults", or gets fixed,
+   and what is fixed is the next release.
+2. *The next release*, when he says so. 0.2.0 is taken (the script refuses
+   a version that has a release): change `VERSION`, write
+   `docs\release-notes\<version>.md`, commit, and push on his word. Then,
+   from the commit that was pushed: `tools\build.ps1 core package -Arch
+   x64`, then `tools\build.ps1 core package` (this machine's last, so the
+   bindings match its DLL), then `tools\publish.ps1 -DryRun`, and when that
+   reads right, `tools\publish.ps1`. The packages must be built from the
+   very commit that is pushed (the build number is the commit count, and
+   the script refuses any other), so a commit made after packaging means
    packaging again.
 
 Nothing else is planned. The design's "out of scope" list, and "Known
@@ -1511,7 +1535,8 @@ on the Mac); no one else has read it. Plan:
   tests for how a card and a tab are carried, and all 23 pass. 608 .NET
   tests pass.
 
-**Stage 7 (package and release) is done but for the release** (2026-11-23).
+**Stage 7 (package and release) is done: 0.2.0 was released on
+2026-11-23.**
 Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`.
 
 - Done (Task 1): `tools\publish.ps1`, `docs\release-notes\0.2.0.md`, and
@@ -1525,12 +1550,29 @@ Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`
   fixture and passed all five automation checks** (114 each; the x64 one
   under emulation), and the ARM64 package passed `check-input.ps1` too (23,
   by a real mouse and keyboard).
-- `tools\publish.ps1 -DryRun` was read: it checks the checksums and that
-  both packages are the build of the current commit, shows the title, the
-  files and the notes, and names the one thing that would stop a real run
-  (the commit is not on `origin/main`). **A real run has never been made**:
-  the draft, the upload and the publishing are the Toolbox port's code,
-  renamed, and are untried here.
+- `tools\publish.ps1 -DryRun` was read first: it checks the checksums and
+  that both packages are the build of the current commit, and shows the
+  title, the files and the notes.
+- **The release** (2026-11-23, on the owner's word). `main` was pushed,
+  after 203 Rust and 608 .NET tests had passed once more and every commit
+  going out had been searched for the owner's names, for paths under a
+  profile folder and for anything shaped like a key (none). Then
+  `tools\publish.ps1`. Its first real run stopped before it had sent
+  anything, at the list of releases (see "Found on Windows": a JSON list
+  in PowerShell 5.1). That line was put right, and `Invoke-Git` was made
+  to outlive anything git writes to stderr; each fault was seen to fail
+  first in a throwaway script. The second run made the tag `v0.2.0` at
+  `4fd1a3d`, a draft, attached the three files and published it.
+- **Read back from GitHub with no credential**, as anyone sees it: not a
+  draft, not a pre-release, the latest release, three files, and the
+  digests GitHub gives for both zips are the ones in `SHA256SUMS`. The
+  files out there are the packages that were checked.
+- The tag points at `4fd1a3d`, the commit the packages were built from.
+  The script that published them is the one in the commit after it: at the
+  tag, `tools\publish.ps1` still has the fault.
+- Still untried in the script: `-Replace`, `-Prerelease`, and carrying on
+  with a draft that a failed run left behind. GitHub says the 0.2.0
+  release is not immutable, so `-Replace` is open to it.
 - Packages are not kept: they are under `build\release`, which is not in
   git, and they are only good for the commit they were built from. The
-  ones on this machine were built from the commit this note is in.
+  ones on this machine are the released ones, build 44.

@@ -143,4 +143,6 @@ $env:HERACLES_DATA_DIR = "$env:TEMP\heracles-trial"; build\app\win-arm64\Heracle
 
 ## License
 
-MIT. See [`LICENSE`](./LICENSE).
+Heracles is proprietary software, not open source. Copyright (c) 2026 tacticalbadger. All rights reserved.
+
+The source is public so that it can be read. You may download and run the released app. Copying, changing or redistributing the code or the app needs written permission. The terms are in [`LICENSE`](./LICENSE).

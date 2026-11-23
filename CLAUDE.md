@@ -489,6 +489,14 @@ looking at (one showed Quick Open white on white in dark mode).
   `corp.example`, `jdoe`, `ACME` in docs, tests and fixtures, and write "the
   owner" in these notes. The same goes for what is handed out: builds must
   not carry the build machine's paths.
+- **The license is proprietary** (the owner, 2026-11-23, for every public
+  repository on the account: "the most restricting license my code can
+  have"). `LICENSE` is all rights reserved, with one permission: to run
+  the builds the owner hands out. Its copyright line carries the account
+  name `tacticalbadger`, which the owner chose over a real name so that
+  the rule above holds. Do not add an open-source license or a `license`
+  field to a manifest, and keep the README's License section in step with
+  `LICENSE`. Third-party components keep their own licenses.
 - Scripts are PowerShell (`.ps1`, CRLF, ASCII). Everything else is LF.
 - Never run the app on the owner's real library in a test. `HERACLES_DATA_DIR`
   points it at another folder.
@@ -1181,6 +1189,12 @@ Found and not yet fixed. Each is small; none loses data.
 
 ## Current state (update in every commit)
 
+**License, 2026-11-23, on the owner's word and pushed:** `LICENSE` is now
+proprietary (see Conventions) and the README's License section says so.
+Up to `6132977` the repository carried the MIT license. No code changed.
+The commit was made on the Mac from a fresh clone, so the tests were not
+run for it. Pull before other work.
+
 As of 2026-11-23, on `main`. `main` on GitHub was replaced on 2026-11-22
 (commit `9b56acf`, a force-push on the owner's word): the Electron app and
 its history are no longer there. Any other clone of this repository must
@@ -1352,9 +1366,11 @@ below is the record of stages 0 and 1.
   app with no installer, with the app closed, given one registry key the
   app writes itself. Clicking the banner is not verified.
 
-Decided by the owner on 2026-11-22: the earlier account name stays in
-`LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
-the Mac repository. Do not change either.
+Decided by the owner on 2026-11-22: the earlier account name stays in the
+one link in `docs/review-and-native-rewrite.md`, as in the Mac repository.
+Do not change it. That decision also kept the name in `LICENSE`; the
+owner's decision of 2026-11-23 on the license (see Conventions) replaced
+that half, in both repositories.
 
 **Stage 3 (the editor's document model) is built and verified** (2026-11-23):
 from a clean build, no warnings, 203 Rust tests and 302 .NET tests pass,

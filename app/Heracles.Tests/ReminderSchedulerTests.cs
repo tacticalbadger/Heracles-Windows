@@ -383,6 +383,21 @@ public sealed class WindowsIntegrationTests : BoardFixture
     }
 
     [Fact]
+    public void AProgramThatIsNotTheAppIsNotGivenTheLinks()
+    {
+        InAKeyOfItsOwn(classes =>
+        {
+            // The app started some other way than by its own program: links
+            // must not be sent to whatever started it.
+            var host = string.Join((char)92, "C:", "Program Files", "dotnet", "dotnet.exe");
+            var scheduler = WindowsIntegration.Register(classes, host, Model, () => center, (work, after) => waiting.Add((work, after)));
+            Assert.NotNull(scheduler);
+            Assert.Null(classes.OpenSubKey("heracles"));
+            Assert.True(AppIdentity.IsRegistered(classes));
+        });
+    }
+
+    [Fact]
     public void WithNoPathToItselfTheAppStillHasItsReminders()
     {
         InAKeyOfItsOwn(classes =>

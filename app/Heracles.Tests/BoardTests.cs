@@ -728,6 +728,60 @@ public sealed class TaskDetailTests : BoardFixture
     }
 
     [Fact]
+    public void ATaskThatWentWhileTheWindowWasNotLookingIsNotWrittenTo()
+    {
+        var tent = AddCard("Up Next", "Tent");
+        Model.AddSubtask(tent, "Pegs");
+        var detail = Open(tent);
+        // Deleted in another window, and this one has not heard yet.
+        Model.DeleteTask(tent.Id);
+
+        detail.SetTitle("Ghost");
+        detail.SetLocation("Nowhere");
+        detail.SetPriority(1);
+        detail.SetCompleted(true);
+        detail.SetCompleted(detail.Subtasks[0].Id, true);
+        detail.AddLabel("x");
+        detail.AddSubtask("y");
+        detail.AddComment("z");
+        detail.DeleteTask(detail.Subtasks.Count > 0 ? detail.Subtasks[0].Id : "gone");
+        // Nothing was there to change, and there is nothing to tell the user about.
+        Assert.Null(Model.LastError);
+        Assert.Empty(Model.Tasks(List.Id));
+    }
+
+    [Fact]
+    public void NothingIsChangedInAListThatIsInTheTrash()
+    {
+        var tent = AddCard("Up Next", "Tent");
+        Model.AddSubtask(tent, "Pegs");
+        Model.AddComment(tent.Id, "Borrow one?");
+        var detail = Open(tent);
+        Model.Trash(List.Id);
+        var version = Model.BoardVersion(List.Id);
+
+        detail.SetTitle("Changed in the trash");
+        detail.SetCompleted(true);
+        detail.AddLabel("x");
+        detail.AddSubtask("y");
+        detail.AddComment("z");
+        detail.EditComment(detail.Comments[0].Id, "Edited");
+        detail.DeleteComment(detail.Comments[0].Id);
+        detail.DeleteTask(detail.Subtasks[0].Id);
+        detail.MakeCard(Column("Active").Id);
+        Assert.False(detail.AddReminder(DateTimeOffset.UtcNow.AddHours(1)));
+        detail.TypeNotes("Typed in the trash");
+        RunWaiting();
+        detail.Close();
+        Assert.False(detail.Delete());
+
+        Assert.Equal(version, Model.BoardVersion(List.Id));
+        Assert.Equal("Tent", Task("Tent").Title);
+        Assert.Equal("", Task("Tent").Description);
+        Assert.Null(Model.LastError);
+    }
+
+    [Fact]
     public void NothingCanBeChangedOnceTheTaskHasGone()
     {
         var tent = AddCard("Up Next", "Tent");

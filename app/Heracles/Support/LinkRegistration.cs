@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace Heracles.Support;
@@ -44,10 +43,15 @@ internal static class LinkRegistration
 }
 
 /// <summary>
-/// The name Windows knows the app by. Notifications belong to an identity,
-/// and an app with no installer gives itself one: a key under
-/// <c>HKCU\Software\Classes\AppUserModelId</c>, and a call that says this
-/// process is that app.
+/// The name Windows knows the app's notifications by. Notifications belong
+/// to an identity, and an app with no installer gives itself one: a key
+/// under <c>HKCU\Software\Classes\AppUserModelId</c>.
+///
+/// The process is not told to go by this identity. (The spike did that, and
+/// handing a reminder to Windows turned out not to need it: a test hands
+/// one over from a process that never said who it was.) An explicit
+/// identity on the process parts it from a taskbar pin made from the
+/// program file, which would then show beside the running app, not as it.
 /// </summary>
 internal static class AppIdentity
 {
@@ -69,12 +73,6 @@ internal static class AppIdentity
         using var identity = classes.CreateSubKey(KeyPath);
         identity.SetValue("DisplayName", DisplayName);
     }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = true)]
-    private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
-
-    /// <summary>Say that this process is the app. False if Windows would not have it.</summary>
-    public static bool Claim() => SetCurrentProcessExplicitAppUserModelID(Id) >= 0;
 }
 
 /// <summary>
@@ -85,6 +83,8 @@ internal static class AppIdentity
 /// </summary>
 internal static class WindowsIntegration
 {
+    private const string ProgramName = "Heracles";
+
     /// <returns>
     /// What now keeps Windows' notifications in step with the library, or
     /// null when Windows has none to give. The links are registered either way.
@@ -97,7 +97,14 @@ internal static class WindowsIntegration
         Action<Action, TimeSpan>? later = null)
     {
         AppIdentity.Register(classes);
-        if (exePath is not null) LinkRegistration.Register(classes, exePath);
+        // Links go to the app's own program. Started some other way (by a
+        // host, in a debugger), the path is the host's, and links must not
+        // be sent there.
+        if (exePath is not null
+            && string.Equals(Path.GetFileNameWithoutExtension(exePath), ProgramName, StringComparison.OrdinalIgnoreCase))
+        {
+            LinkRegistration.Register(classes, exePath);
+        }
 
         Boards.IReminderCenter notifications;
         try { notifications = center(); }

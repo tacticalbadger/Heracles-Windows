@@ -113,7 +113,6 @@ public partial class App : Application
         // had reminders, so it says so in the log and goes on.
         try
         {
-            AppIdentity.Claim();
             using var classes = Registry.CurrentUser.CreateSubKey(LinkRegistration.ClassesKey);
             reminders = WindowsIntegration.Register(classes, Environment.ProcessPath, model, () => new ToastCenter(AppIdentity.Id));
             Log.Info(reminders is null ? "windows: links registered, reminders not" : "windows: links and reminders registered");

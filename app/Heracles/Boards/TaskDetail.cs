@@ -163,6 +163,7 @@ internal sealed class TaskDetail
     public bool Delete()
     {
         if (Task is null) return true;
+        if (!CanChange()) return false;
         // Nothing is saved to a task that is going.
         if (typedNotes?.TaskId == TaskId) typedNotes = null;
         model.DeleteTask(TaskId);
@@ -174,9 +175,23 @@ internal sealed class TaskDetail
 
     // The fields
 
+    /// <summary>
+    /// Whether a task of this window can be changed now: it is still there,
+    /// and its list is not in the trash. Asked before every write, because
+    /// another window may have changed either since this one last looked,
+    /// and a write to something gone is an error the user did nothing to earn.
+    /// </summary>
+    private bool CanChange(string? taskId = null)
+    {
+        if (Task is null) return false;
+        if (model.Library.Note(TodoListId) is not { Trashed: false }) return false;
+        try { return model.Store.GetTask(taskId ?? TaskId) is not null; }
+        catch (UniffiException) { return false; }
+    }
+
     private void Patch(TaskPatch patch)
     {
-        if (Task is null) return;
+        if (!CanChange()) return;
         model.UpdateTask(TaskId, patch);
         Reload();
     }
@@ -189,7 +204,7 @@ internal sealed class TaskDetail
     /// <summary>Tick the task being shown, or one of its subtasks.</summary>
     public void SetCompleted(string taskId, bool completed)
     {
-        if (Task is null) return;
+        if (!CanChange(taskId)) return;
         model.SetCompleted(taskId, completed);
         Reload();
     }
@@ -248,7 +263,7 @@ internal sealed class TaskDetail
     /// <summary>Add a reminder. False when the task already has one for that moment.</summary>
     public bool AddReminder(DateTimeOffset when)
     {
-        if (Task is null) return false;
+        if (Task is null || !CanChange()) return false;
         var stored = TaskDates.Format(when);
         if (Task.Reminders.Contains(stored)) return false;
         Patch(new TaskPatch(Reminders: [.. Task.Reminders, stored]));
@@ -285,6 +300,8 @@ internal sealed class TaskDetail
         typedNotes = null;
         // The task may have gone while the notes waited. Then there is
         // nothing to save them to, and nothing to tell the user about.
+        // Nor are they saved to a list that has gone to the trash meanwhile.
+        if (model.Library.Note(TodoListId) is not { Trashed: false }) return;
         TodoTask? stored;
         try { stored = model.Store.GetTask(typed.TaskId); }
         catch (UniffiException) { return; }
@@ -297,7 +314,7 @@ internal sealed class TaskDetail
 
     public void AddSubtask(string title)
     {
-        if (Task is null) return;
+        if (Task is null || !CanChange()) return;
         var trimmed = title.Trim();
         if (trimmed.Length == 0) return;
         model.AddSubtask(Task, trimmed);
@@ -307,7 +324,7 @@ internal sealed class TaskDetail
     /// <summary>Delete a subtask of the task being shown.</summary>
     public void DeleteTask(string taskId)
     {
-        if (Subtasks.All(task => task.Id != taskId)) return;
+        if (Subtasks.All(task => task.Id != taskId) || !CanChange(taskId)) return;
         model.DeleteTask(taskId);
         Reload();
     }
@@ -315,7 +332,7 @@ internal sealed class TaskDetail
     /// <summary>Make the subtask being shown a card of its own, at the foot of a column.</summary>
     public void MakeCard(string columnId)
     {
-        if (!CanMakeCard) return;
+        if (!CanMakeCard || !CanChange()) return;
         SaveNotes();
         model.MoveCard(TaskId, columnId);
         Reload();
@@ -325,7 +342,7 @@ internal sealed class TaskDetail
 
     public void AddComment(string body)
     {
-        if (Task is null) return;
+        if (!CanChange()) return;
         var trimmed = body.Trim();
         if (trimmed.Length == 0) return;
         model.AddComment(TaskId, trimmed);
@@ -336,14 +353,14 @@ internal sealed class TaskDetail
     public void EditComment(string commentId, string body)
     {
         var trimmed = body.Trim();
-        if (trimmed.Length == 0 || Comments.All(comment => comment.Id != commentId)) return;
+        if (trimmed.Length == 0 || Comments.All(comment => comment.Id != commentId) || !CanChange()) return;
         model.UpdateComment(commentId, trimmed);
         Reload();
     }
 
     public void DeleteComment(string commentId)
     {
-        if (Comments.All(comment => comment.Id != commentId)) return;
+        if (Comments.All(comment => comment.Id != commentId) || !CanChange()) return;
         model.DeleteComment(commentId);
         Reload();
     }

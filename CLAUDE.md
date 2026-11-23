@@ -1015,19 +1015,18 @@ stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
 after that stays local until he says push: `git log origin/main..HEAD`
 lists it.
 
-**Where things stand: stages 0 to 4 of the design's seven are done, and
-stage 5 is built and waits only for its last check from a clean build.
-The app can be browsed, a note can be written in it, and a todo list is a
-board.** One process per library, any number of windows, a sidebar, panes
+**Where things stand: stages 0 to 5 of the design's seven are done. The app
+can be browsed, a note can be written in it, and a todo list is a board.** One process per library, any number of windows, a sidebar, panes
 and tabs, Quick Open; a native block editor with the Mac editor's
 behaviour (every kind of block, Markdown as it is typed, the slash menu,
 marks and links, the editor's own undo, copy and paste, pictures, and
 saving that loses nothing on close or quit); boards with columns and
 cards, a window for each task with everything the Mac's task has, and
-reminders handed to Windows. As of stage 5's second task: no warnings, 203
-Rust tests, 555 .NET tests and one skipped on purpose, and 84 scripted
-checks of the real window (`check-shell.ps1` 30, `check-editor.ps1` 15,
-`check-boards.ps1` 39).
+reminders handed to Windows. From a clean build at the end of stage 5: no
+warnings, 203 Rust tests, 558 .NET tests and one skipped on purpose (it
+talks to Windows' notification platform: `HERACLES_TEST_TOASTS=1` runs
+it), and 84 scripted checks of the real window (`check-shell.ps1` 30,
+`check-editor.ps1` 15, `check-boards.ps1` 39).
 
 **What that does not say** is under "Not verified", and two entries
 matter. Nobody has yet typed, clicked or dragged in the app with a real
@@ -1038,12 +1037,13 @@ Windows (its link scheme, its reminders), because it does that only on the
 real library and has only ever been started on fixtures: the first start
 on the real library is the first time that runs.
 
-**In hand: stage 5**, boards, task details and reminders. Plan:
-`docs/superpowers/plans/2026-11-23-windows-stage-5-boards-and-reminders.md`,
-three tasks. Tasks 1 and 2 are done; task 3 is the check from a clean
-build. Then stage 6 (import and export of files, the Electron library
-imported on first start, what is left of the menus), and stage 7
-(packages, a release script, and 0.2.0 when the owner asks).
+**Next: stage 6**, import and export of files from the File menu, and the
+Electron library imported on first start with a summary. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-6-import-export.md`. (The
+rest of what the design puts in stage 6 is already there: links from
+outside came with stages 2 and 5, and the Mac's menu bar has nothing else
+that this one lacks.) Then stage 7 (packages, a release script, and 0.2.0
+when the owner asks).
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.
@@ -1256,7 +1256,16 @@ keyboard or touch the clipboard.
   (`SidebarRows.ShowTheSame`), and stays scrolled to where it was when it
   does.
 
-**Stage 5 (boards, task details and reminders)**, built 2026-11-23. Plan:
+**Stage 5 (boards, task details and reminders) is built and verified**
+(2026-11-23): from a clean build, no warnings, 203 Rust tests, 558 .NET
+tests and one skipped on purpose, and the three scripted checks of the
+window (30, 15 and 39). Reviewed by the session that wrote it, by breaking
+rules on purpose where a test had passed at its first run (six, all
+caught) and by a read-through that found three things, each then given a
+test that failed first: a task deleted or sent to the trash under an open
+task window was still written to; a program that only hosts the app would
+have been given its links; and the process took an identity it did not
+need. No one else has read it. Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-5-boards-and-reminders.md`.
 
 - Done (Task 1): what a board and a task window decide, in classes with no
@@ -1297,3 +1306,13 @@ keyboard or touch the clipboard.
   - Tests write their log lines to `%TEMP%\heracles-tests-log`, not into
     the log of the app the owner runs (a module initialiser in
     `TestLibrary.cs`). Before this stage they wrote into the real one.
+  - **Every write `TaskDetail` makes asks first whether the task is still
+    there and its list out of the trash** (`CanChange`): another window
+    may have changed either since this one last looked.
+  - The app does not give its process an identity
+    (`SetCurrentProcessExplicitAppUserModelID`), though the toast spike
+    did. Handing a reminder to Windows does not need it (the opt-in test
+    does it from a process that never said who it was), and it parts a
+    running app from a taskbar pin made from its program file.
+  - Links are registered to the app's own program only: started by a
+    host, the path would be the host's.

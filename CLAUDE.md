@@ -71,7 +71,18 @@ Claude's calls, open to change:
   `EditorDocument` are mutable classes changed in place as on the Mac, with
   `Clone()` (deep) wherever Swift copies by assigning and `SameAs()` for
   comparison; `BlockIDs` passed `inout` is the class `BlockIds`; a Swift
-  `Range<Int>` is `int start, int end`.
+  `Range<Int>` is `int start, int end`. A Swift function told apart by an
+  argument label carries the label in its name (`insert(_:after:)` is
+  `InsertAfter`, `stop(before:)` is `StopBefore`, `path(to:)` is `PathTo`,
+  and `blocks(from:to:)` is `BlocksBetween`, since `Blocks` is taken). A
+  Swift enum with a payload is a record struct with members that make it
+  (`BlockTarget.Heading(2)`, `DropTarget.Before(id)`).
+- What follows from blocks being classes, for anyone writing against the
+  model: a block found in a document (`Block(id)`, `Stops`) **is** the
+  block, not a copy, so a value needed from before a change is read before
+  the change; one `Block` object must never sit in two places in a tree
+  (`Fresh` and `Clone` make copies); and `Tidy` makes the lists of blocks
+  anew, so no `Blocks` or `Children` list is kept across an edit.
 
 Out of scope, because the Mac has not built them either: updating itself,
 syntax colouring in code blocks, find within a note, selecting text across
@@ -106,8 +117,11 @@ app/
     Editor/               the editor's document model, no WPF in it:
                           JsonValue, RichText, EditorBlock (Block,
                           EditorDocument and its stored JSON, BlockIds),
-                          EditorSelection, EditorDocument.Tree (so far
-                          only finding a block)
+                          EditorSelection, EditorDocument.Tree (finding
+                          blocks, the order the caret meets them in),
+                          EditorDocument.Editing (every edit that changes
+                          a note's shape, BlockTarget, DropTarget, and
+                          RichText's typing shortcuts)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -779,23 +793,31 @@ Decided by the owner on 2026-11-22: the earlier account name stays in
 `LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
 the Mac repository. Do not change either.
 
-**Stage 3 (the editor's document model) is under way: two of its three
-tasks are done.** Plan: `docs/superpowers/plans/2026-11-22-windows-stage-3-editor-model.md`.
+**Stage 3 (the editor's document model) is written: its three tasks of
+code are done, and the stage's own check (Task 4) is next.** Plan:
+`docs/superpowers/plans/2026-11-22-windows-stage-3-editor-model.md`.
 
 - Done, each translated from the Mac with its tests: `JsonValue` and
   `RichText` (Task 1); `Block`, `EditorDocument` read from and written to
-  the stored JSON, `BlockIds`, `EditorSelection` (Task 2). 185 .NET tests
-  pass. Nothing in the app uses the model yet: a note is still shown
-  through `ReadOnlyDocument`.
-- **Next: Task 3**, the largest. Translate
-  `macos/Sources/HeraclesApp/Editor/EditorDocument+Tree.swift` (114 lines)
-  and `EditorDocument+Editing.swift` (656 lines) into
-  `EditorDocument.Tree.cs` (begun: `AllBlocks`, `Block(id)`, `Contains`) and
-  `EditorDocument.Editing.cs`, after translating
-  `macos/Tests/HeraclesAppTests/EditorDocumentTests.swift` (98 tests) into
-  `app/Heracles.Tests/Editor/EditorDocumentTests.cs`. The test builders
-  (`P`, `Bullet`, `Doc`, `Outline`, `Shape`…) are already in
-  `EditorTestSupport.cs`. Then Task 4 (verify the stage).
+  the stored JSON, `BlockIds`, `EditorSelection` (Task 2); the tree and
+  every edit that changes a note's shape (Task 3): split, the two deletes,
+  indent and outdent, turning a block into another kind, remove, duplicate,
+  move (with columns), the Markdown beginnings, paste, selecting whole
+  blocks, blocks as plain text, and on `RichText` the inline Markdown marks
+  and linking a typed web address.
+- 302 .NET tests pass (203 Rust). Of the 117 for Task 3, 97 are the Mac's
+  `EditorDocumentTests.swift` test for test (the plan said 98; there are
+  97), and 20 are new: finding blocks, and what a C# translation can get
+  wrong that Swift cannot (a stale id or offset from a view, a note
+  emptied, an id given twice, a copy that shares something with its
+  original).
+- Where the Windows model differs from the Mac's on purpose: a numbered
+  list begins from digits only (the Mac also reads a sign, so `+1. ` makes
+  a list there); `Paste` brings a stale range back into the text before
+  using it; `Move` takes an id given twice as one block.
+- Nothing in the app uses the model yet: a note is still shown through
+  `ReadOnlyDocument`.
+- **Next: Task 4**, verify the stage from a clean build.
 
 After stage 3: stage 4, the editor's views, which reads "Spike findings"
 above. Plans are in `docs/superpowers/plans/`.

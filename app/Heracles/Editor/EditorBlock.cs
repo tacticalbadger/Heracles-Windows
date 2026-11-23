@@ -172,7 +172,10 @@ internal sealed class Block
     // Copies and comparison: what a Swift struct does by itself.
 
     /// <summary>A copy with nothing shared: its children are copies too.</summary>
-    public Block Clone() => new(Id, Kind, Text, Children.Select(child => child.Clone()), Attrs, ParagraphId)
+    public Block Clone() => CopyHolding(Children.Select(child => child.Clone()));
+
+    /// <summary>A copy of this block alone, holding the blocks given in place of its own.</summary>
+    internal Block CopyHolding(IEnumerable<Block> children) => new(Id, Kind, Text, children, Attrs, ParagraphId)
     {
         StartsList = StartsList,
         ListAttrs = new Dictionary<string, JsonValue>(ListAttrs),

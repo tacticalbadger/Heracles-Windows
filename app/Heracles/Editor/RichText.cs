@@ -141,7 +141,7 @@ internal sealed record TextStyle
 /// block is the character <c>\n</c>. A text never changes: every edit gives
 /// a new one.
 /// </summary>
-internal sealed class RichText : IEquatable<RichText>
+internal sealed partial class RichText : IEquatable<RichText>
 {
     /// <summary>
     /// A run of text. <see cref="Atom"/> is an inline node this editor does

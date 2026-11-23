@@ -116,6 +116,19 @@ internal static class EditorTestSupport
     /// <summary>An outline written in a test, with its indentation and line endings made plain.</summary>
     public static string Lines(string text) => text.ReplaceLineEndings("\n");
 
+    /// <summary>
+    /// Run an edit on a document. Gives back the document as an outline and
+    /// where the edit left the selection (<c>nil</c> when it gave none). New
+    /// blocks get the ids n1, n2, and so on.
+    /// </summary>
+    public static (string Outline, string Selection) Edit(
+        EditorDocument document, Func<EditorDocument, BlockIds, EditorSelection?> change)
+    {
+        var ids = BlockIds.Sequential();
+        var selection = change(document, ids);
+        return (Outline(document), selection is null ? "nil" : Shape(selection));
+    }
+
     /// <summary>A selection as text: <c>a|3</c> is a caret, <c>a|1-4</c> a range, <c>[a b]</c> blocks.</summary>
     public static string Shape(EditorSelection selection) => selection switch
     {

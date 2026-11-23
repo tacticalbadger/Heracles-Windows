@@ -1064,45 +1064,37 @@ stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
 after that stays local until he says push: `git log origin/main..HEAD`
 lists it.
 
-**Where things stand: stages 0 to 5 of the design's seven are done. The app
-can be browsed, a note can be written in it, and a todo list is a board.** One process per library, any number of windows, a sidebar, panes
-and tabs, Quick Open; a native block editor with the Mac editor's
-behaviour (every kind of block, Markdown as it is typed, the slash menu,
-marks and links, the editor's own undo, copy and paste, pictures, and
-saving that loses nothing on close or quit); boards with columns and
-cards, a window for each task with everything the Mac's task has, and
-reminders handed to Windows. From a clean build at the end of stage 5: no
-warnings, 203 Rust tests, 558 .NET tests and one skipped on purpose (it
-talks to Windows' notification platform: `HERACLES_TEST_TOASTS=1` runs
-it), and 84 scripted checks of the real window (`check-shell.ps1` 30,
-`check-editor.ps1` 15, `check-boards.ps1` 39).
+**Where things stand: stages 0 to 6 of the design's seven are done. The app
+does what the Mac app does.** One process per library, any number of
+windows, a sidebar, panes and tabs, Quick Open; a native block editor with
+the Mac editor's behaviour (every kind of block, Markdown as it is typed,
+the slash menu, marks and links, the editor's own undo, copy and paste,
+pictures, and saving that loses nothing on close or quit); boards with
+columns and cards, a window for each task with everything the Mac's task
+has, and reminders handed to Windows; files imported and a note exported
+from the File menu; and a library left by the Electron app brought across
+at the first start, with a summary. From a clean build at the end of stage
+6: no warnings, 203 Rust tests, 600 .NET tests and one skipped on purpose
+(it talks to Windows' notification platform: `HERACLES_TEST_TOASTS=1` runs
+it), and 114 scripted checks of the real window (`check-shell.ps1` 30,
+`check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
+`check-legacy.ps1` 20).
 
-**What that does not say** is under "Not verified", and two entries
+**What that does not say** is under "Not verified", and three entries
 matter. Nobody has yet typed, clicked or dragged in the app with a real
 keyboard and mouse: the tests reach the code behind every key and every
 mouse gesture, with real text boxes, but not the last inch between Windows'
-input and that code. And the app has never yet made itself known to
-Windows (its link scheme, its reminders), because it does that only on the
-real library and has only ever been started on fixtures: the first start
-on the real library is the first time that runs.
+input and that code. The app has never yet made itself known to Windows
+(its link scheme, its reminders), because it does that only on the real
+library and has only ever been started on fixtures: the first start on the
+real library is the first time that runs. And that same first start is
+when a real Electron library, if there is one, is imported for the first
+time: only made-up ones have been.
 
-**In hand: stage 6**, import and export of files from the File menu, and
-the Electron library imported on first start with a summary. Plan:
-`docs/superpowers/plans/2026-11-23-windows-stage-6-import-export.md`, three
-tasks. **Task 1 is done**: File > Import (Ctrl+Shift+I) and File > Export
-as Markdown (Ctrl+Shift+E), with `Model/Transfer.cs`, 30 tests, and
-`tools\e2e\check-transfer.ps1` (10 checks, through the system's own
-dialogs). **Task 2 is done**: a library the Electron app left in the
-library folder is brought across before the first window opens
-(`Model/AppModel.Legacy.cs`), and a summary says what came
-(`ImportSummaryWindow.cs`); 12 tests against the library in
-`app/Heracles.Tests/Fixtures`, and `tools\e2e\check-legacy.ps1` (20
-checks). 600 .NET tests pass, and 114 scripted checks. Task 3 is the check
-from a clean build. (The
-rest of what the design puts in stage 6 is already there: links from
-outside came with stages 2 and 5, and the Mac's menu bar has nothing else
-that this one lacks.) Then stage 7 (packages, a release script, and 0.2.0
-when the owner asks).
+**Next: stage 7**, packages for both processors, a release script, release
+notes and a README for the app as it is. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`.
+0.2.0 itself is published when the owner asks.
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.
@@ -1375,3 +1367,34 @@ need. No one else has read it. Plan:
     running app from a taskbar pin made from its program file.
   - Links are registered to the app's own program only: started by a
     host, the path would be the host's.
+
+**Stage 6 (import, export and the Electron library) is built and verified**
+(2026-11-23): from a clean build, no warnings, 203 Rust tests, 600 .NET
+tests and one skipped on purpose, and the five scripted checks of the
+window (114 in all). Reviewed by the session that wrote it, by breaking
+rules on purpose where a test had passed at its first run (six, five
+caught; the one that was not is a guard the core makes redundant, kept as
+on the Mac); no one else has read it. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-6-import-export.md`.
+
+- Done (Task 1): File > Import (Ctrl+Shift+I) and File > Export as
+  Markdown (Ctrl+Shift+E). `Model/Transfer.cs` says which files the dialog
+  offers and what an exported note is called; the reading and writing are
+  the core's. `check-transfer.ps1` goes through the system's own dialogs.
+- Done (Task 2): a library the Electron app left (`heracles.sqlite` in the
+  library folder) is brought across before the first window opens, and
+  `ImportSummaryWindow` says what came. `check-legacy.ps1` checks the first
+  start, the second, and an old library that is not a database.
+- For whoever changes it:
+  - The import is asked for at every start, and is cheap when there is
+    nothing to do: no old file, or a library that already holds notes.
+    The core refuses a second import by a mark it keeps in the new
+    library, so a library emptied by hand does not fill up again.
+  - The core copies the old database through SQLite's backup interface.
+    The copy is the same library, not the same bytes.
+  - The system's file dialogs are driven by window messages (see "Found on
+    Windows"). The Open dialog gives the files back in an order of its own.
+  - A note's name in the automation tree (`NoteText:<leaf>`) holds line
+    breaks when the note has several blocks, and `ui.ps1 find` then prints
+    several lines, of which the helpers read the first. Ask for a block
+    by its words (`Get-UiId -Name '…' -Prefix 'Block:'`).

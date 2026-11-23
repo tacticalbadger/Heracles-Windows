@@ -1186,12 +1186,16 @@ As of 2026-11-23, on `main`. `main` on GitHub was replaced on 2026-11-22
 its history are no longer there. Any other clone of this repository must
 `git fetch origin` and `git reset --hard origin/main` before it is used,
 and must never push its old history. **All of `main` was pushed on
-2026-11-23, this commit included, and 0.2.0 was released, on the owner's
-word.** What is committed after that stays local until he says push:
-`git log origin/main..HEAD` lists it.
+2026-11-23, this commit included, and 0.2.0 and then 0.2.1 were released,
+on the owner's word.** What is committed after that stays local until he
+says push: `git log origin/main..HEAD` lists it.
 
-**This commit is the one 0.2.1 is built from** (2026-11-23, on the owner's
-word: "the next release as an iso"). The app is 0.2.0's, unchanged: no file
+**The latest release is 0.2.1, handed out as disc images** (2026-11-23, on
+the owner's word: "the next release as an iso".
+https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.1,
+the tag `v0.2.1` at commit `2444eeb`, build 46, with
+`Heracles-0.2.1-win-arm64.iso`, `Heracles-0.2.1-win-x64.iso` and
+`SHA256SUMS`). The app is 0.2.0's, unchanged: no file
 under `app/` or `core/` differs but the version. What changed is the
 package. `tools\build.ps1 package` makes
 `Heracles-<version>-win-<arch>.iso` where it made a zip: the app in a
@@ -1203,15 +1207,14 @@ searches the whole image, not three files of it, for this machine's
 profile folder. `tools\e2e\check-disc.ps1` opens the image as a drive and
 starts the app from the disc (16 checks; given the ARM64 disc under the
 x64 name, three of them fail, as they should). `tools\publish.ps1` sends
-the `.iso` files, and its install text is rewritten for a disc. Whether
-0.2.1 is out is on the releases page; the commit after this one records
-how the release went.
+the `.iso` files, and its install text is rewritten for a disc. How the
+release went is under "Stage 7" at the end.
 
 **Where things stand: the app is built and released. All seven stages of
-the design are done, and 0.2.0 is on GitHub** (2026-11-23:
+the design are done.** 0.2.0 came first (2026-11-23:
 https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.0,
-the tag `v0.2.0` at commit `4fd1a3d`, build 44, with the zips for ARM64 and
-x64 and `SHA256SUMS`). The app
+the tag `v0.2.0` at commit `4fd1a3d`, build 44, with zips for ARM64 and
+x64), and is still there. The app
 does what the Mac app does: one process per library, any number of
 windows, a sidebar, panes and tabs, Quick Open; a native block editor with
 the Mac editor's behaviour (every kind of block, Markdown as it is typed,
@@ -1225,10 +1228,10 @@ ticked. From a clean build at the end: no warnings, 203 Rust tests, 608
 .NET tests and one skipped on purpose (it talks to Windows' notification
 platform: `HERACLES_TEST_TOASTS=1` runs it), 114 scripted checks of the
 real window by automation (`check-shell.ps1` 30, `check-editor.ps1` 15,
-`check-boards.ps1` 39, `check-transfer.ps1` 10, `check-legacy.ps1` 20) and
-23 by a real mouse and keyboard (`check-input.ps1`). Both packages were
-built, each was started and checked, and they are the files of the
-release: see "Stage 7" at the end.
+`check-boards.ps1` 39, `check-transfer.ps1` 10, `check-legacy.ps1` 20), 16
+of a packaged disc (`check-disc.ps1`) and 23 by a real mouse and keyboard
+(`check-input.ps1`). Both packages were built, each was started and
+checked, and they are the files of the release: see "Stage 7" at the end.
 
 **What that does not say** is under "Not verified", and three entries
 matter. The release changes none of them: it was made, on the owner's
@@ -1600,7 +1603,7 @@ on the Mac); no one else has read it. Plan:
   tests pass.
 
 **Stage 7 (package and release) is done: 0.2.0 was released on
-2026-11-23.**
+2026-11-23, and 0.2.1 the same day.**
 Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`.
 
 - Done (Task 1): `tools\publish.ps1`, `docs\release-notes\0.2.0.md`, and
@@ -1637,6 +1640,23 @@ Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`
 - Still untried in the script: `-Replace`, `-Prerelease`, and carrying on
   with a draft that a failed run left behind. GitHub says the 0.2.0
   release is not immutable, so `-Replace` is open to it.
+- **0.2.1, the same app as disc images** (2026-11-23, on the owner's word).
+  203 Rust and 608 .NET tests passed on what was then committed as
+  `2444eeb` and pushed, and both packages were built from it (build 46:
+  `Heracles-0.2.1-win-arm64.iso`, 176 MB; `Heracles-0.2.1-win-x64.iso`,
+  165 MB), each read back by the package step. Against those packages:
+  `check-disc.ps1` on both (16 each: the image opened as a drive, and the
+  app started from the disc, the x64 one under emulation); all five
+  automation checks on the ARM64 package (114) and `check-shell.ps1` on
+  the x64 one (30); and `check-input.ps1` on the ARM64 package (23, by a
+  real mouse and keyboard, with the owner told first). The dry run read
+  right, and `tools\publish.ps1` published at its first run this time,
+  with a release already in the list. Read back from GitHub with no
+  credential: `v0.2.1` at `2444eeb`, not a draft, the latest release,
+  and the digests GitHub gives for both images are the ones in
+  `SHA256SUMS`.
 - Packages are not kept: they are under `build\release`, which is not in
   git, and they are only good for the commit they were built from. The
-  ones on this machine are the released ones, build 44.
+  ones on this machine are the released ones of 0.2.1, build 46 (and the
+  zips of 0.2.0, whose `SHA256SUMS` the later build wrote over; GitHub
+  has that file).

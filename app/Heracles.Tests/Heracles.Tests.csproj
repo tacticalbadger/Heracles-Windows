@@ -24,6 +24,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Files the tests read: see Fixtures\README.md. -->
+    <Content Include="Fixtures\legacy.sqlite" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- A WPF project's implicit usings leave this one out. -->
     <Using Include="System.IO" />
     <Using Include="Xunit" />

@@ -87,11 +87,35 @@ public partial class App : Application
 
         Model.PendingLinkChanged += TakePendingLink;
         Model.ErrorChanged += ShowError;
+
+        // A library the Electron app left behind is brought across before the
+        // first window opens, so that the window opens on it. If it cannot be
+        // read, the app starts on its own empty library and says so.
+        var imported = Model.ImportLegacyLibraryIfNeeded(AppModel.LegacyDatabase(AppPaths.DataDirectory));
+        if (imported is not null)
+        {
+            Log.Info($"legacy: imported {imported.Notes} notes, {imported.Tasks} tasks, {imported.Images} images");
+        }
+        else if (Model.LastError is { } failure)
+        {
+            Log.Error("legacy: could not be imported: " + failure);
+        }
+
         RegisterWithWindows(Model);
 
         var saved = WindowStates.Load(AppPaths.WindowsPath);
         if (saved.Count == 0) OpenWindow();
         foreach (var window in saved) OpenWindow(window);
+
+        // Said once, over the first window. It is not modal: the app can be
+        // used behind it, and a second copy started meanwhile still hands over.
+        if (imported is not null)
+        {
+            var summary = new ImportSummaryWindow(imported);
+            if (frontmost is { IsVisible: true }) summary.Owner = frontmost;
+            else summary.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            summary.Show();
+        }
 
         if (e.Args.Select(AppLink.Parse).FirstOrDefault(link => link is not null) is { } link) Model.PendingLink = link;
     }

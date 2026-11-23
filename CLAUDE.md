@@ -121,10 +121,12 @@ Cargo.toml, Cargo.lock    workspace with the one member; output in target\
 app/
   Heracles/               the WPF project (net10.0-windows10.0.22621.0)
     App.xaml(.cs)         startup, single instance, the windows, errors
+    ImportSummaryWindow.cs  what came across from the Electron app's library
     SingleInstance.cs     one process per library; hand-over by named pipe
     MainWindow.xaml(.cs)  one window: menus, shortcuts, saved layout
     Model/                AppModel (the change feed; .Boards.cs: board
-                          actions), Library, Navigation (AppLink,
+                          actions; .Legacy.cs: the Electron app's library,
+                          and the summary's words), Library, Navigation (AppLink,
                           NavigationPolicy), Transfer (which files a dialog
                           offers, what an exported note is called)
     Workspaces/           PaneTree (immutable), Workspace, PaneNodeView
@@ -169,7 +171,10 @@ app/
                           app's identity, WindowsIntegration: what the app
                           writes in the registry for itself at start)
   Heracles.Tests/         xunit tests: the crossing into the core
-                          (BindingTests) and every class with logic
+                          (BindingTests) and every class with logic.
+                          Fixtures/legacy.sqlite is a small library as the
+                          Electron app kept it (its README says what is in
+                          it and how it was made)
   Generated/, runtimes/   produced by the core build, not in git
   Directory.Build.props   version from VERSION, build number, PathMap
   nuget.config            pins nuget.org
@@ -278,6 +283,8 @@ tools\e2e\check-shell.ps1             # the scripted check of the window: 30 che
 tools\e2e\check-editor.ps1            # the scripted check of writing in a note: 15 checks
 tools\e2e\check-boards.ps1            # the scripted check of a board and a task: 39 checks
 tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
+tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electron app's library, to be imported
+tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
 tools\e2e\launch.ps1 --e2e-seed --theme-light   # the app in light (or --theme-dark) whatever Windows is set to
@@ -341,7 +348,9 @@ looking at (one showed Quick Open white on white in dark mode).
   `instance: second launch: <args>`; `error shown: <text>`; `exit`. On the
   real library only (never on a fixture): `windows: links and reminders
   registered`, and `reminders: <n> scheduled, <m> taken back` when a sync
-  changed anything.
+  changed anything. At a first start beside an Electron library: `legacy:
+  imported <n> notes, <n> tasks, <n> images`, or `legacy: could not be
+  imported: <reason>`.
 - Automation ids. Sidebar: `Sidebar` (the list), rows `note:<id>` (in the
   tree), `favorite:<id>`, `archived:<id>`, `trashed:<id>`, headers
   `notebook:<id>`, `section:favorites|archive|trash`, `toggle:<id>`,
@@ -361,7 +370,10 @@ looking at (one showed Quick Open white on white in dark mode).
   Quick Open: `Switcher`, `SwitcherQuery`, `SwitcherResult:<noteId>`. Icon
   picker: `IconPicker`, `Icon:<emoji>`, `IconTyped`, `IconRemove`. Dialogs:
   `PromptTitle`, `PromptInput`, `PromptOk`, `PromptCancel`, `ErrorText`,
-  `ErrorOk`. `StartupError` shows only when the library did not open. Menu
+  `ErrorOk`. `StartupError` shows only when the library did not open. The
+  summary of an import: `ImportSummary`, `ImportSummaryCounts`,
+  `ImportSummaryBackup` (a text box: its value is the path),
+  `ImportSummaryRepair:<n>`, `ImportSummaryOk`. Menu
   items go by name (`ui.ps1 expand -Name View`, then `invoke -Name 'Split
   Right'`).
 - Automation ids of a board: `Board:<leafId>`, `Column:<columnId>` (named
@@ -635,7 +647,9 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Import of Markdown and HTML files; export as Markdown (File > Import
       and File > Export as Markdown, checked through the system's own
       dialogs)
-- [ ] The Electron library imported on first start, with a summary
+- [x] The Electron library imported on first start, with a summary (checked
+      in the window with a small made-up library; **no real Electron
+      library has ever been imported**: see "Not verified")
 - [x] Quick Open, the icon picker, the menu bar (with Edit and Format)
 - [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
       handed over between copies, and the editor scrolls to the block and
@@ -991,6 +1005,16 @@ swaps in the text box and puts the caret where the click was.
   properly. Windows itself was in dark mode; the app following a change of
   Windows' own setting while it runs has not been seen.
 - A window saved on a second display that is then unplugged.
+- **A real Electron library.** The import has only ever been given the
+  small library in `app/Heracles.Tests/Fixtures` and the ones the core's
+  own tests make. The owner's own (`%APPDATA%\Heracles\heracles.sqlite`, if
+  the Electron app was used on this PC) is imported the first time the
+  native app starts on the real library, which has not happened yet. The
+  core copies the old file to `backups\` first and only ever reads it, and
+  both the core's tests and `check-legacy.ps1` check that it is byte for
+  byte as it was afterwards. The design also asks that the folder be
+  confirmed against a machine that has run the Electron build (Electron
+  names it `heracles`; Windows file names ignore case): not done.
 
 ## Known faults
 
@@ -1022,6 +1046,8 @@ Found and not yet fixed. Each is small; none loses data.
   and not handed over is dropped when the board or the task window goes.
   The Mac does the same.
 - A task window is not reopened when the app starts again.
+- The summary of an import names a note that had to be adjusted by its id,
+  not by its title (the core's words; the Mac shows the same).
 - A reminder can be set for a time already past. It is kept on the task and
   never scheduled. (The Mac allows the same.)
 - The title and icon stand over the editor's column by fixed margins, so
@@ -1066,8 +1092,13 @@ the Electron library imported on first start with a summary. Plan:
 tasks. **Task 1 is done**: File > Import (Ctrl+Shift+I) and File > Export
 as Markdown (Ctrl+Shift+E), with `Model/Transfer.cs`, 30 tests, and
 `tools\e2e\check-transfer.ps1` (10 checks, through the system's own
-dialogs). 588 .NET tests pass. Task 2 is the Electron library; its test
-library is already at `app/Heracles.Tests/Fixtures/legacy.sqlite`. (The
+dialogs). **Task 2 is done**: a library the Electron app left in the
+library folder is brought across before the first window opens
+(`Model/AppModel.Legacy.cs`), and a summary says what came
+(`ImportSummaryWindow.cs`); 12 tests against the library in
+`app/Heracles.Tests/Fixtures`, and `tools\e2e\check-legacy.ps1` (20
+checks). 600 .NET tests pass, and 114 scripted checks. Task 3 is the check
+from a clean build. (The
 rest of what the design puts in stage 6 is already there: links from
 outside came with stages 2 and 5, and the Mac's menu bar has nothing else
 that this one lacks.) Then stage 7 (packages, a release script, and 0.2.0

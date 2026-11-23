@@ -24,3 +24,18 @@ internal sealed class TestLibrary : IDisposable
         catch (UnauthorizedAccessException) { }
     }
 }
+
+/// <summary>What every test run does first.</summary>
+internal static class TestRun
+{
+    /// <summary>
+    /// Whatever the code under test writes to the log goes to a file of the
+    /// tests' own, not into the log of the app the user runs.
+    /// </summary>
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Begin()
+    {
+        var log = Path.Combine(Path.GetTempPath(), "heracles-tests-log", "heracles.log");
+        Environment.SetEnvironmentVariable(AppPaths.LogPathVariable, log);
+    }
+}

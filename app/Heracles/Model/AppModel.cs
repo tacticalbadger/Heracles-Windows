@@ -15,7 +15,7 @@ internal readonly record struct DocumentChange(long Revision, string? Origin);
 /// change feed says something changed, whoever changed it. That is what keeps
 /// two windows in step without either knowing about the other.
 /// </summary>
-internal sealed class AppModel : IDisposable
+internal sealed partial class AppModel : IDisposable
 {
     private readonly int ownerThread = Environment.CurrentManagedThreadId;
     private readonly Action<Action> post;

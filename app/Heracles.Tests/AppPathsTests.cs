@@ -25,6 +25,16 @@ public sealed class AppPathsTests
     }
 
     [Fact]
+    public void ALibraryPutSomewhereElseIsATestLibrary()
+    {
+        // Such a run must not take the user's links or put reminders on the screen.
+        Assert.False(AppPaths.Resolve(Environment(), @"C:\A", @"C:\L").IsTestLibrary);
+        Assert.True(AppPaths.Resolve(Environment(("HERACLES_DATA_DIR", @"D:\x")), @"C:\A", @"C:\L").IsTestLibrary);
+        Assert.False(AppPaths.Resolve(Environment(("HERACLES_DATA_DIR", "")), @"C:\A", @"C:\L").IsTestLibrary);
+        Assert.False(AppPaths.Resolve(Environment(("HERACLES_LOG_PATH", @"D:\y\log.txt")), @"C:\A", @"C:\L").IsTestLibrary);
+    }
+
+    [Fact]
     public void AnEmptyOverrideIsIgnored()
     {
         var locations = AppPaths.Resolve(Environment(("HERACLES_DATA_DIR", "")), @"C:\A", @"C:\L");

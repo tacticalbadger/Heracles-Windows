@@ -890,7 +890,7 @@ library, any number of windows, a sidebar, panes and tabs, Quick Open, and
 a native block editor with the Mac editor's behaviour: every kind of block,
 Markdown as it is typed, the slash menu, marks and links, the editor's own
 undo, copy and paste, pictures, and saving that loses nothing on close or
-quit. From a clean build: no warnings, 203 Rust tests, 438 .NET tests, and
+quit. From a clean build at the end of stage 4: no warnings, 203 Rust tests, 438 .NET tests (537 now, with stage 5's first task), and
 45 scripted checks of the real window (`check-shell.ps1` 30,
 `check-editor.ps1` 15).
 
@@ -900,14 +900,18 @@ keyboard and mouse. The tests reach the code behind every key and every
 mouse gesture, with real text boxes, but not the last inch between Windows'
 input and that code.
 
-**Next: stage 5**, boards, task details and reminders (the design's
-"Boards and tasks" and "Reminders"; the Mac's `BoardView.swift`,
-`TaskDetailView.swift`, `TaskSupport.swift` and their tests; the fourth
-spike's findings on scheduled toasts). It has no plan yet: write one in
-`docs/superpowers/plans/` first. A todo list still says "Boards arrive in a
-later version." Then stage 6 (import and export of files, the Electron
-library imported on first start, the link scheme registered with Windows),
-and stage 7 (packages, a release script, and 0.2.0 when the owner asks).
+**In hand: stage 5**, boards, task details and reminders. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-5-boards-and-reminders.md`,
+three tasks. **Task 1 is done**: everything a board and a task window
+decide, with no view in it (`Boards/`: `TaskSupport.cs`, `Board.cs`,
+`TaskDetail.cs`, `ReminderScheduler.cs`; `Model/AppModel.Boards.cs`;
+`Support/LinkRegistration.cs`), and 99 tests for it against a real core.
+Nothing in the app uses it yet: a todo list still says "Boards arrive in a
+later version." Task 2 is the views (`BoardView`, the task window), the
+real Windows notifications behind `IReminderCenter`, and a scripted check.
+Then stage 6 (import and export of files, the Electron library imported on
+first start), and stage 7 (packages, a release script, and 0.2.0 when the
+owner asks).
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.

@@ -1,7 +1,12 @@
 namespace Heracles.Support;
 
 /// <summary>Where the app keeps its files.</summary>
-internal sealed record AppLocations(string DataDirectory, string LogPath);
+/// <param name="IsTestLibrary">
+/// The library folder was given by <c>HERACLES_DATA_DIR</c>: a test, or a try
+/// on a copy. Such a run takes nothing of the user's for itself: not the link
+/// scheme, and no notifications.
+/// </param>
+internal sealed record AppLocations(string DataDirectory, string LogPath, bool IsTestLibrary);
 
 /// <summary>
 /// Where the app keeps its files. The library folder is the one the Electron
@@ -24,7 +29,8 @@ internal static class AppPaths
 
         return new AppLocations(
             Override(DataDirectoryVariable) ?? Path.Combine(appData, "Heracles"),
-            Override(LogPathVariable) ?? Path.Combine(localAppData, "Heracles", "heracles.log"));
+            Override(LogPathVariable) ?? Path.Combine(localAppData, "Heracles", "heracles.log"),
+            IsTestLibrary: Override(DataDirectoryVariable) is not null);
     }
 
     // Static fields are initialised in the order written: this one first, so
@@ -37,6 +43,8 @@ internal static class AppPaths
     public static string DataDirectory => Current.DataDirectory;
 
     public static string LogPath => Current.LogPath;
+
+    public static bool IsTestLibrary => Current.IsTestLibrary;
 
     /// <summary>The windows that were open, kept beside the library they show.</summary>
     public static string WindowsPath => Path.Combine(DataDirectory, "windows.json");

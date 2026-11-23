@@ -203,6 +203,19 @@ public sealed class BlockTextBoxTests
     });
 
     [Fact]
+    public void TheTextAndTheCaretAskForTheThemesTextColour() => Sta.Run(() =>
+    {
+        // A text box's document takes its colour from nowhere by itself: in
+        // the window it was black on a dark page, with every test passing.
+        // No theme is loaded here, so all that can be said is that each of
+        // the three is told to look the colour up.
+        var box = Box(P("a", "Hello"));
+        Assert.NotEqual(DependencyProperty.UnsetValue, box.ReadLocalValue(System.Windows.Controls.Control.ForegroundProperty));
+        Assert.NotEqual(DependencyProperty.UnsetValue, box.ReadLocalValue(System.Windows.Controls.Primitives.TextBoxBase.CaretBrushProperty));
+        Assert.NotEqual(DependencyProperty.UnsetValue, box.Document.ReadLocalValue(TextElement.ForegroundProperty));
+    });
+
+    [Fact]
     public void WhatIsTypedArrivesOnceTheDispatcherHasRun() => Sta.Run(() =>
     {
         var box = Box(P("a", "Hello"));

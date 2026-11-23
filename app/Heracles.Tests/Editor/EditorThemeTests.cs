@@ -106,6 +106,10 @@ public sealed class EditorThemeTests
         var inlines = EditorTheme.Inlines(block, emoji: true).ToList();
         var emoji = Assert.Single(inlines.OfType<global::Emoji.Wpf.EmojiInline>());
         Assert.Equal("💡", emoji.Text);
+        // Its own colour is pinned. Left to take the colour of the text
+        // around it, it is drawn as a flat shape of that colour: on a dark
+        // page, a white blob (seen in the window, not in any test).
+        Assert.NotEqual(DependencyProperty.UnsetValue, emoji.ReadLocalValue(TextElement.ForegroundProperty));
         // The text is all still there, in order, when it is read back.
         var paragraph = new Paragraph();
         paragraph.Inlines.AddRange(inlines);

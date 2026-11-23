@@ -13,6 +13,45 @@ internal static class E2eSeed
     private static string Document(string text) =>
         """{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":""" + System.Text.Json.JsonSerializer.Serialize(text) + "}]}]}";
 
+    /// <summary>A note holding one of everything the editor draws, to be looked at.</summary>
+    private const string EveryKind =
+        """
+        {"type":"doc","content":[
+          {"type":"heading","attrs":{"level":1},"content":[{"type":"text","text":"A trip to the coast"}]},
+          {"type":"paragraph","content":[
+            {"type":"text","text":"Plain words, then "},{"type":"text","text":"bold","marks":[{"type":"bold"}]},
+            {"type":"text","text":", "},{"type":"text","text":"italic","marks":[{"type":"italic"}]},
+            {"type":"text","text":", "},{"type":"text","text":"struck","marks":[{"type":"strike"}]},
+            {"type":"text","text":", "},{"type":"text","text":"code","marks":[{"type":"code"}]},
+            {"type":"text","text":" and "},{"type":"text","text":"a link","marks":[{"type":"link","attrs":{"href":"https://example.com"}}]},
+            {"type":"text","text":", with a lantern 💡 and a compass 🧭 among them."}]},
+          {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"What to bring"}]},
+          {"type":"bulletList","content":[
+            {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Tent"}]},
+              {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Pegs and a mallet"}]}]}]}]},
+            {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Stove"}]}]}]},
+          {"type":"orderedList","content":[
+            {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Book the ferry"}]}]},
+            {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"Pack the car"}]}]}]},
+          {"type":"taskList","content":[
+            {"type":"taskItem","attrs":{"checked":true},"content":[{"type":"paragraph","content":[{"type":"text","text":"Charge the lantern"}]}]},
+            {"type":"taskItem","attrs":{"checked":false},"content":[{"type":"paragraph","content":[{"type":"text","text":"Find the map"}]}]}]},
+          {"type":"heading","attrs":{"level":3},"content":[{"type":"text","text":"Notes"}]},
+          {"type":"blockquote","content":[{"type":"paragraph","content":[{"type":"text","text":"The sea is never the same twice."}]}]},
+          {"type":"calloutBlock","attrs":{"emoji":"🔥"},"content":[{"type":"paragraph","content":[{"type":"text","text":"No fires on the beach after June."}]}]},
+          {"type":"toggleBlock","attrs":{"open":true},"content":[
+            {"type":"paragraph","content":[{"type":"text","text":"Tide times"}]},
+            {"type":"paragraph","content":[{"type":"text","text":"High water at six, low at noon."}]}]},
+          {"type":"codeMirrorBlock","attrs":{"language":"rust","code":"fn main() {\n    println!(\"ahoy\");\n}"}},
+          {"type":"horizontalRule"},
+          {"type":"columnBlock","content":[
+            {"type":"column","attrs":{"width":1},"content":[{"type":"paragraph","content":[{"type":"text","text":"On the left, the way there."}]}]},
+            {"type":"column","attrs":{"width":1},"content":[{"type":"paragraph","content":[{"type":"text","text":"On the right, the way back."}]}]}]},
+          {"type":"image","attrs":{"src":"heracles-image://local/0000000000000000000000000000000000000000000000000000000000000000","alt":"A map of the coast","title":null}},
+          {"type":"paragraph","content":[{"type":"text","text":"The end."}]}
+        ]}
+        """;
+
     public static void Run(Store store)
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(AppPaths.DataDirectoryVariable)))
@@ -37,6 +76,7 @@ internal static class E2eSeed
         store.SetNoteArchived(old.Id, true);
         var scrap = store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "Scrap"));
         store.TrashNote(scrap.Id);
+        store.CreateNote(new NewNote(ParentId: plans.Id, Title: "Every kind of block", Icon: "🧪", Content: EveryKind));
         // Titles a view must cope with: none at all, and far too long.
         var unnamed = store.CreateNote(new NewNote(ParentId: notebook.Id));
         store.RenameNote(unnamed.Id, "");

@@ -254,6 +254,8 @@ internal abstract class TextHoldingView : BlockView
 
     public override BlockTextBox? TextBox => box;
 
+    protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new BlockTextPeer(this);
+
     public override double OwnRowHeight => ownRow;
 
     /// <summary>Shown, faintly, while the block is empty and has the caret.</summary>

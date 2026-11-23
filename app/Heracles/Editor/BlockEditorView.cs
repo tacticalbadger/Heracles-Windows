@@ -35,6 +35,21 @@ internal sealed partial class BlockEditorView : HandLaidView
         Hold(overlay);
         InitializeMouse();
         Hold(SlashMenu);
+
+        // The Edit menu's commands, while whole blocks are selected and the
+        // page itself has the keyboard.
+        bool BlocksSelected() => editor.Selection is EditorSelection.OfBlocks;
+        CommandBindings.Add(new CommandBinding(
+            ApplicationCommands.Copy, (_, _) => editor.CopyToClipboard(cut: false), (_, e) => e.CanExecute = BlocksSelected()));
+        CommandBindings.Add(new CommandBinding(
+            ApplicationCommands.Cut, (_, _) => editor.CopyToClipboard(cut: true),
+            (_, e) => e.CanExecute = editor.IsEditable && BlocksSelected()));
+        CommandBindings.Add(new CommandBinding(
+            ApplicationCommands.Paste, (_, _) => editor.PasteFromClipboard(), (_, e) => e.CanExecute = editor.IsEditable));
+        CommandBindings.Add(new CommandBinding(ApplicationCommands.SelectAll, (_, _) => editor.SelectAllBlocks()));
+        CommandBindings.Add(new CommandBinding(
+            ApplicationCommands.Delete, (_, _) => editor.DeleteSelectedBlocks(),
+            (_, e) => e.CanExecute = editor.IsEditable && BlocksSelected()));
     }
 
     // Keys while whole blocks are selected
@@ -50,6 +65,8 @@ internal sealed partial class BlockEditorView : HandLaidView
     }
 
     public IReadOnlyList<BlockView> RootViews => rootViews;
+
+    protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new EditorPagePeer(this);
 
     /// <summary>Whole blocks that are selected.</summary>
     public IReadOnlyList<string> SelectedBlocks

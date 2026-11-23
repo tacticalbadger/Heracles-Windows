@@ -219,8 +219,36 @@ internal sealed class AppModel : IDisposable
         }
     }
 
-    public void SaveDocument(string noteId, string content, string? origin) =>
-        Attempt(() => Store.SaveDocument(noteId, content, origin));
+    /// <summary>Save a note's content. False when it could not be saved; <see cref="LastError"/> says why.</summary>
+    public bool SaveDocument(string noteId, string content, string? origin) =>
+        Attempt(() => Store.SaveDocument(noteId, content, origin)) is not null;
+
+    // What is not saved yet
+
+    private readonly List<Action> savers = [];
+
+    private sealed class Registration(Action undo) : IDisposable
+    {
+        public void Dispose() => undo();
+    }
+
+    /// <summary>
+    /// An editor holds what was typed for a moment before it saves. It
+    /// registers here, so that closing a window or ending the app can ask
+    /// every editor to save first. Dispose what this returns to stop being
+    /// asked.
+    /// </summary>
+    public IDisposable RegisterSaver(Action save)
+    {
+        savers.Add(save);
+        return new Registration(() => savers.Remove(save));
+    }
+
+    /// <summary>Have every open editor save what it holds. Nothing typed is lost to a window closing.</summary>
+    public void SaveEverything()
+    {
+        foreach (var save in savers.ToList()) save();
+    }
 
     public IReadOnlyList<SearchHit> Search(string query)
     {

@@ -452,6 +452,26 @@ internal sealed partial class BlockEditorController
 
     // For the app around the editor
 
+    /// <summary>The note's words, a line for each block that has any. For a screen reader, and for checks.</summary>
+    public string PlainText => string.Join("\n", Document.AllBlocks.Where(block => block.HasText).Select(block => block.Text.String));
+
+    /// <summary>
+    /// Put other words in a block's place, as one step to undo, with the
+    /// caret after them. This is what "set value" from a screen reader or
+    /// dictation does. False when there is no such block to write in.
+    /// </summary>
+    public bool ReplaceText(string blockId, string text)
+    {
+        if (!IsEditable || Document.Block(blockId) is not { HasText: true } block) return false;
+        var words = EditorTheme.Clean(text);
+        if (block.Kind != BlockKind.Code) words = words.Replace("\n", " ");
+        return Edit((document, _) =>
+        {
+            document.Update(blockId, changed => changed.Text = new RichText(words));
+            return EditorSelection.Caret(blockId, words.Length);
+        });
+    }
+
     /// <summary>
     /// Bring a block into view and mark it for a moment. The id may be a
     /// list item's or that of the paragraph inside it.

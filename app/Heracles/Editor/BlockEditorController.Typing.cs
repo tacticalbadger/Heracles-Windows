@@ -592,6 +592,10 @@ internal sealed partial class BlockEditorController
             case Key.Escape when plain:
                 SelectBlocks([id], extending: false);
                 return true;
+            case Key.Space when control:
+                // A rich text box takes this to strip its formatting, which
+                // here is only how the document's marks are shown.
+                return true;
             default:
                 return false;
         }

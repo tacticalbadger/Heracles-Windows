@@ -113,7 +113,10 @@ app/
                           (PaneHost), PaneLeafView, TabDrag
     Sidebar/              SidebarRows (logic), SidebarView, SwitcherView
                           (Quick Open), NoteIcon
-    Notes/                NoteDetailView, IconPicker, ReadOnlyDocument
+    Notes/                NoteDetailView (a note's title, and its editor),
+                          EditorCoordinator (the app's end of an editor:
+                          loading, saving, pictures, links), IconPicker,
+                          ReadOnlyDocument (a note's words, for tests)
     Editor/               the editor. Its document model, no WPF in it:
                           JsonValue, RichText, EditorBlock (Block,
                           EditorDocument and its stored JSON, BlockIds),
@@ -121,15 +124,16 @@ app/
                           blocks, the order the caret meets them in),
                           EditorDocument.Editing (every edit that changes
                           a note's shape, BlockTarget, DropTarget, and
-                          RichText's typing shortcuts). Its views (so
-                          far): EditorTheme (fonts, sizes, a block's text
+                          RichText's typing shortcuts). Its views:
+                          EditorTheme (fonts, sizes, a block's text
                           as inlines and read back), BlockTextBox (one
                           block's text while it is typed in), BlockViews
                           (a view for each kind of block), BlockEditorView
                           (the page), BlockEditorController (the document,
                           the selection; .Typing.cs: editing and keys;
                           .Actions.cs: block actions, clipboard, pictures;
-                          BlockEditorView.Mouse.cs: the handle and drags)
+                          BlockEditorView.Mouse.cs: the handle and drags),
+                          EditorAutomation (what UI Automation sees of it)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -141,8 +145,9 @@ app/
 tools/build.ps1           targets core, app, test, run, package, clean
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           and synthetic input), adapted from Toolbox;
-                          ui-check (helpers) and check-shell (the scripted
-                          check of the window)
+                          ui-check (helpers), check-shell and check-editor
+                          (the scripted checks of the window and of writing
+                          in a note), look-editor (pictures, light and dark)
 tools/                    (to come) publish.ps1
 docs/                     the design, the plans, the Mac's rewrite notes
 VERSION                   marketing version; build number = commit count
@@ -236,9 +241,24 @@ tools\e2e\launch.ps1 -Again --new-window   # a second copy while one runs: it ha
 tools\e2e\capture.ps1                 # PNG of every Heracles window -> build\e2e\shots
 tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, focus, click, clickat, drag, keys, text
 tools\e2e\check-shell.ps1             # the scripted check of the window: 30 checks, exit code = failures
+tools\e2e\check-editor.ps1            # the scripted check of writing in a note: 15 checks
+tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
+tools\e2e\launch.ps1 --e2e-seed --theme-light   # the app in light (or --theme-dark) whatever Windows is set to
 ```
 
-**Run `tools\e2e\check-shell.ps1` after any change to the window.** It
+**Run `tools\e2e\check-shell.ps1` after any change to the window, and
+`tools\e2e\check-editor.ps1` after any change to the editor or to how a
+note is shown or saved.** The second opens a note, writes in a block by
+automation ("set value"), uses the Format and Edit menus, ticks a task,
+watches a second pane follow, restarts the app to see the words kept, and
+tries to change a note in the trash.
+
+**Then look.** `tools\e2e\look-editor.ps1` takes six pictures. Twice in one
+day a picture showed what 436 passing tests could not: emoji drawn as white
+blobs, and the block being typed in black on a dark page. Colour is in no
+automation tree.
+
+About `check-shell.ps1`: it
 resets the fixture, seeds it, and drives the sidebar, tabs and panes,
 search, Quick Open, the icon picker, renaming, the trash, a second window,
 the hand-over from a second copy, and the layout coming back after a
@@ -247,9 +267,16 @@ clipboard). It found a crash on Split Right that 139 unit tests did not.
 New checks use the helpers in `tools\e2e\ui-check.ps1` (`Test-Ui`,
 `Find-Ui`, `Find-UiShown`, `Get-UiId`, `Invoke-UiMenu`, `Set-UiFocus`).
 
-App arguments: a `heracles://` link, `--new-window`, and `--e2e-seed` (a
+App arguments: a `heracles://` link, `--new-window`, `--e2e-seed` (a
 testing aid that does nothing unless `HERACLES_DATA_DIR` is set and the
-library is empty).
+library is empty; among its notes is "Every kind of block"), and
+`--theme-light` or `--theme-dark` (a testing aid: the theme, whatever
+Windows is set to).
+
+A build cannot replace a program that is running: `tools\build.ps1 app`
+refuses while an instance started from `build\` is up. A test instance
+left open after a look at the screen is the usual cause. Stop it by path
+(the check scripts do, at their end).
 
 `launch.ps1` sets `HERACLES_DATA_DIR` (`build\e2e\data`) and
 `HERACLES_LOG_PATH` (`build\e2e\heracles.log`) for the run; the real library
@@ -273,7 +300,16 @@ looking at (one showed Quick Open white on white in dark mode).
   `SidebarSearch`, results `hit:<id>`, `NewMenu`. Panes: `Pane:<leafId>`,
   `Tab:<leafId>:<noteId>`, `TabClose:<leafId>:<noteId>`,
   `EmptyPane:<leafId>`, `Divider:<splitId>:<n>`. A note: `NoteTitle:<leafId>`,
-  `NoteIcon:<leafId>`, `NoteText:<leafId>` (its name is the note's text).
+  `NoteIcon:<leafId>`, `NoteText:<leafId>` (the editor's page, a Document
+  whose name is the note's words; for a todo list, the line that says its
+  board is to come). In a note: `Block:<blockId>` for each block with text
+  (an Edit: its name and value are its words, **its value can be set**, its
+  item status is its kind: `paragraph`, `heading 2`, `bullet`, `todo`,
+  `todo done`, `code rust`; `focus` puts the caret at its end),
+  `Check:<blockId>` (a task's box; `invoke` ticks it), `Fold:<blockId>` (a
+  toggle's arrow), `Language:<blockId>` (a code block's language),
+  `HandleAdd`, `LinkAddress`, `LinkRemove`. A block's id is the same in
+  every pane that shows the note, so `find -Id Block:…` gives the first.
   Quick Open: `Switcher`, `SwitcherQuery`, `SwitcherResult:<noteId>`. Icon
   picker: `IconPicker`, `Icon:<emoji>`, `IconTyped`, `IconRemove`. Dialogs:
   `PromptTitle`, `PromptInput`, `PromptOk`, `PromptCancel`, `ErrorText`,
@@ -401,6 +437,24 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   the page inside cannot learn how much of it is on show from its own
   measuring. `EditorScrollViewer` notes the height it is offered and asks
   the page to measure again when that changes.
+- **An `EmojiInline` that takes the colour of the text around it is drawn
+  as a flat shape of that colour**: in dark mode, a white blob. The
+  library's own text block pins each one's `Foreground` to black, and so
+  must anything else that makes one (`EditorTheme.ColourEmoji`). In a bare
+  test program, with no theme, the same inline drew in colour unpinned, so
+  only the window showed it.
+- **A `RichTextBox`'s document takes its text colour from nowhere.** With
+  the Fluent theme in dark mode the box's text and caret were black on the
+  dark page, while static text beside it, which inherits from the window,
+  was white. `BlockTextBox` points its own `Foreground`, its `CaretBrush`
+  and its document's `Foreground` at `TextFillColorPrimaryBrush`.
+- **Private-use characters (the icon font's glyphs) do not survive a file
+  being read and written back by the session's tools**: they read as an
+  empty string, and a rewrite of the whole file then stores an empty
+  string. `NoteDetailView` lost its placeholder icon that way and
+  `git show HEAD:<file> | cat -A` found it. Write such a character by
+  number (`((char)0xE76E).ToString()`), and change files that hold them
+  with targeted edits.
 - `System.Text.Json` writes every character outside the basic plane (an
   emoji) as two escapes, whatever encoder it is given. `JsonValue.Text`
   puts them back, to match what the Mac and the core write.
@@ -446,24 +500,29 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Panes and tabs: splits within splits, draggable dividers, tabs that
       move between panes, Ctrl-click to open beside, layout kept per window
 - [x] Multiple windows on one shared model, kept in step by the change feed
-- [ ] The native block editor: paragraph, headings, bullet, numbered and
+- [x] The native block editor: paragraph, headings, bullet, numbered and
       task lists, quote, callout, toggle, code block, divider, image, columns
-- [ ] Editor behaviour: Markdown as you type, slash menu, block handle,
+- [x] Editor behaviour: Markdown as you type, slash menu, block handle,
       drag to move and to make columns, whole-block selection, the editor's
       own undo, marks and links, paste through the core's converter
-- [ ] Pictures in the image store; remote pictures fetched on open
+      (built, and tested with real text boxes in no window; **never yet
+      used with a real mouse or keyboard**: see "Not verified")
+- [ ] Pictures in the image store; remote pictures fetched on open (pasted
+      and dropped pictures are stored and shown, tested; a picture on the
+      web is fetched when its block is shown, written and never run; no
+      picture has been looked at in the window)
 - [ ] Kanban boards with drag between columns
 - [ ] Task detail: notes, priority, dates, location, labels, reminders,
       nested subtasks, comments
 - [ ] Reminders delivered by Windows, whether or not the app is running
 - [ ] Import of Markdown and HTML files; export as Markdown
 - [ ] The Electron library imported on first start, with a summary
-- [x] Quick Open, the icon picker, the menu bar (its Format menu comes with
-      the editor)
+- [x] Quick Open, the icon picker, the menu bar (with Edit and Format)
 - [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
-      handed over between copies; not yet registered with Windows, and
-      nothing scrolls to a block until the editor exists)
-- [ ] Nothing lost on quit: closing and quitting wait for every editor
+      handed over between copies, and the editor scrolls to the block and
+      marks it; not yet registered with Windows)
+- [x] Nothing lost on quit: closing a tab, a pane or a window, and
+      quitting, save every editor first
 - [ ] Packages for ARM64 and x64, and a release script
 
 ## Spike findings
@@ -768,9 +827,23 @@ swaps in the text box and puts the caret where the click was.
 - Deleting a note for good while it is open in two windows, through the
   window. The model and workspace tests cover it; the only way to it in the
   window is a context menu.
-- The window in light mode. Every picture was taken with Windows in dark
-  mode. The colours come from the theme, which is the reason to expect
-  light to work and not evidence that it does.
+- **The editor under a real hand.** Nobody has typed in it, clicked in it
+  or dragged in it. What the tests do: send finished characters to real
+  text boxes in no window, offer keys to the same method a key press
+  reaches, and call the methods the mouse handlers call. What has never
+  run: the handlers themselves (`OnPreviewKeyDown`, the mouse overrides in
+  `BlockEditorView.Mouse.cs`, `GripView`, `ColumnGrip`, the static text's
+  mouse-down), keyboard focus moving from block to block in a real window,
+  the caret being seen, the first click in static text landing where it
+  was aimed, a drag selecting text, the block handle appearing under the
+  pointer, the block menu and the text menu, the link panel, the system
+  clipboard (Ctrl+C, Ctrl+V), files dropped from Explorer, spell-checking,
+  and scrolling a long note. **The owner should spend ten minutes typing in
+  a note before anything else is built on this.**
+- Light mode was looked at once (`look-editor.ps1`, 2026-11-23, with
+  `--theme-light`): the window and a note of every kind of block read
+  properly. Windows itself was in dark mode; the app following a change of
+  Windows' own setting while it runs has not been seen.
 - A window saved on a second display that is then unplugged.
 
 ## Known faults
@@ -787,6 +860,21 @@ Found and not yet fixed. Each is small; none loses data.
   left as written, not imported.
 - `tools\e2e\capture.ps1` still looks for Windows Security dialog windows,
   which Toolbox needed and Heracles does not. Harmless.
+- **Emoji in the block being typed in are drawn in one colour**, as
+  outlines, and in colour again when the caret leaves. This was the plan
+  (a text box counts characters, and a colour emoji is not one); the
+  library's inline has still to be tried inside the text box.
+- Text copied from an app that offers only RTF is pasted as plain text.
+  The Mac converts RTF first.
+- Text cannot be dragged out of or into a block's text. (Picture files can
+  be dropped on the page.)
+- The block handle's grip cannot be reached by the keyboard or by UI
+  Automation, so the block menu is the mouse's only. Its commands are also
+  in the Format menu, except Duplicate, Delete and Copy Link to Block.
+- A numbered list begun by typing `+1. ` is not a list here and is on the
+  Mac (see "Current state", stage 3).
+- The title and icon stand over the editor's column by fixed margins, so
+  they sit a few pixels off it when the scroll bar shows.
 
 ## Current state (update in every commit)
 
@@ -909,7 +997,7 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-**Stage 4 (the editor's views) is under way: four of its six tasks are
+**Stage 4 (the editor's views) is under way: five of its six tasks are
 done.** Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
@@ -979,9 +1067,18 @@ keyboard or touch the clipboard.
     `HtmlFragment` takes the wrapping off before the core converts it.
   - A text copied from a block only as rich text (RTF, no HTML) is pasted as
     plain text. The Mac converts RTF to HTML first; this does not.
-- **Next: Task 5**: the editor in the app. `Notes/EditorCoordinator.cs`
-  from the Mac's `EditorCoordinator.swift` (loading, saving 300 ms after
-  typing pauses with the editor's id as the origin, pictures in and out of
-  the image store, links), the editor in `NoteDetailView` in place of the
-  read-only text, the Edit and Format menus, closing and quitting that wait
-  for every editor, automation ids, and `tools\e2e\check-editor.ps1`.
+- Done (Task 5): **the editor is in the app, and a note can be written.**
+  `Notes/EditorCoordinator.cs` (loads a note, saves 300 ms after a change
+  with the editor's id as the origin so it never reloads from its own save,
+  follows a save made elsewhere unless it holds unsaved typing, keeps
+  pictures in the image store and reads them back, opens links by
+  `NavigationPolicy`), `NoteDetailView` with the editor in place of the
+  read-only text, Edit and Format menus that act on the focused pane's
+  editor, and saving before a tab, a pane or a window closes and before the
+  app ends (`AppModel.RegisterSaver`, `SaveEverything`). 11 tests against a
+  real core (`EditorCoordinatorTests.cs`); 437 .NET tests pass.
+  `tools\e2e\check-editor.ps1` passes its 15 checks in the real window and
+  `check-shell.ps1` still passes its 30. Pictures in dark and in light were
+  looked at, and two faults found by looking were fixed (see "Found on
+  Windows": the emoji's colour, the text box's colour).
+- **Next: Task 6**, verify the stage from a clean build.

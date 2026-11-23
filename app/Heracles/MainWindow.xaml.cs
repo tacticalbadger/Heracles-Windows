@@ -44,8 +44,11 @@ public partial class MainWindow : Window
         model.Changed += OnModelChanged;
         Workspace.TreeChanged += OnTreeChanged;
         Workspace.SwitcherChanged += OnSwitcherChanged;
+        // Nothing typed is lost to a window closing: every editor saves first.
+        Closing += (_, _) => model.SaveEverything();
         Closed += (_, _) =>
         {
+            panes.Close();
             // The model outlives the window: it must not keep calling it.
             model.Changed -= OnModelChanged;
             Workspace.TreeChanged -= OnTreeChanged;
@@ -144,6 +147,64 @@ public partial class MainWindow : Window
             favoriteItem.Header = active?.Favorited == true ? "Remove from _Favorites" : "Add to _Favorites";
         };
 
+        // Edit and Format act on the editor of the pane that has the focus.
+        // Their keys are the editor's own, answered while it is being typed
+        // in, so they are shown here and not bound to the window.
+        Heracles.Editor.BlockEditorController? Editor() => panes?.EditorFor(workspace.Tree.FocusedLeafId);
+
+        var edit = new MenuItem { Header = "_Edit" };
+        var undo = Ui.Item("_Undo", () => Editor()?.Undo(), "Ctrl+Z");
+        var redo = Ui.Item("_Redo", () => Editor()?.Redo(), "Ctrl+Y");
+        var pastePlain = Ui.Item("Paste as Plain Te_xt", () => Editor()?.PasteFromClipboard(plainOnly: true), "Ctrl+Shift+V");
+        edit.Items.Add(undo);
+        edit.Items.Add(redo);
+        edit.Items.Add(new Separator());
+        // These go to whatever has the keyboard: a note's text, its title, the search box.
+        edit.Items.Add(new MenuItem { Header = "Cu_t", Command = ApplicationCommands.Cut, InputGestureText = "Ctrl+X" });
+        edit.Items.Add(new MenuItem { Header = "_Copy", Command = ApplicationCommands.Copy, InputGestureText = "Ctrl+C" });
+        edit.Items.Add(new MenuItem { Header = "_Paste", Command = ApplicationCommands.Paste, InputGestureText = "Ctrl+V" });
+        edit.Items.Add(pastePlain);
+        edit.Items.Add(new Separator());
+        edit.Items.Add(new MenuItem { Header = "Select _All", Command = ApplicationCommands.SelectAll, InputGestureText = "Ctrl+A" });
+        edit.SubmenuOpened += (_, _) =>
+        {
+            var editor = Editor();
+            undo.IsEnabled = editor is { CanUndo: true, IsEditable: true };
+            redo.IsEnabled = editor is { CanRedo: true, IsEditable: true };
+            pastePlain.IsEnabled = editor is { IsEditable: true };
+        };
+
+        var format = new MenuItem { Header = "F_ormat" };
+        MenuItem Mark(string header, Heracles.Editor.TextMark mark, string gesture) =>
+            Ui.Item(header, () => Editor()?.Apply(new Heracles.Editor.EditorFormat.OfMark(mark)), gesture);
+        MenuItem Kind(string header, Heracles.Editor.BlockTarget target, string? gesture = null) =>
+            Ui.Item(header, () => Editor()?.Apply(new Heracles.Editor.EditorFormat.OfBlock(target)), gesture);
+        format.Items.Add(Mark("_Bold", Heracles.Editor.TextMark.Bold, "Ctrl+B"));
+        format.Items.Add(Mark("_Italic", Heracles.Editor.TextMark.Italic, "Ctrl+I"));
+        format.Items.Add(Mark("_Strikethrough", Heracles.Editor.TextMark.Strike, "Ctrl+Shift+X"));
+        format.Items.Add(Mark("_Code", Heracles.Editor.TextMark.Code, "Ctrl+E"));
+        format.Items.Add(Ui.Item("_Link…", () => Editor()?.Apply(new Heracles.Editor.EditorFormat.OfLink()), "Ctrl+K"));
+        format.Items.Add(new Separator());
+        format.Items.Add(Kind("_Text", Heracles.Editor.BlockTarget.Paragraph, "Ctrl+Alt+0"));
+        format.Items.Add(Kind("Heading _1", Heracles.Editor.BlockTarget.Heading(1), "Ctrl+Alt+1"));
+        format.Items.Add(Kind("Heading _2", Heracles.Editor.BlockTarget.Heading(2), "Ctrl+Alt+2"));
+        format.Items.Add(Kind("Heading _3", Heracles.Editor.BlockTarget.Heading(3), "Ctrl+Alt+3"));
+        format.Items.Add(new Separator());
+        format.Items.Add(Kind("B_ullet List", Heracles.Editor.BlockTarget.Bullet, "Ctrl+Shift+8"));
+        format.Items.Add(Kind("_Numbered List", Heracles.Editor.BlockTarget.Numbered, "Ctrl+Shift+7"));
+        format.Items.Add(Kind("T_ask List", Heracles.Editor.BlockTarget.Todo, "Ctrl+Shift+9"));
+        format.Items.Add(new Separator());
+        format.Items.Add(Kind("_Quote", Heracles.Editor.BlockTarget.Quote));
+        format.Items.Add(Kind("Call_out", Heracles.Editor.BlockTarget.Callout));
+        format.Items.Add(Kind("To_ggle", Heracles.Editor.BlockTarget.Toggle));
+        format.Items.Add(Kind("Code Bloc_k", Heracles.Editor.BlockTarget.Code));
+        format.Items.Add(Kind("_Divider", Heracles.Editor.BlockTarget.Divider));
+        format.SubmenuOpened += (_, _) =>
+        {
+            var canFormat = Editor() is { IsEditable: true };
+            foreach (var item in format.Items.OfType<MenuItem>()) item.IsEnabled = canFormat;
+        };
+
         var view = new MenuItem { Header = "_View" };
         // Oem5 is the backslash key on the keyboards that have one there.
         view.Items.Add(Command("Split _Right", () => workspace.SplitFocused(SplitTarget.Right), Key.Oem5, ModifierKeys.Control, "Ctrl+\\"));
@@ -156,7 +217,7 @@ public partial class MainWindow : Window
         help.Items.Add(Command("_About Heracles", () =>
             MessageBox.Show(this, $"Heracles {App.VersionText}", "About Heracles", MessageBoxButton.OK, MessageBoxImage.Information)));
 
-        foreach (var menu in new[] { file, note, view, window, help }) MenuBar.Items.Add(menu);
+        foreach (var menu in new[] { file, edit, note, format, view, window, help }) MenuBar.Items.Add(menu);
     }
 
     private void CopyLink()

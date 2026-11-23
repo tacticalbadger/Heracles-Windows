@@ -58,6 +58,11 @@ public partial class App : Application
         }
         Log.Info("instance: first");
 
+        // A testing aid: the app in light or in dark whatever Windows is set
+        // to, so that both can be looked at on one machine.
+        if (e.Args.Contains("--theme-light")) ThemeMode = ThemeMode.Light;
+        else if (e.Args.Contains("--theme-dark")) ThemeMode = ThemeMode.Dark;
+
         try
         {
             Store = new Store(AppPaths.DataDirectory);
@@ -117,6 +122,8 @@ public partial class App : Application
     /// <summary>End the app from the menu: every window that is open comes back next time.</summary>
     internal void ExitApp()
     {
+        // Nothing typed is lost on quit: every editor saves before anything closes.
+        Model?.SaveEverything();
         SaveWindows(windows.Select(window => window.Capture()));
         exiting = true;
         Shutdown();
@@ -172,6 +179,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Whatever way the app is ending, an editor may still hold typing.
+        Model?.SaveEverything();
         Model?.Dispose();
         Store?.Dispose();
         instance?.Dispose();

@@ -84,6 +84,7 @@ internal static class EditorTheme
 
     // Colours, by the theme's names
 
+    public const string PrimaryText = "TextFillColorPrimaryBrush";
     public const string SecondaryText = "TextFillColorSecondaryBrush";
     public const string TertiaryText = "TextFillColorTertiaryBrush";
     public const string LinkText = "AccentTextFillColorPrimaryBrush";
@@ -199,13 +200,25 @@ internal static class EditorTheme
                 foreach (Match match in global::Emoji.Wpf.EmojiData.MatchOne.Matches(line))
                 {
                     if (match.Index > at) yield return Marked(new Run(line[at..match.Index]), span.Style, block);
-                    yield return Marked(
-                        new global::Emoji.Wpf.EmojiInline { Text = match.Value, FontSize = FontFor(block).Size }, span.Style, block);
+                    yield return ColourEmoji(match.Value, span.Style, block);
                     at = match.Index + match.Length;
                 }
                 if (at < line.Length) yield return Marked(new Run(line[at..]), span.Style, block);
             }
         }
+    }
+
+    /// <summary>
+    /// An emoji as an element drawn in colour. Its own foreground is pinned,
+    /// as the library pins it in its own text block: left to take the
+    /// colour of the text around it, the emoji is drawn as a flat shape of
+    /// that colour.
+    /// </summary>
+    private static Inline ColourEmoji(string emoji, TextStyle style, Block block)
+    {
+        var inline = new global::Emoji.Wpf.EmojiInline { Text = emoji, FontSize = FontFor(block).Size, Foreground = Brushes.Black };
+        inline.SetValue(MarksProperty, style);
+        return inline;
     }
 
     private static bool MayHoldEmoji(string text)

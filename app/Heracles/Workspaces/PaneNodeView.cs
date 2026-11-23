@@ -47,7 +47,11 @@ internal sealed class PaneHost : Border
             Child = null;
             foreach (var view in views.Values) (view.Parent as Panel)?.Children.Remove(view);
             var live = tree.Leaves.Select(leaf => leaf.Id).ToHashSet();
-            foreach (var gone in views.Keys.Where(id => !live.Contains(id)).ToList()) views.Remove(gone);
+            foreach (var gone in views.Keys.Where(id => !live.Contains(id)).ToList())
+            {
+                views[gone].Close();
+                views.Remove(gone);
+            }
             Child = Build(tree.Root);
 
             if (focused is { IsVisible: true } && focused is DependencyObject element && IsAncestorOf(element)) focused.Focus();
@@ -56,6 +60,15 @@ internal sealed class PaneHost : Border
         {
             if (views.TryGetValue(leaf.Id, out var view)) view.Update(leaf);
         }
+    }
+
+    /// <summary>The editor in a pane, if that pane is showing a note that has one.</summary>
+    public Heracles.Editor.BlockEditorController? EditorFor(string leafId) => views.GetValueOrDefault(leafId)?.Editor;
+
+    /// <summary>The window is going: every pane saves what was typed in it.</summary>
+    public void Close()
+    {
+        foreach (var view in views.Values) view.Close();
     }
 
     /// <summary>The frame of the tree as text: which splits hold which panes, and their shares.</summary>

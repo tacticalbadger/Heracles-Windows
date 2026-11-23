@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Heracles.Editor;
 using Heracles.Model;
 using Heracles.Sidebar;
 using Heracles.Workspaces;
@@ -8,26 +9,26 @@ using Heracles.Workspaces;
 namespace Heracles.Notes;
 
 /// <summary>
-/// One note in a pane: its icon and title, then its content. Until the editor
-/// exists the content is shown as text that cannot be changed, and a todo
-/// list says its board is still to come.
+/// One note in a pane: its icon and title, then its content in the editor.
+/// A todo list says its board is still to come.
 /// </summary>
 internal sealed class NoteDetailView : DockPanel
 {
-    /// <summary>The widest a line of text is allowed to get, as in the Mac editor.</summary>
-    private const double ContentWidth = 760;
-
     private readonly AppModel model;
     private readonly Workspace workspace;
     private readonly string leafId;
     private readonly Button iconButton;
     private readonly TextBox title;
-    private readonly global::Emoji.Wpf.TextBlock text;
+    private readonly ContentControl body;
+    private EditorCoordinator? coordinator;
+    private TextBlock? message;
     private Note note;
-    private long shownRevision = -1;
     private bool updating;
 
     public string NoteId => note.Id;
+
+    /// <summary>The note's editor, once it is showing one. A todo list has none.</summary>
+    public BlockEditorController? Editor => coordinator?.Editor;
 
     public NoteDetailView(AppModel model, Workspace workspace, string leafId, Note note)
     {
@@ -59,25 +60,27 @@ internal sealed class NoteDetailView : DockPanel
         };
         title.KeyDown += (_, e) =>
         {
-            if (e.Key != Key.Enter) return;
+            if (e.Key is not (Key.Enter or Key.Down)) return;
             CommitTitle();
+            // From the title, on into the note.
+            coordinator?.Editor.FocusStart();
             e.Handled = true;
         };
 
-        var header = new DockPanel { MaxWidth = ContentWidth, Margin = new Thickness(32, 20, 32, 4) };
+        // The header stands over the editor's text column: as wide, and as far in.
+        var header = new DockPanel
+        {
+            MaxWidth = EditorTheme.ContentWidth,
+            Margin = new Thickness(EditorTheme.Gutter - 46, 20, EditorTheme.Gutter, 4),
+        };
         SetDock(iconButton, Dock.Left);
         header.Children.Add(iconButton);
         header.Children.Add(title);
         SetDock(header, Dock.Top);
         Children.Add(header);
 
-        text = new global::Emoji.Wpf.TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 14, LineHeight = 22 };
-        text.Id("NoteText:" + leafId);
-        Children.Add(new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Content = new Border { MaxWidth = ContentWidth, Margin = new Thickness(34, 8, 32, 24), Child = text },
-        });
+        body = new ContentControl { Focusable = false };
+        Children.Add(body);
 
         Update(note);
     }
@@ -87,7 +90,8 @@ internal sealed class NoteDetailView : DockPanel
     {
         note = current;
         iconButton.Content = string.IsNullOrWhiteSpace(note.Icon)
-            ? new TextBlock { Text = "", FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 20, Opacity = 0.4 }
+            // The icon font's face: a note with no icon of its own.
+            ? new TextBlock { Text = ((char)0xE76E).ToString(), FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontSize = 20, Opacity = 0.4 }
             : NoteIcon.EmojiText(note.Icon, 26);
         iconButton.IsEnabled = !note.Trashed;
         title.IsEnabled = !note.Trashed;
@@ -101,21 +105,48 @@ internal sealed class NoteDetailView : DockPanel
 
         if (note.Kind == NoteKind.TodoList)
         {
-            Show("Boards arrive in a later version.", 0.6);
+            Say("Boards arrive in a later version.");
             return;
         }
-        var revision = model.DocumentChangeFor(note.Id)?.Revision ?? 0;
-        if (revision == shownRevision) return;
-        shownRevision = revision;
-        Show(ReadOnlyDocument.PlainText(model.Document(note.Id)?.Content ?? ""), 1);
+        coordinator ??= MakeEditor();
+        if (!ReferenceEquals(body.Content, coordinator.Editor.ScrollView)) body.Content = coordinator.Editor.ScrollView;
+        coordinator.Show(note.Id, editable: !note.Trashed, model.DocumentChangeFor(note.Id));
+        coordinator.Reveal(workspace.BlockToReveal(note.Id), () => workspace.DidReveal(note.Id));
     }
 
-    private void Show(string content, double opacity)
+    private EditorCoordinator MakeEditor()
     {
-        if (text.Text != content) text.Text = content;
-        text.Opacity = opacity;
-        // A screen reader, and the end-to-end checks, read the text from here.
-        System.Windows.Automation.AutomationProperties.SetName(text, content.Length == 0 ? "Empty note" : content);
+        var made = new EditorCoordinator(model)
+        {
+            // Typing in a pane makes it the one the next note opens in.
+            OnFocus = () => workspace.Tree = workspace.Tree.Focus(leafId),
+        };
+        // A screen reader, and the end-to-end checks, read the note from here.
+        made.Editor.Page.Id("NoteText:" + leafId);
+        return made;
+    }
+
+    private void Say(string text)
+    {
+        message ??= new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            Opacity = 0.6,
+            MaxWidth = EditorTheme.ContentWidth,
+            Margin = new Thickness(EditorTheme.Gutter, 8, EditorTheme.Gutter, 24),
+        }.Id("NoteText:" + leafId);
+        message.Text = text;
+        System.Windows.Automation.AutomationProperties.SetName(message, text);
+        if (!ReferenceEquals(body.Content, message)) body.Content = message;
+    }
+
+    /// <summary>The view is going: what was typed and not yet saved is saved now.</summary>
+    public void Close()
+    {
+        CommitTitle();
+        coordinator?.Dispose();
+        coordinator = null;
     }
 
     private void CommitTitle()

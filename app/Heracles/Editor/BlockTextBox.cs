@@ -102,6 +102,12 @@ internal sealed class BlockTextBox : RichTextBox
         AllowDrop = false;
         Document.Blocks.Clear();
         Document.Blocks.Add(paragraph);
+        // The text, and the caret, in the theme's text colour: the colour
+        // static text gets from the window. A text box's document does not
+        // take it from anywhere by itself, and was black on a dark page.
+        SetResourceReference(ForegroundProperty, EditorTheme.PrimaryText);
+        SetResourceReference(CaretBrushProperty, EditorTheme.PrimaryText);
+        Document.SetResourceReference(TextElement.ForegroundProperty, EditorTheme.PrimaryText);
 
         // Asked whether it can, the box says no and lets the key travel on:
         // Ctrl+Shift+N is the window's New Section, not a numbered list.

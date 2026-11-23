@@ -76,6 +76,8 @@ internal sealed class PaneLeafView : DockPanel
         {
             if (detail is null || detail.NoteId != note.Id)
             {
+                // The note that was showing is saved before it is let go.
+                detail?.Close();
                 detail = new NoteDetailView(model, workspace, leafId, note);
                 content.Content = detail;
             }
@@ -87,9 +89,20 @@ internal sealed class PaneLeafView : DockPanel
         }
         else
         {
+            detail?.Close();
             detail = null;
             content.Content = Empty();
         }
+    }
+
+    /// <summary>The editor of the note this pane is showing, if it is showing one that has an editor.</summary>
+    public Heracles.Editor.BlockEditorController? Editor => detail?.Editor;
+
+    /// <summary>The pane is going: what was typed in it and not yet saved is saved now.</summary>
+    public void Close()
+    {
+        detail?.Close();
+        detail = null;
     }
 
     private FrameworkElement Empty()

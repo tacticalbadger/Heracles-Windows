@@ -793,9 +793,12 @@ Decided by the owner on 2026-11-22: the earlier account name stays in
 `LICENSE` and in the one link in `docs/review-and-native-rewrite.md`, as in
 the Mac repository. Do not change either.
 
-**Stage 3 (the editor's document model) is written: its three tasks of
-code are done, and the stage's own check (Task 4) is next.** Plan:
+**Stage 3 (the editor's document model) is built and verified** (2026-11-23):
+from a clean build, no warnings, 203 Rust tests and 302 .NET tests pass,
+`tools\e2e\check-shell.ps1` passes its 30 checks, and nothing under
+`app/Heracles/Editor/` names a `System.Windows` type. Plan:
 `docs/superpowers/plans/2026-11-22-windows-stage-3-editor-model.md`.
+Reviewed by the session that wrote it; no one else has read it.
 
 - Done, each translated from the Mac with its tests: `JsonValue` and
   `RichText` (Task 1); `Block`, `EditorDocument` read from and written to
@@ -817,7 +820,6 @@ code are done, and the stage's own check (Task 4) is next.** Plan:
   using it; `Move` takes an id given twice as one block.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
-- **Next: Task 4**, verify the stage from a clean build.
 
 After stage 3: stage 4, the editor's views, which reads "Spike findings"
 above. Plans are in `docs/superpowers/plans/`.

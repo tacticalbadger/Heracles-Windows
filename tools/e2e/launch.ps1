@@ -5,7 +5,7 @@
 .DESCRIPTION
         tools\e2e\launch.ps1 [-Fixture <dir>] [-Wait <secs>] [-Exe <path>] [-DataDir <path>] [app arguments...]
         tools\e2e\launch.ps1
-        tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.0-win-x64\Heracles.exe
+        tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.1-win-x64\Heracles.exe
 
     The run uses the fixture's library folder (<fixture>\data) and log
     (<fixture>\heracles.log); the real library is not touched. A previous

@@ -6,9 +6,9 @@ This repository is the Windows app. It is a native app, written in C# (WPF) over
 
 ## Status and download
 
-The native app is a preview. Builds are published on the [releases page](https://github.com/tacticalbadger/Heracles-Windows/releases): a zip for Windows on x64, and one for Windows on ARM. If there is no release there yet, the app can be [built from source](#building).
+The native app is a preview. Builds are published on the [releases page](https://github.com/tacticalbadger/Heracles-Windows/releases): a disc image (an `.iso` file) for Windows on x64, and one for Windows on ARM. The app can also be [built from source](#building).
 
-- **Nothing to install.** Unzip it anywhere and run `Heracles.exe`. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
+- **Nothing to install.** Double-click the `.iso` and Windows opens it as a disc. Copy the `Heracles` folder from it to anywhere on your PC, run `Heracles.exe` from the copy, and eject the disc. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
 - **The build is not code-signed.** Windows will say it does not recognise the app. Choose **More info**, then **Run anyway**.
 - It does not update itself. To move to a newer version, replace the folder.
 - **Nobody has used it day to day yet.** It passes its automated tests and its scripted checks of the real window, one of which uses a real mouse and keyboard for a minute. That is not a person using it. What has been checked and what has not is written down, plainly, in [`CLAUDE.md`](./CLAUDE.md#not-verified).
@@ -73,7 +73,7 @@ From PowerShell, in the repository's folder:
 tools\build.ps1            # the core and its C# bindings, then the app -> build\app\win-<arch>\Heracles.exe
 tools\build.ps1 test       # the core's tests (Rust), then the app's (.NET)
 tools\build.ps1 run        # start the built app
-tools\build.ps1 core package            # a zip for this PC's processor -> build\release
+tools\build.ps1 core package            # a disc image (.iso) for this PC's processor -> build\release
 tools\build.ps1 core package -Arch x64  # and for the other one
 ```
 
@@ -87,6 +87,7 @@ tools\e2e\check-editor.ps1     # writing in a note
 tools\e2e\check-boards.ps1     # a board and a task
 tools\e2e\check-transfer.ps1   # importing files and exporting a note
 tools\e2e\check-legacy.ps1     # the first start beside a library of the earlier version
+tools\e2e\check-disc.ps1       # a packaged disc image: opened as a drive, and the app started from it
 tools\e2e\check-input.ps1      # a minute of real typing, clicking and dragging: leave the mouse and keys alone while it runs
 ```
 
@@ -105,6 +106,7 @@ app/Heracles/        the Windows app (C#, WPF)
   Boards/            boards, tasks and reminders
 app/Heracles.Tests/  its tests
 tools/build.ps1      builds, tests and packages
+tools/disc-image.ps1 makes the package's disc image, and reads it back
 tools/e2e/           the scripted checks of the real window
 tools/publish.ps1    publishes a release
 docs/                the design, the implementation plans, release notes

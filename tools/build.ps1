@@ -11,9 +11,9 @@
       app      the WPF app -> build\app\win-<arch>\Heracles.exe
       test     Rust tests, then the .NET tests
       run      start the built app (on the real library, not a fixture)
-      package  self-contained build for handing out: a zip per architecture and
-               SHA256SUMS under build\release (needs "core" for that
-               architecture first)
+      package  self-contained build for handing out: a disc image (.iso) per
+               architecture and SHA256SUMS under build\release (needs "core"
+               for that architecture first)
       clean    remove build output and the generated bindings
 
     Run "core" again after any change to the Rust API: the bindings and the
@@ -68,6 +68,9 @@ $Triple = if ($Arch -eq 'arm64') { 'aarch64-pc-windows-msvc' } else { 'x86_64-pc
 $OutDir = Join-Path $Build "app\$Rid"
 $Exe = Join-Path $OutDir 'Heracles.exe'
 $Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
+
+# New-DiscImage and Compare-DiscImage, for the package.
+. (Join-Path $PSScriptRoot 'disc-image.ps1')
 
 # A shell opened before the toolchain was installed does not have these on
 # PATH yet.
@@ -247,8 +250,34 @@ function Get-BuildNumber {
     return $count
 }
 
+# What the disc says of itself, in a file at its top, for whoever opens it
+# without the release page in front of them.
+function Get-DiscReadMe {
+    return @(
+        "Heracles $Version for Windows ($Arch)",
+        '',
+        '1. Copy the Heracles folder from this disc to your PC, for example into',
+        '   %LOCALAPPDATA%\Programs.',
+        '2. Run Heracles.exe from the copy.',
+        '3. Eject this disc. It is not needed again.',
+        '',
+        'Run it from the copy, not from the disc: Windows opens links to notes,',
+        'and reminders, with the copy of Heracles that was started last.',
+        '',
+        'The app is not code-signed. If Windows shows "Windows protected your PC",',
+        'choose More info, then Run anyway.',
+        '',
+        'Your library is kept on your PC, under %APPDATA%\Heracles. Nothing is',
+        'written to the folder the app runs from, so a newer version is put in by',
+        'replacing that folder.',
+        '',
+        'https://github.com/tacticalbadger/Heracles-Windows'
+    )
+}
+
 # A folder that runs on a PC with nothing installed (the .NET runtime is
-# inside), zipped for the Releases page. Nothing in it is code-signed yet, so
+# inside), on a disc image for the Releases page: Windows opens an .iso as a
+# disc when it is double-clicked. Nothing in it is code-signed yet, so
 # Windows asks before running it the first time.
 function New-Package {
     Assert-Tool 'dotnet' 'Install the .NET SDK: winget install Microsoft.DotNet.SDK.10'
@@ -258,10 +287,14 @@ function New-Package {
     $name = "Heracles-$Version-win-$Arch"
     $release = Join-Path $Build 'release'
     $stage = Join-Path $release $name
-    $zip = Join-Path $release "$name.zip"
+    $iso = Join-Path $release "$name.iso"
+    $top = Join-Path $release "$name.top"
     New-Item -ItemType Directory -Force $release | Out-Null
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
-    if (Test-Path $zip) { Remove-Item -Force $zip }
+    if (Test-Path $top) { Remove-Item -Recurse -Force $top }
+    # Gone before anything is built: an image left from an earlier build must
+    # not sit beside a folder it was not made from.
+    Remove-DiscImage -Path $iso
 
     Step "package: dotnet publish (self-contained, $Rid, $Version build $number)"
     $project = Join-Path $App 'Heracles\Heracles.csproj'
@@ -287,15 +320,38 @@ function New-Package {
         throw "$($telling -join ', ') contains a path under this machine's profile folder. Run: tools\build.ps1 core -Arch $Arch (it rewrites those paths), then package again."
     }
 
-    Step "package: $name.zip"
-    Invoke-Native 'tar' { tar.exe -a -c -f $zip -C $release $name }
+    # The disc: the app in a folder named Heracles, and a few words beside it.
+    Step "package: $name.iso"
+    $label = "Heracles $Version"
+    $holds = @{ Heracles = $stage }
+    New-Item -ItemType Directory -Force $top | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $top 'README.txt'), ((Get-DiscReadMe) -join "`r`n") + "`r`n", [System.Text.Encoding]::ASCII)
+    try {
+        New-DiscImage -Path $iso -Label $label -Top $top -Folders $holds
+        # Read back as Windows reads it, before anyone else does: every file
+        # that went in must come out the same, and nothing else.
+        $different = @(Compare-DiscImage -Path $iso -Label $label -Top $top -Folders $holds)
+    }
+    finally {
+        Remove-Item -Recurse -Force $top
+    }
+    if ($different.Count -gt 0) {
+        Remove-Item -Force $iso
+        throw "the disc image does not hold what was put in it: $(($different | Select-Object -First 5) -join '; ')"
+    }
+    # The whole image this time, so every file in the package is looked at,
+    # and whatever the disc says of itself.
+    if (@(Find-PrivatePaths @($iso)).Count -gt 0) {
+        Remove-Item -Force $iso
+        throw "$name.iso contains a path under this machine's profile folder."
+    }
 
     # Checksums for every package of this version that is there.
-    $lines = Get-ChildItem $release -Filter "Heracles-$Version-win-*.zip" | Sort-Object Name | ForEach-Object {
+    $lines = Get-ChildItem $release -Filter "Heracles-$Version-win-*.iso" | Sort-Object Name | ForEach-Object {
         '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
     }
     [System.IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (($lines -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
-    Write-Host ("ok: {0} ({1:N0} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
+    Write-Host ("ok: {0} ({1:N0} MB)" -f $iso, ((Get-Item $iso).Length / 1MB))
     Write-Host "ok: $(Join-Path $release 'SHA256SUMS')"
 }
 

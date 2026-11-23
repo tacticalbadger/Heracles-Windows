@@ -7,7 +7,7 @@
         tools\publish.ps1 [-Replace] [-Prerelease] [-DryRun]
 
     Tag v<version> (from the VERSION file), with every
-    build\release\Heracles-<version>-win-<arch>.zip and SHA256SUMS attached,
+    build\release\Heracles-<version>-win-<arch>.iso and SHA256SUMS attached,
     so the app can be downloaded from the repo's Releases page.
 
     Before anything is sent: the checksums are verified, the packages must
@@ -80,7 +80,7 @@ function Invoke-Git {
 
 # ----- The files -----
 
-$packages = @(Get-ChildItem $Out -Filter "Heracles-$Version-win-*.zip" -ErrorAction SilentlyContinue | Sort-Object Name)
+$packages = @(Get-ChildItem $Out -Filter "Heracles-$Version-win-*.iso" -ErrorAction SilentlyContinue | Sort-Object Name)
 if ($packages.Count -eq 0 -or -not (Test-Path $SumsPath)) {
     throw "no packages for $Version in build\release; run: tools\build.ps1 core package (and again with -Arch for the other architecture)"
 }
@@ -97,7 +97,7 @@ foreach ($package in $packages) {
     if (-not $expected.ContainsKey($package.Name) -or $expected[$package.Name] -ne $actual) {
         throw "$($package.Name) does not match SHA256SUMS; run the package step again"
     }
-    # The staged folder next to the zip says which commit count it was built from.
+    # The staged folder next to the image says which commit count it was built from.
     $assembly = Join-Path $Out ($package.BaseName + '\Heracles.dll')
     if (-not (Test-Path $assembly)) { throw "the staged folder for $($package.Name) is gone; run the package step again" }
     $fileVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($assembly)
@@ -130,9 +130,10 @@ Heracles is a local-first, hierarchical notebook for Windows: pages in notebooks
 
 ## Install
 
-1. Download the zip for your PC below: **win-x64** for most PCs, **win-arm64** for Windows on ARM (Settings > System > About shows the system type).
-2. Right-click the zip, choose **Properties**, tick **Unblock** and press OK. Then extract it anywhere, for example ``%LOCALAPPDATA%\Programs``.
-3. Run **Heracles.exe** from the extracted folder.
+1. Download the disc image for your PC below: **win-x64** for most PCs, **win-arm64** for Windows on ARM (Settings > System > About shows the system type).
+2. Double-click the downloaded ``.iso`` file. Windows opens it as a disc. If it asks whether to open the file, choose **Open**.
+3. Copy the **Heracles** folder from the disc to your PC, for example into ``%LOCALAPPDATA%\Programs``, and run **Heracles.exe** from the copy.
+4. Eject the disc (right-click it in File Explorer and choose **Eject**). It is not needed again, and the downloaded file can be deleted.
 
 This build is **not code-signed**. If Windows shows "Windows protected your PC", choose **More info**, then **Run anyway**. Nothing needs installing: the .NET runtime is inside the folder. Requires Windows 10 version 2004 or newer, or Windows 11.
 
@@ -230,7 +231,7 @@ try { $existing = Invoke-GitHub 'Get' "$api/releases/tags/$Tag" }
 catch { if ((Get-StatusCode $_) -ne 404) { throw "GitHub refused the request ($(Get-StatusCode $_)): $($_.Exception.Message)" } }
 
 function Send-Files($release) {
-    foreach ($package in $packages) { Send-Asset $release $package 'application/zip' }
+    foreach ($package in $packages) { Send-Asset $release $package 'application/x-iso9660-image' }
     Send-Asset $release (Get-Item $SumsPath) 'text/plain'
 }
 

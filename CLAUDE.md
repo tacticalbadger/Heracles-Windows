@@ -42,13 +42,28 @@ Owner, 2026-11-22:
 - The decisions of the Toolbox Windows port stand (`..\Toolbox_Windows`):
   WPF on .NET 10 in C#, bindings from `uniffi-bindgen-cs` v0.12.0 (UniFFI
   0.32), PowerShell build and release scripts, unsigned self-contained zips
-  for ARM64 and x64, nothing of the owner's own setup in git.
+  for ARM64 and x64 (disc images here, from 0.2.1: see below), nothing of
+  the owner's own setup in git.
 - The editor is native: one rich-text box per block, the Mac editor's
   design translated. Not a web view.
 - The GitHub repository is rebuilt around the new app.
 - Commits are authored as `tacticalbadger`.
 
+Owner, 2026-11-23:
+
+- A release is handed out as a disc image (an ISO), from 0.2.1 on. 0.2.0
+  was two zips.
+
 Claude's calls, open to change:
+
+- What "as an ISO" means, which the owner did not say. One image for each
+  processor, in place of the zip and not beside it
+  (`Heracles-<version>-win-<arch>.iso`). On the disc: the app in a folder
+  named `Heracles`, and a `README.txt` that says to copy the folder to the
+  PC and run it from the copy. The disc is named `Heracles <version>`. The
+  image is made by the part of Windows that writes discs (IMAPI2), so
+  nothing is installed for it. The other reading was one image holding both
+  processors: twice the download for everyone, so not taken.
 
 - An existing Electron library is imported on first start, as the Mac does.
 - The library lives in `%APPDATA%\Heracles`, the Electron app's folder.
@@ -179,6 +194,9 @@ app/
   Directory.Build.props   version from VERSION, build number, PathMap
   nuget.config            pins nuget.org
 tools/build.ps1           targets core, app, test, run, package, clean
+tools/disc-image.ps1      New-DiscImage, Compare-DiscImage, Remove-DiscImage:
+                          the package's ISO made, and read back by mounting
+                          it (dot-sourced by build.ps1)
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           and synthetic input), adapted from Toolbox;
                           ui-check (helpers), check-shell, check-editor,
@@ -186,7 +204,9 @@ tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           checks of the window, of writing in a note, of a
                           board and a task, and of files in and out),
                           check-legacy (the first start beside an Electron
-                          library), check-input (a minute of REAL mouse and
+                          library), check-disc (a packaged disc image opened
+                          as a drive, and the app started from it),
+                          check-input (a minute of REAL mouse and
                           keyboard), look-editor and look-boards (pictures,
                           light and dark)
 tools/publish.ps1         a GitHub release from the packages: checks, a
@@ -268,7 +288,7 @@ tools\build.ps1                 # core (release DLL + C# bindings), then the app
 tools\build.ps1 app -Restart    # rebuild the app, close the running build, start the new one
 tools\build.ps1 test            # cargo test --locked, then dotnet test on app\Heracles.Tests
 tools\build.ps1 run             # starts it on the real library, not a fixture
-tools\build.ps1 core package    # self-contained zip for this machine -> build\release
+tools\build.ps1 core package    # self-contained disc image (.iso) for this machine -> build\release
 tools\build.ps1 core package -Arch x64   # and for the other processor (then "core" again, for this one's bindings)
 tools\publish.ps1 -DryRun       # what a release would send, and what would stop it; sends nothing
 tools\build.ps1 clean
@@ -288,7 +308,7 @@ lines, which go to stderr, into errors, and the script stops on the first.
 ```powershell
 tools\e2e\make-fixture.ps1            # an empty library folder and no log -> build\e2e
 tools\e2e\launch.ps1                  # (re)start the built app on the fixture
-tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.0-win-x64\Heracles.exe   # a packaged build instead
+tools\e2e\launch.ps1 -Exe build\release\Heracles-0.2.1-win-x64\Heracles.exe   # a packaged build instead
 tools\e2e\launch.ps1 -DataDir <path>  # another library folder (to see what the app does with a bad one)
 tools\e2e\launch.ps1 --e2e-seed       # ...with a few notes of every kind in it
 tools\e2e\launch.ps1 -Again --new-window   # a second copy while one runs: it hands over
@@ -300,6 +320,7 @@ tools\e2e\check-boards.ps1            # the scripted check of a board and a task
 tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
 tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electron app's library, to be imported
 tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
+tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 16 checks (-Arch x64 for the other one)
 tools\e2e\check-input.ps1             # REAL mouse and keyboard, for a minute: typing, keys, clicks, drags. 23 checks. Hands off while it runs
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
@@ -652,6 +673,20 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   that must outlive a warning from git sets the preference to `Continue`
   inside the function that calls git and reads `$LASTEXITCODE`
   (`Invoke-Git` in `tools\publish.ps1`).
+- **A disc image is made and read back with what Windows has, and no
+  administrator** (2026-11-23, `tools\disc-image.ps1`). What it took to
+  find: the class is `IMAPI2FS.MsftFileSystemImage` (asked for as
+  `MSFileSystemImage`, it is "class not registered"); its size
+  limit is a CD's until `FreeMediaBlocks` is set to 0; PowerShell cannot
+  read the stream it hands back, so a few lines of C# write it to a file;
+  and the files put in stay open until the COM objects are released and
+  collected. File systems 7 (ISO 9660, Joliet and UDF) keeps long names:
+  Windows reads the UDF. `Mount-DiskImage` takes an image only by its whole
+  path, and with `-NoDriveLetter` nothing shows in File Explorer: the disc
+  is then read at the volume's own path (`\\?\Volume{...}\`), which
+  `Get-Volume` gives. A disc's name is kept whole up to 32 characters and
+  cut without a word beyond. Everything on a mounted disc is read-only. It
+  all works from an emulated x64 shell too.
 - `tools\build.ps1` now compiles the C# afresh every time
   (`--no-incremental`), because of this machine's clock (see above). A bare
   `dotnet build` or `dotnet test` still trusts the clock.
@@ -731,7 +766,8 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Nothing lost on quit: closing a tab, a pane or a window, and
       quitting, save every editor first
 - [x] Packages for ARM64 and x64, and a release script (both packages
-      built, started and checked, and released as 0.2.0 on 2026-11-23)
+      built, started and checked, and released as 0.2.0 on 2026-11-23; a
+      package is a disc image from 0.2.1)
 
 ## Spike findings
 
@@ -1016,11 +1052,21 @@ swaps in the text box and puts the caret where the click was.
 - Windows 10. Everything so far ran on Windows 11.
 - A PC with nothing installed. The packages are self-contained and have
   only been started on the machine that built them.
-- **A download.** The files of the 0.2.0 release are byte for byte the
-  packages that were checked (GitHub's digests match `SHA256SUMS`), but
-  nobody has downloaded one from the release page, unblocked it and started
-  it. What Windows says to this app when it comes from the web (the release
-  notes say "More info", then "Run anyway") has not been seen.
+- **A download.** The files of a release are byte for byte the packages
+  that were checked (GitHub's digests match `SHA256SUMS`), but nobody has
+  downloaded one from the release page and started the app from it. What
+  Windows says to this app when it comes from the web (the release notes
+  say "More info", then "Run anyway") has not been seen; nor what it says
+  to an `.iso` from the web when it is double-clicked (the notes say it may
+  ask whether to open the file, which is from memory of other downloads,
+  not from this one).
+- **A hand opening the disc.** The image was mounted by a script, as a
+  drive, and the app was started from it (`check-disc.ps1`). Nobody has
+  double-clicked the `.iso`, dragged the `Heracles` folder out in File
+  Explorer and ejected the disc. Not known: whether the copy File Explorer
+  makes keeps the files read-only, as they are on a disc. The app writes
+  nothing beside itself, so that would only matter to someone deleting the
+  folder.
 - **Clicking a reminder.** The toast spike proved the two halves apart: the
   banner appears, and opening a link of the app's scheme starts the app
   with that link. A click on the banner itself was not made: UI Automation
@@ -1144,6 +1190,23 @@ and must never push its old history. **All of `main` was pushed on
 word.** What is committed after that stays local until he says push:
 `git log origin/main..HEAD` lists it.
 
+**This commit is the one 0.2.1 is built from** (2026-11-23, on the owner's
+word: "the next release as an iso"). The app is 0.2.0's, unchanged: no file
+under `app/` or `core/` differs but the version. What changed is the
+package. `tools\build.ps1 package` makes
+`Heracles-<version>-win-<arch>.iso` where it made a zip: the app in a
+folder named `Heracles` and a `README.txt`, on a disc named
+`Heracles <version>`. The step reads the image back, by mounting it, and
+refuses it if any file differs from what went in (seen to say so for a
+file changed, missing, added, or spelled in another case), and it now
+searches the whole image, not three files of it, for this machine's
+profile folder. `tools\e2e\check-disc.ps1` opens the image as a drive and
+starts the app from the disc (16 checks; given the ARM64 disc under the
+x64 name, three of them fail, as they should). `tools\publish.ps1` sends
+the `.iso` files, and its install text is rewritten for a disc. Whether
+0.2.1 is out is on the releases page; the commit after this one records
+how the release went.
+
 **Where things stand: the app is built and released. All seven stages of
 the design are done, and 0.2.0 is on GitHub** (2026-11-23:
 https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.0,
@@ -1190,12 +1253,13 @@ one, is imported for the first time: only made-up ones have been.
    task a reminder two minutes ahead, close the app, and click the banner
    when it comes. What goes wrong goes in "Known faults", or gets fixed,
    and what is fixed is the next release.
-2. *The next release*, when he says so. 0.2.0 is taken (the script refuses
-   a version that has a release): change `VERSION`, write
+2. *The next release*, when he says so. A version that has a release is
+   taken (the script refuses it): change `VERSION`, write
    `docs\release-notes\<version>.md`, commit, and push on his word. Then,
    from the commit that was pushed: `tools\build.ps1 core package -Arch
    x64`, then `tools\build.ps1 core package` (this machine's last, so the
-   bindings match its DLL), then `tools\publish.ps1 -DryRun`, and when that
+   bindings match its DLL), `tools\e2e\check-disc.ps1` for each (`-Arch
+   x64` for the other), then `tools\publish.ps1 -DryRun`, and when that
    reads right, `tools\publish.ps1`. The packages must be built from the
    very commit that is pushed (the build number is the commit count, and
    the script refuses any other), so a commit made after packaging means

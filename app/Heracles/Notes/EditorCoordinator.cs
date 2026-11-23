@@ -222,7 +222,12 @@ internal sealed class EditorCoordinator : IBlockEditorHost, IDisposable
 
         void Finish(ImageSource? image)
         {
-            if (image is not null) Images[source] = image;
+            if (image is not null)
+            {
+                // A picture is big once it is read. Past a few dozen, start again.
+                if (Images.Count >= 48) Images.Clear();
+                Images[source] = image;
+            }
             completion(image);
         }
 

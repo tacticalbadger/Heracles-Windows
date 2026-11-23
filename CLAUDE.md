@@ -850,9 +850,6 @@ swaps in the text box and puts the caret where the click was.
 
 Found and not yet fixed. Each is small; none loses data.
 
-- The sidebar is rebuilt on every change, which puts it back at the top.
-  With a library longer than one screen, renaming a note scrolls the
-  sidebar away from it. Keep the scroll position across `Refresh`.
 - The sidebar has no keyboard navigation of its own beyond the list's
   (no left and right to fold and unfold).
 - A `file://` picture URL written with two slashes before a drive
@@ -886,6 +883,34 @@ and must never push its old history. **Stage 2 and the first two tasks of
 stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
 after that stays local until he says push: `git log origin/main..HEAD`
 lists it.
+
+**Where things stand: stages 0 to 4 of the design's seven are done. The
+app can be browsed, and a note can be written in it.** One process per
+library, any number of windows, a sidebar, panes and tabs, Quick Open, and
+a native block editor with the Mac editor's behaviour: every kind of block,
+Markdown as it is typed, the slash menu, marks and links, the editor's own
+undo, copy and paste, pictures, and saving that loses nothing on close or
+quit. From a clean build: no warnings, 203 Rust tests, 438 .NET tests, and
+45 scripted checks of the real window (`check-shell.ps1` 30,
+`check-editor.ps1` 15).
+
+**What that does not say** is under "Not verified", and the first entry
+matters: nobody has yet typed, clicked or dragged in the editor with a real
+keyboard and mouse. The tests reach the code behind every key and every
+mouse gesture, with real text boxes, but not the last inch between Windows'
+input and that code.
+
+**Next: stage 5**, boards, task details and reminders (the design's
+"Boards and tasks" and "Reminders"; the Mac's `BoardView.swift`,
+`TaskDetailView.swift`, `TaskSupport.swift` and their tests; the fourth
+spike's findings on scheduled toasts). It has no plan yet: write one in
+`docs/superpowers/plans/` first. A todo list still says "Boards arrive in a
+later version." Then stage 6 (import and export of files, the Electron
+library imported on first start, the link scheme registered with Windows),
+and stage 7 (packages, a release script, and 0.2.0 when the owner asks).
+
+What follows is the record, stage by stage, as each was finished. Read it
+for how a thing was done; some of it describes the app as it was then.
 
 **Stage 2 (model and shell) is built: the app can be browsed.** One process
 per library; any number of windows on one model; a sidebar (favorites,
@@ -994,11 +1019,17 @@ Reviewed by the session that wrote it; no one else has read it.
   list begins from digits only (the Mac also reads a sign, so `+1. ` makes
   a list there); `Paste` brings a stale range back into the text before
   using it; `Move` takes an id given twice as one block.
-- Nothing in the app uses the model yet: a note is still shown through
-  `ReadOnlyDocument`.
+- (At the end of stage 3 nothing in the app used the model. Stage 4 put
+  the editor on it.)
 
-**Stage 4 (the editor's views) is under way: five of its six tasks are
-done.** Plan:
+**Stage 4 (the editor's views) is built and verified** (2026-11-23): from a
+clean build, no warnings, 203 Rust tests and 437 .NET tests passed; then,
+with the sidebar change below, 438, and both scripted checks of the window
+(30 and 15). Reviewed by the session that wrote it, by breaking the code on
+purpose where a test had passed at its first run (fourteen breaks over
+the stage, thirteen caught; the one that was not is a guard kept against an
+order of events WPF was seen to give both ways) and by looking at the
+window in dark and in light; no one else has read it. Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
 undo, marks and the slash menu; block actions, the clipboard, pictures and
@@ -1081,4 +1112,10 @@ keyboard or touch the clipboard.
   `check-shell.ps1` still passes its 30. Pictures in dark and in light were
   looked at, and two faults found by looking were fixed (see "Found on
   Windows": the emoji's colour, the text box's colour).
-- **Next: Task 6**, verify the stage from a clean build.
+- Done (Task 6): the stage verified from a clean build, as said above.
+  And one fault of stage 2 fixed, because the editor made it constant: a
+  save changes a note's date, the core reports the note changed, and the
+  sidebar was drawn again from the top at every pause in typing. The
+  sidebar now draws its rows again only when they would come out different
+  (`SidebarRows.ShowTheSame`), and stays scrolled to where it was when it
+  does.

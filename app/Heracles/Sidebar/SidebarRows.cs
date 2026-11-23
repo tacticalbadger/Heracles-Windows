@@ -68,4 +68,33 @@ internal static class SidebarRows
         }
         return null;
     }
+
+    /// <summary>
+    /// True when two lists of rows would be drawn the same, menus and all.
+    /// A note's dates are not shown, and they change with every save of its
+    /// text: without this the sidebar would be drawn again at every pause
+    /// in someone's typing.
+    /// </summary>
+    public static bool ShowTheSame(IReadOnlyList<SidebarRow> first, IReadOnlyList<SidebarRow> second)
+    {
+        if (first.Count != second.Count) return false;
+        for (var index = 0; index < first.Count; index++)
+        {
+            var a = first[index];
+            var b = second[index];
+            if (a.Key != b.Key || a.Title != b.Title || a.Depth != b.Depth || a.IsHeader != b.IsHeader
+                || a.HasChildren != b.HasChildren || a.IsExpanded != b.IsExpanded || !ShowTheSame(a.Note, b.Note))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool ShowTheSame(Note? a, Note? b)
+    {
+        if (a is null || b is null) return a is null && b is null;
+        return a.Id == b.Id && a.Kind == b.Kind && a.ParentId == b.ParentId && a.Title == b.Title && a.Icon == b.Icon
+            && a.Favorited == b.Favorited && a.Archived == b.Archived && a.Trashed == b.Trashed;
+    }
 }

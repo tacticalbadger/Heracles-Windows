@@ -20,6 +20,8 @@ internal sealed class SidebarView : DockPanel
     private readonly TextBox search;
     private readonly ListBox list;
     private readonly HashSet<string> collapsed = [];
+    private readonly Dictionary<string, ListBoxItem> items = [];
+    private IReadOnlyList<SidebarRow>? shownRows;
     private bool refreshing;
 
     public SidebarView(AppModel model, Workspace workspace)
@@ -68,28 +70,69 @@ internal sealed class SidebarView : DockPanel
 
     public bool IsSearching => !string.IsNullOrWhiteSpace(search.Text);
 
-    /// <summary>Redraw from the model. Called whenever the library or this window's panes change.</summary>
+    /// <summary>
+    /// Show the model as it is now. Called whenever the library or this
+    /// window's panes change, which while someone types is every time their
+    /// note is saved. The rows are only drawn again when they would come out
+    /// different, and then the list stays scrolled to where it was.
+    /// </summary>
     public void Refresh()
     {
         refreshing = true;
         try
         {
-            list.Items.Clear();
-            if (IsSearching) ShowResults();
-            else ShowLibrary();
+            if (IsSearching)
+            {
+                shownRows = null;
+                Redraw(ShowResults);
+                return;
+            }
+            var rows = SidebarRows.For(model.Library, collapsed);
+            var active = SidebarRows.RowFor(rows, workspace.Tree.ActiveNoteId)?.Key;
+            if (shownRows is null || !SidebarRows.ShowTheSame(shownRows, rows))
+            {
+                Redraw(() => ShowLibrary(rows));
+                shownRows = rows;
+            }
+            // The highlight is on the note in the focused pane, whatever was
+            // clicked last.
+            var wanted = active is not null && items.TryGetValue(active, out var item) ? item : null;
+            if (!ReferenceEquals(list.SelectedItem, wanted)) list.SelectedItem = wanted;
         }
         finally { refreshing = false; }
     }
 
-    private void ShowLibrary()
+    private void Redraw(Action draw)
     {
-        var rows = SidebarRows.For(model.Library, collapsed);
-        var active = SidebarRows.RowFor(rows, workspace.Tree.ActiveNoteId);
+        var scroll = Scroller(list);
+        var offset = scroll?.VerticalOffset ?? 0;
+        list.Items.Clear();
+        items.Clear();
+        draw();
+        if (scroll is null || offset <= 0) return;
+        // Once the new rows have their places, back to where the list was.
+        list.UpdateLayout();
+        scroll.ScrollToVerticalOffset(offset);
+    }
+
+    private static ScrollViewer? Scroller(DependencyObject parent)
+    {
+        for (var index = 0; index < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, index);
+            if (child is ScrollViewer found) return found;
+            if (Scroller(child) is { } inner) return inner;
+        }
+        return null;
+    }
+
+    private void ShowLibrary(IReadOnlyList<SidebarRow> rows)
+    {
         foreach (var row in rows)
         {
             var item = Item(row);
             list.Items.Add(item);
-            if (row == active) list.SelectedItem = item;
+            items[row.Key] = item;
         }
     }
 

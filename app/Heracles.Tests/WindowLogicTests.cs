@@ -144,7 +144,7 @@ public sealed class SidebarRowsTests
     private static string Outline(IEnumerable<SidebarRow> rows) =>
         string.Join("\n", rows.Select(row => new string(' ', row.Depth * 2) + (row.IsHeader ? "# " : "") + row.Key));
 
-    private static Library Sample() => new(
+    private static Note[] SampleNotes() =>
     [
         Note("nb", NoteKind.Notebook, title: "Work"),
         Note("plans", NoteKind.Section, parent: "nb", at: 0),
@@ -152,7 +152,36 @@ public sealed class SidebarRowsTests
         Note("budget", parent: "plans", at: 1),
         Note("old", parent: "nb", archived: true),
         Note("scrap", parent: "nb", trashed: true),
-    ]);
+    ];
+
+    private static Library Sample() => new(SampleNotes());
+
+    [Fact]
+    public void RowsThatShowTheSameNeedNoRedrawing()
+    {
+        var shown = SidebarRows.For(Sample(), NothingCollapsed);
+
+        IReadOnlyList<SidebarRow> After(Func<Note, Note> change, IReadOnlySet<string>? collapsed = null) =>
+            SidebarRows.For(new Library(SampleNotes().Select(change)), collapsed ?? NothingCollapsed);
+
+        // Every save of a note's text changes its date, and nothing the
+        // sidebar shows. The sidebar must not be redrawn for that: while
+        // someone types, a save comes every pause.
+        Assert.True(SidebarRows.ShowTheSame(shown, shown));
+        Assert.True(SidebarRows.ShowTheSame(shown, After(note => note with { UpdatedAt = "2026-06-01T00:00:00.000Z" })));
+
+        // Anything it does show is a reason to draw again.
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "trip" ? note with { Title = "Trip to the coast" } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "trip" ? note with { Icon = "🧭" } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "trip" ? note with { Favorited = false } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "budget" ? note with { Favorited = true } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "budget" ? note with { Trashed = true } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "budget" ? note with { Position = -1 } : note)));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note, new HashSet<string> { "plans" })));
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note).Take(3).ToList()));
+        // A favorite's row offers "Remove from Favorites": what a row's menu says counts too.
+        Assert.False(SidebarRows.ShowTheSame(shown, After(note => note.Id == "old" ? note with { Favorited = true, Archived = true } : note)));
+    }
 
     [Fact]
     public void TheRowsComeInTheOrderTheSidebarShows()

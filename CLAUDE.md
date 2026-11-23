@@ -255,6 +255,11 @@ Things that bite on this machine:
   a change seems to have had no effect, compare the times of the source and
   the output, and rebuild with `--no-incremental` (or `tools\build.ps1
   clean`). Do not read much into gaps between log timestamps either.
+  **And it steps forwards when it is put right** (seven minutes, seen
+  2026-11-23, twice in one day counting the step back). A wait that reads
+  the clock is over the instant that happens: a check said "the window did
+  not appear" one second before it did. The harness's waits are timed by a
+  stopwatch now (`Wait-Ui`); anything new that waits should be too.
 
 ## Everyday commands
 
@@ -711,7 +716,9 @@ harness; "Not verified" below says what the checks could not reach.
       against the real one**: see "Not verified")
 - [x] Nothing lost on quit: closing a tab, a pane or a window, and
       quitting, save every editor first
-- [ ] Packages for ARM64 and x64, and a release script
+- [x] Packages for ARM64 and x64, and a release script (both packages
+      built, started and checked; the script has only ever run dry: the
+      release is the owner's to make)
 
 ## Spike findings
 
@@ -990,8 +997,9 @@ swaps in the text box and puts the caret where the click was.
 
 ## Not verified
 
-- The x64 build has only run under emulation, on the ARM64 dev machine.
-  It has never run on x64 hardware.
+- The x64 build has only run under emulation, on the ARM64 dev machine
+  (where the x64 package passes all five automation checks). It has never
+  run on x64 hardware.
 - Windows 10. Everything so far ran on Windows 11.
 - A PC with nothing installed. The packages are self-contained and have
   only been started on the machine that built them.
@@ -1118,8 +1126,9 @@ stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
 after that stays local until he says push: `git log origin/main..HEAD`
 lists it.
 
-**Where things stand: stages 0 to 6 of the design's seven are done. The app
-does what the Mac app does.** One process per library, any number of
+**Where things stand: the app is built. All seven stages of the design are
+done but for the release itself, which is the owner's to make.** The app
+does what the Mac app does: one process per library, any number of
 windows, a sidebar, panes and tabs, Quick Open; a native block editor with
 the Mac editor's behaviour (every kind of block, Markdown as it is typed,
 the slash menu, marks and links, the editor's own undo, copy and paste,
@@ -1127,12 +1136,14 @@ pictures, and saving that loses nothing on close or quit); boards with
 columns and cards, a window for each task with everything the Mac's task
 has, and reminders handed to Windows; files imported and a note exported
 from the File menu; and a library left by the Electron app brought across
-at the first start, with a summary. From a clean build at the end of stage
-6: no warnings, 203 Rust tests, 600 .NET tests (604 since: see "Since stage 6" at the end) and one skipped on purpose
-(it talks to Windows' notification platform: `HERACLES_TEST_TOASTS=1` runs
-it), and 114 scripted checks of the real window (`check-shell.ps1` 30,
-`check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
-`check-legacy.ps1` 20).
+at the first start, with a summary. Every line of the parity list is
+ticked. From a clean build at the end: no warnings, 203 Rust tests, 608
+.NET tests and one skipped on purpose (it talks to Windows' notification
+platform: `HERACLES_TEST_TOASTS=1` runs it), 114 scripted checks of the
+real window by automation (`check-shell.ps1` 30, `check-editor.ps1` 15,
+`check-boards.ps1` 39, `check-transfer.ps1` 10, `check-legacy.ps1` 20) and
+23 by a real mouse and keyboard (`check-input.ps1`). Both packages were
+built, and each was started and checked: see "Stage 7" at the end.
 
 **What that does not say** is under "Not verified", and three entries
 matter. No person has used the app yet. A script used it for a minute with
@@ -1140,21 +1151,34 @@ a real mouse and keyboard (`check-input.ps1`: typing, keys, clicks and
 drags, and it found a fault no test could have), but it did only what it
 was written to do: the block handle, the context menus, selecting with the
 mouse and the clipboard are among what is still untried. The app has never
-yet made itself known to Windows
-(its link scheme, its reminders), because it does that only on the real
-library and has only ever been started on fixtures: the first start on the
-real library is the first time that runs. And that same first start is
-when a real Electron library, if there is one, is imported for the first
-time: only made-up ones have been.
+yet made itself known to Windows (its link scheme, its reminders), because
+it does that only on the real library and has only ever been started on
+fixtures: the first start on the real library is the first time that runs.
+And that same first start is when a real Electron library, if there is
+one, is imported for the first time: only made-up ones have been.
 
-**In hand: stage 7**, packages for both processors, a release script,
-release notes and a README for the app as it is. Plan:
-`docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`,
-two tasks. **Task 1 is done**: `tools\publish.ps1` (the Toolbox port's,
-renamed; never run but for its dry run), `docs\release-notes\0.2.0.md`, and
-`README.md` rewritten against the Mac's, feature for feature. Task 2 builds
-both packages from the final commit, starts each, and reads the script's
-dry run. 0.2.0 itself is published when the owner asks.
+**What is left, and it is the owner's**:
+
+1. *Use it.* Start a build on the real library (`tools\build.ps1 run`, or
+   a package). That first start imports an Electron library if one is
+   there, shows the summary, and registers the app's links and reminders
+   with Windows. Ten minutes of typing, dragging blocks by their handles,
+   right-clicking things, copying and pasting. Give a task a reminder two
+   minutes ahead, close the app, and click the banner when it comes. What
+   goes wrong goes in "Known faults", or gets fixed.
+2. *Push.* Everything since stage 3's second task is local:
+   `git log origin/main..HEAD` lists it.
+3. *Release*, when he says so. From the commit that was pushed:
+   `tools\build.ps1 core package -Arch x64`, then
+   `tools\build.ps1 core package` (this machine's last, so the bindings
+   match its DLL), then `tools\publish.ps1 -DryRun`, and when that reads
+   right, `tools\publish.ps1`. The packages must be built from the very
+   commit that is pushed (the build number is the commit count, and the
+   script refuses any other), so a commit made after packaging means
+   packaging again.
+
+Nothing else is planned. The design's "out of scope" list, and "Known
+faults" above, are what a next session would choose from.
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.
@@ -1486,3 +1510,27 @@ on the Mac); no one else has read it. Plan:
   go over "Add a card" never reached its column. Both are fixed, with
   tests for how a card and a tab are carried, and all 23 pass. 608 .NET
   tests pass.
+
+**Stage 7 (package and release) is done but for the release** (2026-11-23).
+Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`.
+
+- Done (Task 1): `tools\publish.ps1`, `docs\release-notes\0.2.0.md`, and
+  `README.md` rewritten for the app as it is, against the Mac's README
+  feature for feature.
+- Done (Task 2): from a clean build, no warnings, 203 Rust tests, 608 .NET
+  tests and one skipped on purpose. Both packages built
+  (`Heracles-0.2.0-win-arm64.zip`, 61 MB; `Heracles-0.2.0-win-x64.zip`,
+  66 MB; `SHA256SUMS`), and neither names the build machine's profile
+  folder (the package step checks). **Each package was started on the
+  fixture and passed all five automation checks** (114 each; the x64 one
+  under emulation), and the ARM64 package passed `check-input.ps1` too (23,
+  by a real mouse and keyboard).
+- `tools\publish.ps1 -DryRun` was read: it checks the checksums and that
+  both packages are the build of the current commit, shows the title, the
+  files and the notes, and names the one thing that would stop a real run
+  (the commit is not on `origin/main`). **A real run has never been made**:
+  the draft, the upload and the publishing are the Toolbox port's code,
+  renamed, and are untried here.
+- Packages are not kept: they are under `build\release`, which is not in
+  git, and they are only good for the commit they were built from. The
+  ones on this machine were built from the commit this note is in.

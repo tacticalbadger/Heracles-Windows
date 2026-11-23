@@ -96,11 +96,15 @@ function Invoke-UiMenu {
 # Wait until a condition holds, for at most a few seconds. Returns whether it did.
 function Wait-Ui {
     param([Parameter(Mandatory = $true)][scriptblock]$Condition, [int]$Milliseconds = 3000)
-    $until = (Get-Date).AddMilliseconds($Milliseconds)
+    # Timed by a stopwatch, not by the clock: this machine's clock is put
+    # right now and then, minutes at a time, and a wait that reads the clock
+    # is over at once when it jumps forward (a window "did not appear" that
+    # was a second from appearing) and never over when it jumps back.
+    $waited = [System.Diagnostics.Stopwatch]::StartNew()
     do {
         if (& $Condition) { return $true }
         Start-Sleep -Milliseconds 150
-    } while ((Get-Date) -lt $until)
+    } while ($waited.ElapsedMilliseconds -lt $Milliseconds)
     return $false
 }
 

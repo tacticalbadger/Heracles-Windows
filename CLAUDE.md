@@ -519,6 +519,15 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   an emoji, and failed for a reason that was not in the code. Write such
   files with the editor tools, and build a string that must contain a
   backslash from its character code (`(char)92`).
+- **The view tests share one thread, and a test that pumped it used to let
+  another test run inside itself.** Every typing test lets the thread do
+  what it has put off after each key; a test of another class, asked for
+  meanwhile from another of the runner's threads, was among the things put
+  off, and ran whole, in the middle. Nothing noticed until a slow test (two
+  seconds waiting on a web server) landed inside the test that times its
+  own typing, which then failed, at random, for something it never did.
+  `Sta.Run` now lets one test on that thread at a time (`StaTests`). A
+  timing that fails once and passes alone is worth an hour, not a retry.
 - **A Save dialog takes its file name only from characters typed in its
   box.** Text put there whole (`WM_SETTEXT`) shows in the box and is then
   ignored: Save writes the name the dialog first offered, in the folder it
@@ -629,10 +638,11 @@ harness; "Not verified" below says what the checks could not reach.
       own undo, marks and links, paste through the core's converter
       (built, and tested with real text boxes in no window; **never yet
       used with a real mouse or keyboard**: see "Not verified")
-- [ ] Pictures in the image store; remote pictures fetched on open (pasted
-      and dropped pictures are stored and shown, tested; a picture on the
-      web is fetched when its block is shown, written and never run; no
-      picture has been looked at in the window)
+- [x] Pictures in the image store; remote pictures fetched on open (pasted,
+      dropped and imported pictures are stored and shown; a picture on the
+      web is fetched when its block is shown, tested against a web server
+      of the test's own on this machine; a stored picture and a missing one
+      were looked at in the window, in the seeded note)
 - [x] Kanban boards: columns added, renamed, moved and deleted, cards added,
       ticked, opened and deleted (**dragging a card is written and has
       never been done**: see "Not verified")
@@ -1005,6 +1015,11 @@ swaps in the text box and puts the caret where the click was.
   properly. Windows itself was in dark mode; the app following a change of
   Windows' own setting while it runs has not been seen.
 - A window saved on a second display that is then unplugged.
+- A picture from the real web. The fetching is tested against a server on
+  this machine (`EditorCoordinatorTests`, over plain HTTP on the loopback
+  address): a picture, a page that is not one, one that says it is too
+  big, one sent with "not found", and a place that does not answer. HTTPS,
+  redirects and a slow server were not tried.
 - **A real Electron library.** The import has only ever been given the
   small library in `app/Heracles.Tests/Fixtures` and the ones the core's
   own tests make. The owner's own (`%APPDATA%\Heracles\heracles.sqlite`, if
@@ -1074,7 +1089,7 @@ columns and cards, a window for each task with everything the Mac's task
 has, and reminders handed to Windows; files imported and a note exported
 from the File menu; and a library left by the Electron app brought across
 at the first start, with a summary. From a clean build at the end of stage
-6: no warnings, 203 Rust tests, 600 .NET tests and one skipped on purpose
+6: no warnings, 203 Rust tests, 600 .NET tests (604 since: see "Since stage 6" at the end) and one skipped on purpose
 (it talks to Windows' notification platform: `HERACLES_TEST_TOASTS=1` runs
 it), and 114 scripted checks of the real window (`check-shell.ps1` 30,
 `check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
@@ -1398,3 +1413,16 @@ on the Mac); no one else has read it. Plan:
     breaks when the note has several blocks, and `ui.ps1 find` then prints
     several lines, of which the helpers read the first. Ask for a block
     by its words (`Get-UiId -Name '…' -Prefix 'Block:'`).
+
+**Since stage 6** (2026-11-23), before packaging:
+
+- Pictures, the last feature on the parity list not ticked. Fetching one
+  from the web had been "written and never run"; it is now run, against a
+  web server of the test's own on this machine, and two rules broken on
+  purpose (the limit on size, and "not found") were each caught once the
+  test was made sharp enough to tell. The seeded note "Every kind of block"
+  holds a real picture, made in code, beside one that is missing, and
+  `look-editor.ps1` shows both.
+- The view tests' shared thread takes one test at a time (see "Found on
+  Windows"). This was a fault in the tests since stage 4, found when a new
+  slow test made it show. 604 .NET tests pass, three runs in a row.

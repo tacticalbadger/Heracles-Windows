@@ -47,7 +47,8 @@ internal static class E2eSeed
           {"type":"columnBlock","content":[
             {"type":"column","attrs":{"width":1},"content":[{"type":"paragraph","content":[{"type":"text","text":"On the left, the way there."}]}]},
             {"type":"column","attrs":{"width":1},"content":[{"type":"paragraph","content":[{"type":"text","text":"On the right, the way back."}]}]}]},
-          {"type":"image","attrs":{"src":"heracles-image://local/0000000000000000000000000000000000000000000000000000000000000000","alt":"A map of the coast","title":null}},
+          {"type":"image","attrs":{"src":"PICTURE","alt":"A map of the coast","title":null}},
+          {"type":"image","attrs":{"src":"heracles-image://local/0000000000000000000000000000000000000000000000000000000000000000","alt":"A picture that has gone missing","title":null}},
           {"type":"paragraph","content":[{"type":"text","text":"The end."}]}
         ]}
         """;
@@ -76,13 +77,46 @@ internal static class E2eSeed
         store.SetNoteArchived(old.Id, true);
         var scrap = store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "Scrap"));
         store.TrashNote(scrap.Id);
-        store.CreateNote(new NewNote(ParentId: plans.Id, Title: "Every kind of block", Icon: "🧪", Content: EveryKind));
+        store.CreateNote(new NewNote(ParentId: plans.Id, Title: "Every kind of block", Icon: "🧪", Content: EveryKind.Replace("PICTURE", store.StoreImage(Picture(), "image/png").Url)));
         // Titles a view must cope with: none at all, and far too long.
         var unnamed = store.CreateNote(new NewNote(ParentId: notebook.Id));
         store.RenameNote(unnamed.Id, "");
         store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "A very long title " + new string('x', 280)));
 
         Log.Info($"seed: created {store.ListNotes().Length - 1} notes");
+    }
+
+    /// <summary>
+    /// A picture made here, so the seed needs no file: sea, sand and a sun, 480
+    /// by 200. Something with colour and shape in it, to be looked at.
+    /// </summary>
+    private static byte[] Picture()
+    {
+        const int width = 480;
+        const int height = 200;
+        var pixels = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                // Sky above, sea in the middle, sand below; a sun in the sky.
+                var (red, green, blue) = y < 90 ? (150, 200, 240) : y < 150 ? (40, 110, 170) : (225, 200, 150);
+                var fromSun = Math.Sqrt(Math.Pow(x - 370, 2) + Math.Pow(y - 48, 2));
+                if (fromSun < 26) (red, green, blue) = (250, 210, 80);
+                var at = (y * width + x) * 4;
+                pixels[at] = (byte)blue;
+                pixels[at + 1] = (byte)green;
+                pixels[at + 2] = (byte)red;
+                pixels[at + 3] = 255;
+            }
+        }
+        var bitmap = System.Windows.Media.Imaging.BitmapSource.Create(
+            width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, pixels, width * 4);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
     }
 
     /// <summary>A board with a card of every sort: plain, done, and one with everything a card can say.</summary>

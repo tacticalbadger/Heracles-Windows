@@ -36,15 +36,30 @@ internal static class Sta
         return dispatcher!;
     }
 
-    /// <summary>Run a test on the views' thread. What it throws is thrown here, as it was.</summary>
+    /// <summary>Held by the test that is on the views' thread, for as long as it is.</summary>
+    private static readonly object OneAtATime = new();
+
+    /// <summary>
+    /// Run a test on the views' thread. What it throws is thrown here, as it was.
+    ///
+    /// One test at a time, and the next waits here, off that thread. Without
+    /// this, a test that lets the thread do what it has put off (every
+    /// typing test does, after each key) would find another class's test
+    /// among the things put off, and run the whole of it in the middle of
+    /// itself: a test that times its own typing was once handed two seconds
+    /// of another test's waiting, and failed for it.
+    /// </summary>
     public static void Run(Action test)
     {
         ExceptionDispatchInfo? failure = null;
-        Thread.Value.Invoke(() =>
+        lock (OneAtATime)
         {
-            try { test(); }
-            catch (Exception error) { failure = ExceptionDispatchInfo.Capture(error); }
-        });
+            Thread.Value.Invoke(() =>
+            {
+                try { test(); }
+                catch (Exception error) { failure = ExceptionDispatchInfo.Capture(error); }
+            });
+        }
         failure?.Throw();
     }
 }

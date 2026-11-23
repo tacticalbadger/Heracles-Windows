@@ -124,7 +124,11 @@ app/
                           RichText's typing shortcuts). Its views (so
                           far): EditorTheme (fonts, sizes, a block's text
                           as inlines and read back), BlockTextBox (one
-                          block's text while it is typed in)
+                          block's text while it is typed in), BlockViews
+                          (a view for each kind of block), BlockEditorView
+                          (the page), BlockEditorController (the document,
+                          the selection; .Pending.cs is what is not built
+                          yet)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -389,6 +393,13 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   `ContinueRouting`**, or the key is swallowed and never reaches the
   window's shortcuts) and `PreviewExecuted` (mark it handled).
 - `Key.Enter` and `Key.Return` are one value, and it prints as `Return`.
+- **`UIElement.IsVisible` is false for everything that is not in a shown
+  window**, so it says nothing in a test. Read `Visibility` up the tree
+  (`BlockEditorView.FrameOf` does).
+- **A scroll view measures what it scrolls with no limit on height**, so
+  the page inside cannot learn how much of it is on show from its own
+  measuring. `EditorScrollViewer` notes the height it is offered and asks
+  the page to measure again when that changes.
 - `System.Text.Json` writes every character outside the basic plane (an
   emoji) as two escapes, whatever encoder it is given. `JsonValue.Text`
   puts them back, to match what the Mac and the core write.
@@ -897,7 +908,7 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-**Stage 4 (the editor's views) is under way: one of its six tasks is
+**Stage 4 (the editor's views) is under way: two of its six tasks are
 done.** Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
@@ -913,8 +924,23 @@ keyboard or touch the clipboard.
   static text of the same block are the same height for fifteen kinds of
   text at five widths. 339 .NET tests pass. Nothing in the app uses either
   yet.
-- **Next: Task 2**, the block views and the page
-  (`BlockViews.cs`, `BlockEditorView.cs`, and of `BlockEditorController.cs`
-  what shows a note and holds the selection), from the Mac's files of the
-  same names. The Mac lays its views out by hand (`layout(width:)`); the
-  plan is to do the same in `MeasureOverride` and `ArrangeOverride`.
+- Done (Task 2): a note is shown on a page. `BlockViews.cs` (a view for
+  each kind of block, laid out by hand as the Mac's are: `HandLaidView`
+  places things in `MeasureOverride` and arranges them in
+  `ArrangeOverride`), `BlockEditorView.cs` (the page: views kept by block
+  id from one edit to the next, the block under a point, where a drop would
+  land, the selection drawn over whole blocks), and of
+  `BlockEditorController.cs` what loads a note and holds the selection.
+  **Only the block with the caret has a text box, and giving a block the
+  text box moves nothing on the page** (tested for twelve blocks at two
+  widths). 600 blocks open in well under the test's three seconds. 354
+  .NET tests pass. Tests: `EditorHarness.cs` (the Mac's harness, with no
+  window) and `EditorLayoutTests.cs`.
+- `BlockEditorController.Pending.cs` holds, as methods that do nothing,
+  what the views already call and Tasks 3 and 4 build with their tests
+  (typing, keys, block actions). It goes when the last of them is built.
+- **Next: Task 3**: typing, keys, undo, marks, links and the slash menu,
+  from `BlockEditorController.swift` and the Mac's `EditorTypingTests`,
+  `EditorShortcutTests` and `EditorNavigationTests`. The harness needs a
+  `Press(Key, ModifierKeys)`: a key goes to `HandleKey`, and one the editor
+  leaves alone is carried out by the matching `EditingCommands` command.

@@ -187,8 +187,11 @@ tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           board and a task, and of files in and out),
                           look-editor and look-boards (pictures, light and
                           dark)
-tools/                    (to come) publish.ps1
-docs/                     the design, the plans, the Mac's rewrite notes
+tools/publish.ps1         a GitHub release from the packages: checks, a
+                          draft, the files, then published. -DryRun sends
+                          nothing. Run by the owner, when he says
+docs/                     the design, the plans, the Mac's rewrite notes,
+                          release-notes/<version>.md ("In this version")
 VERSION                   marketing version; build number = commit count
 ```
 
@@ -256,6 +259,8 @@ tools\build.ps1 app -Restart    # rebuild the app, close the running build, star
 tools\build.ps1 test            # cargo test --locked, then dotnet test on app\Heracles.Tests
 tools\build.ps1 run             # starts it on the real library, not a fixture
 tools\build.ps1 core package    # self-contained zip for this machine -> build\release
+tools\build.ps1 core package -Arch x64   # and for the other processor (then "core" again, for this one's bindings)
+tools\publish.ps1 -DryRun       # what a release would send, and what would stop it; sends nothing
 tools\build.ps1 clean
 cargo test --locked             # the core alone: every test binary must say ok
 ```
@@ -648,12 +653,12 @@ harness; "Not verified" below says what the checks could not reach.
       never been done**: see "Not verified")
 - [x] Task detail: notes, priority, dates, location, labels, reminders,
       nested subtasks, comments
-- [ ] Reminders delivered by Windows, whether or not the app is running
+- [x] Reminders delivered by Windows, whether or not the app is running
       (built and tested up to Windows' own list: a reminder handed over
       under a test identity was listed there and taken back. **The app
       itself has never registered or scheduled anything**, because it has
       only ever run on fixtures; no reminder of its own has been seen to
-      arrive, and none has been clicked)
+      arrive, and none has been clicked: see "Not verified")
 - [x] Import of Markdown and HTML files; export as Markdown (File > Import
       and File > Export as Markdown, checked through the system's own
       dialogs)
@@ -661,11 +666,11 @@ harness; "Not verified" below says what the checks could not reach.
       in the window with a small made-up library; **no real Electron
       library has ever been imported**: see "Not verified")
 - [x] Quick Open, the icon picker, the menu bar (with Edit and Format)
-- [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
+- [x] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
       handed over between copies, and the editor scrolls to the block and
       marks it; the scheme is registered with Windows at start, which is
-      tested against a registry key of the test's own and has never run
-      against the real one)
+      tested against a registry key of the test's own and **has never run
+      against the real one**: see "Not verified")
 - [x] Nothing lost on quit: closing a tab, a pane or a window, and
       quitting, save every editor first
 - [ ] Packages for ARM64 and x64, and a release script
@@ -1106,10 +1111,14 @@ real library is the first time that runs. And that same first start is
 when a real Electron library, if there is one, is imported for the first
 time: only made-up ones have been.
 
-**Next: stage 7**, packages for both processors, a release script, release
-notes and a README for the app as it is. Plan:
-`docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`.
-0.2.0 itself is published when the owner asks.
+**In hand: stage 7**, packages for both processors, a release script,
+release notes and a README for the app as it is. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`,
+two tasks. **Task 1 is done**: `tools\publish.ps1` (the Toolbox port's,
+renamed; never run but for its dry run), `docs\release-notes\0.2.0.md`, and
+`README.md` rewritten against the Mac's, feature for feature. Task 2 builds
+both packages from the final commit, starts each, and reads the script's
+dry run. 0.2.0 itself is published when the owner asks.
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.

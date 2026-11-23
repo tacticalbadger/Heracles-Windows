@@ -2,16 +2,48 @@
 
 A local-first, hierarchical notebook: pages in notebooks, a block editor, split panes and kanban boards. Everything is stored on your PC in one SQLite database.
 
-This repository is the Windows app. It is a native app, written in C# (WPF) over the same Rust core as the [Mac app](https://github.com/tacticalbadger/Heracles), and it aims to do everything the Mac app does.
+This repository is the Windows app. It is a native app, written in C# (WPF) over the same Rust core as the [Mac app](https://github.com/tacticalbadger/Heracles), and it does what the Mac app does.
 
-## Status
+## Status and download
 
-The native Windows app is being built. **There is nothing to download yet.**
+The native app is a preview. Builds are published on the [releases page](https://github.com/tacticalbadger/Heracles-Windows/releases): a zip for Windows on x64, and one for Windows on ARM. If there is no release there yet, the app can be [built from source](#building).
 
-- What exists today: you can browse a library. The sidebar, panes and tabs, split views, several windows, search, Quick Open, icons, renaming, favorites, archive and trash all work.
-- What is missing: the editor. A note's text is shown but cannot be changed yet, and boards are not there. Those are the next stages.
-- The Electron app that used to live in this repository is gone. Its source is in the Mac repository's history.
-- The plan and its order of work are in [`docs/superpowers/specs/2026-11-22-native-windows-app-design.md`](./docs/superpowers/specs/2026-11-22-native-windows-app-design.md).
+- **Nothing to install.** Unzip it anywhere and run `Heracles.exe`. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
+- **The build is not code-signed.** Windows will say it does not recognise the app. Choose **More info**, then **Run anyway**.
+- It does not update itself. To move to a newer version, replace the folder.
+- **Nobody has used it day to day yet.** It passes its automated tests and its scripted checks of the real window, and those cannot hold a mouse or press a key. What has been checked and what has not is written down, plainly, in [`CLAUDE.md`](./CLAUDE.md#not-verified).
+- The first time it starts, it copies an existing library of the earlier (Electron) version of Heracles into its own database. See [Data storage](#data-storage).
+
+## Features
+
+- **Notebooks, sections and pages** in a sidebar, nested as deep as you like, with favorites, archive and trash. Trashing, restoring and deleting apply to a page and everything under it.
+- **Panes and tabs.** Split a window right or down, drag the dividers, and drag tabs between panes. Each window remembers its layout, and any number of windows can be open on the same library.
+- **Block editor.** Headings, lists, task lists, quotes, callouts, toggles, code blocks, images and column layouts, with the editor's own undo.
+- **Markdown as you type**, a slash menu of blocks, and a Format menu with the usual shortcuts.
+- **Blocks you can pick up.** Each block has a handle to drag it, make columns with it, duplicate it, turn it into another kind of block, or copy a link to it. Whole blocks can be selected, copied and moved together.
+- **Kanban boards.** A todo list is a board with your own columns, which you can rename and reorder. Cards carry notes, priority, a due date, a deadline, labels, a location, reminders, comments and subtasks nested to any depth.
+- **Reminders** arrive as Windows notifications, whether or not the app is open. Clicking one opens its list.
+- **Search** across every note's title and text.
+- **Quick Open** (Ctrl+K) to jump to a note by name.
+- **Import and export.** Import Markdown and HTML files as pages, with their pictures. Export a note as Markdown with its pictures beside it.
+- **Links between notes.** `heracles://` links open a note, or scroll to one block of it.
+
+Not there yet, here or on the Mac: updating itself, syntax colouring in code blocks, find within a note, selecting text across blocks, resizing an image, and export to HTML.
+
+## Keyboard
+
+| Keys | Does |
+|---|---|
+| Ctrl+N, Ctrl+Shift+N, Ctrl+Shift+T | New page, new section, new to-do list |
+| Ctrl+K | Quick Open (with text selected: make a link) |
+| Ctrl+W | Close the tab |
+| Ctrl+\\, Ctrl+Shift+\\ | Split right, split down |
+| Ctrl+B, Ctrl+I, Ctrl+Shift+X, Ctrl+E | Bold, italic, strikethrough, code |
+| Ctrl+Alt+0 to 3 | Text, heading 1 to 3 |
+| Ctrl+Shift+8, 7, 9 | Bullet list, numbered list, task list |
+| Ctrl+Z, Ctrl+Y | Undo, redo |
+| Ctrl+D, Ctrl+Shift+F, Ctrl+Shift+C | Duplicate the note, favorite it, copy a link to it |
+| Ctrl+Shift+I, Ctrl+Shift+E | Import files, export the note as Markdown |
 
 ## How it is built
 
@@ -21,7 +53,7 @@ The native Windows app is being built. **There is nothing to download yet.**
 | Core | Rust (`heracles-core`): storage, documents, search, import and export |
 | Bridge | UniFFI, with C# bindings generated by `uniffi-bindgen-cs` |
 | Storage | SQLite with full-text search, bundled into the core |
-| Editor | Native: a document model in C#, shown as one rich-text box per block |
+| Editor | Native: a document model in C#, shown as text blocks with one rich-text box where the caret is |
 | Build | Cargo and the .NET SDK, run by the scripts in `tools\` |
 
 The core owns the data. Every window reads from it and subscribes to its change feed, which is what keeps two windows showing the same note in step. Documents are stored as blocks in JSON, and pictures are stored once each, outside the notes that use them.
@@ -47,21 +79,64 @@ tools\build.ps1 core package -Arch x64  # and for the other one
 
 Run `tools\build.ps1 core` again after any change to the Rust interface: the bindings and the DLL are generated, not kept in git.
 
+The scripts under `tools\e2e` start the built app on a throwaway library and drive its real window through UI Automation, with no mouse and no keyboard:
+
+```powershell
+tools\e2e\check-shell.ps1      # the window: sidebar, tabs, panes, search, Quick Open, several windows
+tools\e2e\check-editor.ps1     # writing in a note
+tools\e2e\check-boards.ps1     # a board and a task
+tools\e2e\check-transfer.ps1   # importing files and exporting a note
+tools\e2e\check-legacy.ps1     # the first start beside a library of the earlier version
+```
+
+`tools\publish.ps1` publishes the packages as a GitHub release. Its header says what it checks first.
+
 ## Project structure
 
 ```
-core/              heracles-core: the app's data layer (Rust), shared with the Mac app
-app/Heracles/      the Windows app (C#, WPF)
+core/                heracles-core: the app's data layer (Rust), shared with the Mac app
+app/Heracles/        the Windows app (C#, WPF)
+  Model/             the app's view of the library, kept current by the core's change feed
+  Workspaces/        panes and tabs
+  Sidebar/           the sidebar and Quick Open
+  Notes/             a note in a pane
+  Editor/            the block editor: its document model, and its views
+  Boards/            boards, tasks and reminders
 app/Heracles.Tests/  its tests
-tools/build.ps1    builds, tests and packages
-docs/              the design, the implementation plans, and the notes on the native rewrite
-CLAUDE.md          working notes: decisions, conventions, and the current state
-VERSION            the app's version
+tools/build.ps1      builds, tests and packages
+tools/e2e/           the scripted checks of the real window
+tools/publish.ps1    publishes a release
+docs/                the design, the implementation plans, release notes
+CLAUDE.md            working notes: decisions, conventions, what is and is not verified
+VERSION              the app's version
+```
+
+## Data storage
+
+The app keeps everything in `%APPDATA%\Heracles\`:
+
+| Path | Holds |
+|---|---|
+| `heracles.db` | Notes, documents, boards and the search index, in SQLite |
+| `images\` | Pictures, one file each, named by their content |
+| `backups\` | The copy made of an earlier library before it was imported |
+| `windows.json` | The windows that were open, and their panes |
+
+Its log is `%LOCALAPPDATA%\Heracles\heracles.log`.
+
+The earlier, Electron version of Heracles used the same folder, with its library in `heracles.sqlite`. The first time the native app starts and finds that file, it copies it into `backups\`, reads the copy, and brings the library into `heracles.db`. The old file is never changed. From then on the two hold separate copies, and an edit made in one does not appear in the other.
+
+At its first start the app also tells Windows, for your account only, that `heracles://` links are its to open and that it has notifications to deliver (two keys under `HKEY_CURRENT_USER\Software\Classes`). Nothing needs an administrator.
+
+To try the app on a different folder, start it with `HERACLES_DATA_DIR` set. Started that way it leaves your links and notifications alone:
+
+```powershell
+$env:HERACLES_DATA_DIR = "$env:TEMP\heracles-trial"; build\app\win-arm64\Heracles.exe
 ```
 
 ## Related repository
 
-[Heracles](https://github.com/tacticalbadger/Heracles) is the Mac app: Swift over the same Rust core. It is the reference for how this app behaves.
+[Heracles](https://github.com/tacticalbadger/Heracles) is the Mac app: Swift over the same Rust core. It is the reference for how this app behaves, and the Electron app that used to live here is in its history.
 
 ## License
 

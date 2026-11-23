@@ -133,11 +133,18 @@ internal sealed class Workspace
     {
         var parent = ParentForNewNotes;
         var imported = new List<Note>();
+        var refused = new List<string>();
+        var any = false;
         foreach (var path in paths)
         {
-            if (Model.Attempt(() => Model.Store.ImportFile(path, parent)) is { } note) imported.Add(note);
+            any = true;
+            // One that cannot be read does not stop the others.
+            try { imported.Add(Model.Store.ImportFile(path, parent)); }
+            catch (UniffiException error) { refused.Add($"{Path.GetFileName(path)} ({error.Message})"); }
         }
         if (imported.Count > 0) Tree = Tree.Open(imported[^1].Id);
+        // Said once, at the end, naming each file that did not come in.
+        if (any) Model.LastError = refused.Count == 0 ? null : "Could not import " + string.Join("; ", refused);
         return imported;
     }
 

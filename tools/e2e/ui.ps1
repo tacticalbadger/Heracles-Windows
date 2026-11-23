@@ -64,6 +64,57 @@ if (-not ('HeraclesE2E.Input' -as [type])) {
 }
 [HeraclesE2E.Input]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null
 
+# The system's own dialogs (open a file, save a file) are made of plain
+# Windows controls, which offer no automation patterns here. They are sent
+# window messages, each to the one control by its handle: "select what you
+# hold", "this character was typed in you", and, to the dialog, "your button
+# was pressed". None of it is keyboard or mouse input: nothing is typed
+# into whatever has the keyboard, and nothing can land in another program.
+#
+# Two things found the hard way. A Save dialog takes its file name only
+# from characters typed in its box: text put there whole (WM_SETTEXT) shows
+# in the box and is then ignored, and Save writes the name the dialog
+# offered. And a button told it was clicked (BM_CLICK) does nothing unless
+# its dialog is the active window; the dialog told its button was pressed
+# (WM_COMMAND) always listens.
+if (-not ('HeraclesE2E.Native' -as [type])) {
+    Add-Type -Namespace HeraclesE2E -Name Native -MemberDefinition @'
+[DllImport("user32.dll", EntryPoint = "SendMessageW")] public static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+[DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr hwnd);
+[DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hwnd);
+'@
+}
+$EM_SETSEL = 0x00B1
+$WM_CHAR = 0x0102
+$WM_COMMAND = 0x0111
+
+# Replace what a plain text box holds, as typing over all of it would.
+function Set-NativeText([IntPtr]$edit, [string]$text) {
+    [HeraclesE2E.Native]::SendMessage($edit, $EM_SETSEL, [IntPtr]::Zero, [IntPtr](-1)) | Out-Null
+    foreach ($character in $text.ToCharArray()) {
+        [HeraclesE2E.Native]::SendMessage($edit, $WM_CHAR, [IntPtr][int]$character, [IntPtr]::Zero) | Out-Null
+    }
+}
+
+# Tell a dialog its button was pressed. Posted, not sent: the dialog may close before it answers.
+function Send-NativePress([IntPtr]$button) {
+    $dialog = [HeraclesE2E.Native]::GetParent($button)
+    [HeraclesE2E.Native]::PostMessage($dialog, $WM_COMMAND, [IntPtr][HeraclesE2E.Native]::GetDlgCtrlID($button), $button) | Out-Null
+}
+
+# The plain Windows control of a class at, or under, an element: its window handle, or zero.
+function Get-NativeControl($element, [string]$class) {
+    $candidates = @($element) + @($element.FindAll($TreeScope::Descendants, (New-Object System.Windows.Automation.PropertyCondition ($Auto::ClassNameProperty, $class))))
+    foreach ($candidate in $candidates) {
+        try {
+            if ($candidate.Current.ClassName -eq $class -and $candidate.Current.NativeWindowHandle -ne 0) { return [IntPtr]$candidate.Current.NativeWindowHandle }
+        }
+        catch { }
+    }
+    return [IntPtr]::Zero
+}
+
 $Auto = [System.Windows.Automation.AutomationElement]
 $TreeScope = [System.Windows.Automation.TreeScope]
 $app = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue)
@@ -212,6 +263,10 @@ switch ($Action) {
         elseif ($element.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$pattern)) {
             $pattern.Expand()
         }
+        elseif ((Get-NativeControl $element 'Button') -ne [IntPtr]::Zero) {
+            # A button of a system dialog.
+            Send-NativePress (Get-NativeControl $element 'Button')
+        }
         else { throw "nothing to invoke on: $(Describe $element)" }
         Write-Host "invoked: $(Describe $element)"
     }
@@ -243,7 +298,15 @@ switch ($Action) {
     }
     'setvalue' {
         $element = Find-Element
-        $element.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Text)
+        $pattern = $null
+        if ($element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) {
+            $pattern.SetValue($Text)
+        }
+        elseif ((Get-NativeControl $element 'Edit') -ne [IntPtr]::Zero) {
+            # The file-name box of a system dialog.
+            Set-NativeText (Get-NativeControl $element 'Edit') $Text
+        }
+        else { throw "nothing to set a value on: $(Describe $element)" }
         Write-Host "set: $(Describe $element)"
     }
     'click' {

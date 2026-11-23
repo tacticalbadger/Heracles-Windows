@@ -123,8 +123,10 @@ app/
     App.xaml(.cs)         startup, single instance, the windows, errors
     SingleInstance.cs     one process per library; hand-over by named pipe
     MainWindow.xaml(.cs)  one window: menus, shortcuts, saved layout
-    Model/                AppModel (the change feed), Library, Navigation
-                          (AppLink, NavigationPolicy)
+    Model/                AppModel (the change feed; .Boards.cs: board
+                          actions), Library, Navigation (AppLink,
+                          NavigationPolicy), Transfer (which files a dialog
+                          offers, what an exported note is called)
     Workspaces/           PaneTree (immutable), Workspace, PaneNodeView
                           (PaneHost), PaneLeafView, TabDrag
     Sidebar/              SidebarRows (logic), SidebarView, SwitcherView
@@ -174,9 +176,10 @@ app/
 tools/build.ps1           targets core, app, test, run, package, clean
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           and synthetic input), adapted from Toolbox;
-                          ui-check (helpers), check-shell, check-editor and
-                          check-boards (the scripted checks of the window,
-                          of writing in a note, and of a board and a task),
+                          ui-check (helpers), check-shell, check-editor,
+                          check-boards and check-transfer (the scripted
+                          checks of the window, of writing in a note, of a
+                          board and a task, and of files in and out),
                           look-editor and look-boards (pictures, light and
                           dark)
 tools/                    (to come) publish.ps1
@@ -274,6 +277,7 @@ tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setv
 tools\e2e\check-shell.ps1             # the scripted check of the window: 30 checks, exit code = failures
 tools\e2e\check-editor.ps1            # the scripted check of writing in a note: 15 checks
 tools\e2e\check-boards.ps1            # the scripted check of a board and a task: 39 checks
+tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
 tools\e2e\launch.ps1 --e2e-seed --theme-light   # the app in light (or --theme-dark) whatever Windows is set to
@@ -396,6 +400,14 @@ looking at (one showed Quick Open white on white in dark mode).
   `Find-UiShown` whether it can be seen.
 - `invoke`, `setvalue`, `select`, `expand`, `scroll` touch neither mouse nor
   keyboard. (`setvalue` does move the keyboard focus into the box.)
+- **The system's file dialogs can be driven too**, without real input.
+  Their controls are plain Windows controls and offer no automation
+  patterns here, so `setvalue` and `invoke` fall back to window messages
+  sent to the one control by its handle (`ui.ps1`, "Native"). The file-name
+  box is id `1148` in an Open dialog and `1001` in a Save dialog; the
+  buttons go by name (`Open`, `Save`, `Cancel`: English Windows). Several
+  files are named in one box, each in double quotes. `check-transfer.ps1`
+  has `Complete-FileDialog`.
   `click`, `drag`, `keys`, `text` are real input on the owner's desktop.
 - `ui.ps1 find` throws when the element is not there, which ends a chain of
   commands on one line. Put a check that is expected to find nothing last,
@@ -495,6 +507,15 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   an emoji, and failed for a reason that was not in the code. Write such
   files with the editor tools, and build a string that must contain a
   backslash from its character code (`(char)92`).
+- **A Save dialog takes its file name only from characters typed in its
+  box.** Text put there whole (`WM_SETTEXT`) shows in the box and is then
+  ignored: Save writes the name the dialog first offered, in the folder it
+  opened in. (An Open dialog reads its box either way, which is how this
+  went unnoticed for an hour.) The harness sends the box one `WM_CHAR` for
+  each character. And a button sent `BM_CLICK` does nothing unless its
+  dialog is the active window; send the dialog `WM_COMMAND` with the
+  button's id. **A check must never answer "replace it?" with Yes**: the
+  name offered is the note's, and the folder may hold the file it came from.
 - The same goes for a replacement made by `perl` or `sed` from the shell:
   `@"Software\Classes"` arrived as `SoftwareClasses`, in the line that
   opens the registry key the app registers itself under. It compiled. It
@@ -611,7 +632,9 @@ harness; "Not verified" below says what the checks could not reach.
       itself has never registered or scheduled anything**, because it has
       only ever run on fixtures; no reminder of its own has been seen to
       arrive, and none has been clicked)
-- [ ] Import of Markdown and HTML files; export as Markdown
+- [x] Import of Markdown and HTML files; export as Markdown (File > Import
+      and File > Export as Markdown, checked through the system's own
+      dialogs)
 - [ ] The Electron library imported on first start, with a summary
 - [x] Quick Open, the icon picker, the menu bar (with Edit and Format)
 - [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
@@ -1037,9 +1060,14 @@ Windows (its link scheme, its reminders), because it does that only on the
 real library and has only ever been started on fixtures: the first start
 on the real library is the first time that runs.
 
-**Next: stage 6**, import and export of files from the File menu, and the
-Electron library imported on first start with a summary. Plan:
-`docs/superpowers/plans/2026-11-23-windows-stage-6-import-export.md`. (The
+**In hand: stage 6**, import and export of files from the File menu, and
+the Electron library imported on first start with a summary. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-6-import-export.md`, three
+tasks. **Task 1 is done**: File > Import (Ctrl+Shift+I) and File > Export
+as Markdown (Ctrl+Shift+E), with `Model/Transfer.cs`, 30 tests, and
+`tools\e2e\check-transfer.ps1` (10 checks, through the system's own
+dialogs). 588 .NET tests pass. Task 2 is the Electron library; its test
+library is already at `app/Heracles.Tests/Fixtures/legacy.sqlite`. (The
 rest of what the design puts in stage 6 is already there: links from
 outside came with stages 2 and 5, and the Mac's menu bar has nothing else
 that this one lacks.) Then stage 7 (packages, a release script, and 0.2.0

@@ -124,6 +124,12 @@ public partial class MainWindow : Window
         file.Items.Add(new Separator());
         file.Items.Add(Command("_Quick Open…", () => workspace.IsSwitcherShown = true, Key.K, ModifierKeys.Control, "Ctrl+K"));
         file.Items.Add(new Separator());
+        file.Items.Add(Command("_Import…", ChooseFilesToImport, Key.I, ModifierKeys.Control | ModifierKeys.Shift, "Ctrl+Shift+I"));
+        var export = Command("_Export as Markdown…", ChooseExportDestination, Key.E, ModifierKeys.Control | ModifierKeys.Shift, "Ctrl+Shift+E");
+        file.Items.Add(export);
+        // There is something to export only while a note is open.
+        file.SubmenuOpened += (_, _) => export.IsEnabled = workspace.ActiveNote is not null;
+        file.Items.Add(new Separator());
         file.Items.Add(Command("_Close Tab", workspace.CloseActiveTab, Key.W, ModifierKeys.Control, "Ctrl+W"));
         file.Items.Add(new Separator());
         file.Items.Add(Command("E_xit", () => ((App)Application.Current).ExitApp()));
@@ -218,6 +224,40 @@ public partial class MainWindow : Window
             MessageBox.Show(this, $"Heracles {App.VersionText}", "About Heracles", MessageBoxButton.OK, MessageBoxImage.Information)));
 
         foreach (var menu in new[] { file, edit, note, format, view, window, help }) MenuBar.Items.Add(menu);
+    }
+
+    // Import and export: the core reads and writes; the window asks which files.
+
+    /// <summary>Ask for Markdown and HTML files, and bring them in as pages.</summary>
+    internal void ChooseFilesToImport()
+    {
+        if (Workspace is not { } workspace) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import",
+            Filter = Transfer.ImportFilter,
+            Multiselect = true,
+            CheckFileExists = true,
+        };
+        if (dialog.ShowDialog(this) == true) workspace.ImportFiles(dialog.FileNames);
+    }
+
+    /// <summary>Ask where to write the open note as Markdown, and write it there.</summary>
+    internal void ChooseExportDestination()
+    {
+        if (Workspace is not { ActiveNote: { } note } workspace) return;
+        // What was typed a moment ago is in the file too.
+        workspace.Model.SaveEverything();
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export as Markdown",
+            Filter = Transfer.ExportFilter,
+            FileName = Transfer.ExportFileName(note.DisplayTitle()),
+            DefaultExt = ".md",
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        if (dialog.ShowDialog(this) == true) workspace.ExportActiveNote(dialog.FileName);
     }
 
     private void CopyLink()

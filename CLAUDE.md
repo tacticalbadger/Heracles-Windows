@@ -688,12 +688,14 @@ Found and not yet fixed. Each is small; none loses data.
 
 ## Current state (update in every commit)
 
-As of 2026-11-22, on `main`. `main` on GitHub was replaced earlier this day
+As of 2026-11-23, on `main`. `main` on GitHub was replaced on 2026-11-22
 (commit `9b56acf`, a force-push on the owner's word): the Electron app and
 its history are no longer there. Any other clone of this repository must
 `git fetch origin` and `git reset --hard origin/main` before it is used,
-and must never push its old history. **The commits of stage 2 are local:
-nothing after `9b56acf` has been pushed.**
+and must never push its old history. **Stage 2 and the first two tasks of
+stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
+after that stays local until he says push: `git log origin/main..HEAD`
+lists it.
 
 **Stage 2 (model and shell) is built: the app can be browsed.** One process
 per library; any number of windows on one model; a sidebar (favorites,

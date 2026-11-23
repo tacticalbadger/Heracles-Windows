@@ -114,14 +114,17 @@ app/
     Sidebar/              SidebarRows (logic), SidebarView, SwitcherView
                           (Quick Open), NoteIcon
     Notes/                NoteDetailView, IconPicker, ReadOnlyDocument
-    Editor/               the editor's document model, no WPF in it:
+    Editor/               the editor. Its document model, no WPF in it:
                           JsonValue, RichText, EditorBlock (Block,
                           EditorDocument and its stored JSON, BlockIds),
                           EditorSelection, EditorDocument.Tree (finding
                           blocks, the order the caret meets them in),
                           EditorDocument.Editing (every edit that changes
                           a note's shape, BlockTarget, DropTarget, and
-                          RichText's typing shortcuts)
+                          RichText's typing shortcuts). Its views (so
+                          far): EditorTheme (fonts, sizes, a block's text
+                          as inlines and read back), BlockTextBox (one
+                          block's text while it is typed in)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -370,6 +373,22 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   an emoji, and failed for a reason that was not in the code. Write such
   files with the editor tools, and build a string that must contain a
   backslash from its character code (`(char)92`).
+- **A `\u` escape typed into a file through the session's own editing
+  tools arrives as the character itself**, not as the six characters. Most
+  of the time that is harmless (an em dash is an em dash). U+2028 and
+  U+2029 are not: in C# source they end the line they are on, and the file
+  no longer compiles. Write such characters by number: `(char)0x2028`.
+- **Our `Block` and WPF's `System.Windows.Documents.Block` clash** in any
+  file outside the `Heracles.Editor` namespace that uses both (every view
+  test). `using Block = Heracles.Editor.Block;` settles it.
+- **`RoutedCommand.Execute` does not ask `CanExecute` first**, and a
+  `CommandBinding` on an element whose `CanExecute` says no is passed over
+  for the class's own handler, which then runs. To stop a `RichTextBox`
+  doing something of its own (bold, a bullet list, a new paragraph), handle
+  the routed events on it: `PreviewCanExecute` (say no, **and set
+  `ContinueRouting`**, or the key is swallowed and never reaches the
+  window's shortcuts) and `PreviewExecuted` (mark it handled).
+- `Key.Enter` and `Key.Return` are one value, and it prints as `Return`.
 - `System.Text.Json` writes every character outside the basic plane (an
   emoji) as two escapes, whatever encoder it is given. `JsonValue.Text`
   puts them back, to match what the Mac and the core write.
@@ -878,11 +897,24 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-**Stage 4 (the editor's views) is planned and not begun.** Plan:
+**Stage 4 (the editor's views) is under way: one of its six tasks is
+done.** Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
 undo, marks and the slash menu; block actions, the clipboard, pictures and
 the mouse; the editor in the app; verify. A fifth spike was run for it
 ("Views with no window", above), and what it decided is in the plan: one
 text box, where the caret is; tests that never show a window, take the
-keyboard or touch the clipboard. **Next: Task 1.**
+keyboard or touch the clipboard.
+
+- Done (Task 1): `EditorTheme` and `BlockTextBox`, with 37 tests on one
+  STA thread and no window (`app/Heracles.Tests/Editor/ViewTestSupport.cs`:
+  `Sta.Run`, `Views.Layout`, `Views.Pump`, `Views.Type`). A text box and
+  static text of the same block are the same height for fifteen kinds of
+  text at five widths. 339 .NET tests pass. Nothing in the app uses either
+  yet.
+- **Next: Task 2**, the block views and the page
+  (`BlockViews.cs`, `BlockEditorView.cs`, and of `BlockEditorController.cs`
+  what shows a note and holds the selection), from the Mac's files of the
+  same names. The Mac lays its views out by hand (`layout(width:)`); the
+  plan is to do the same in `MeasureOverride` and `ArrangeOverride`.

@@ -102,16 +102,3 @@ internal sealed class Board(AppModel model, string todoListId)
     }
 }
 
-/// <summary>A card being dragged, carried as text so it can cross between columns and panes.</summary>
-internal sealed record CardDrag(string TaskId)
-{
-    private const string Prefix = "heracles-card:";
-
-    public string Text => Prefix + TaskId;
-
-    public static CardDrag? Parse(string? text)
-    {
-        if (text is null || !text.StartsWith(Prefix, StringComparison.Ordinal) || text.Length == Prefix.Length) return null;
-        return new CardDrag(text[Prefix.Length..]);
-    }
-}

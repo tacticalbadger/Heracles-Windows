@@ -157,8 +157,7 @@ internal sealed class BoardView : ScrollViewer
 
     public void DeleteColumn(string columnId) => model.DeleteColumn(columnId);
 
-    internal static CardDrag? Dragged(DragEventArgs e) =>
-        e.Data.GetDataPresent(DataFormats.UnicodeText) ? CardDrag.Parse(e.Data.GetData(DataFormats.UnicodeText) as string) : null;
+    internal static CardDrag? Dragged(DragEventArgs e) => CardDrag.From(e.Data);
 }
 
 /// <summary>One column of a board: its name, its cards, and a box for a new card.</summary>
@@ -226,30 +225,46 @@ internal sealed class BoardColumnView : Border
         stack.Children.Add(newCard);
         Child = stack;
 
-        // A card let go over the column, and not over a card in it, goes to its end.
-        DragEnter += (_, e) => Target(e, true);
-        DragOver += (_, e) => Target(e, true);
-        DragLeave += (_, e) => Target(e, false);
-        // Heard even when a card in the column took the drop, so the column stops looking aimed at.
-        AddHandler(
-            DropEvent,
-            new DragEventHandler((_, e) =>
-            {
-                Background = Fill;
-                if (e.Handled || BoardView.Dragged(e) is not { } drag) return;
-                board.Board.Drop(drag.TaskId, columnId, null);
-                e.Handled = true;
-            }),
-            handledEventsToo: true);
+        // A card let go over the column, and not over a card in it, goes to
+        // its end. The column hears of the drag on its way down to whatever
+        // is under the pointer, and answers for all of itself but its cards:
+        // its name and its "Add a card" are text boxes, which would answer
+        // "not here" to a card and let nothing through to the column.
+        PreviewDragEnter += (_, e) => Target(e);
+        PreviewDragOver += (_, e) => Target(e);
+        PreviewDrop += (_, e) =>
+        {
+            if (BoardView.Dragged(e) is not { } drag || IsOverACard(e)) return;
+            Background = Fill;
+            board.Board.Drop(drag.TaskId, columnId, null);
+            e.Handled = true;
+        };
+        // Heard even when something in the column answered, so the column stops looking aimed at.
+        AddHandler(DragLeaveEvent, new DragEventHandler((_, _) => Background = Fill), handledEventsToo: true);
+        AddHandler(DropEvent, new DragEventHandler((_, _) => Background = Fill), handledEventsToo: true);
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new LandmarkPeer(this);
 
-    private void Target(DragEventArgs e, bool over)
+    /// <summary>Whether the pointer of a drag is over one of this column's cards, which answers for itself.</summary>
+    private bool IsOverACard(DragEventArgs e)
     {
-        var isCard = BoardView.Dragged(e) is not null;
-        e.Effects = isCard ? DragDropEffects.Move : DragDropEffects.None;
-        Background = isCard && over ? TargetedFill : Fill;
+        for (var at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, this);)
+        {
+            if (at is BoardCardView) return true;
+            at = at is Visual or System.Windows.Media.Media3D.Visual3D ? VisualTreeHelper.GetParent(at) : LogicalTreeHelper.GetParent(at);
+        }
+        return false;
+    }
+
+    private void Target(DragEventArgs e)
+    {
+        // Something that is not a card is none of the column's business: a
+        // text box under the pointer may want it.
+        if (BoardView.Dragged(e) is null) return;
+        Background = TargetedFill;
+        if (IsOverACard(e)) return;
+        e.Effects = DragDropEffects.Move;
         e.Handled = true;
     }
 
@@ -363,7 +378,7 @@ internal sealed class BoardCardView : Border
             pressedAt = null;
             // The button took the mouse when it was pressed. It gives it up, or it would open the task when let go.
             open.ReleaseMouseCapture();
-            DragDrop.DoDragDrop(this, new DataObject(DataFormats.UnicodeText, new CardDrag(taskId).Text), DragDropEffects.Move);
+            DragDrop.DoDragDrop(this, new CardDrag(taskId).Data(), DragDropEffects.Move);
         };
 
         // A card let go over this one lands in front of it.
@@ -453,4 +468,31 @@ internal sealed class BoardCardView : Border
         row.Children.Add(text);
         return row;
     }
+}
+
+/// <summary>
+/// A card being dragged. It is carried under a name of its own, not as
+/// text: a text box takes any text dropped on it for itself, and a card let
+/// go over "Add a card" would type its own name into the box.
+/// </summary>
+internal sealed record CardDrag(string TaskId)
+{
+    /// <summary>The name the dragged card goes under, from one column or pane to another.</summary>
+    public const string Format = "Heracles.Card";
+
+    private const string Prefix = "heracles-card:";
+
+    public string Text => Prefix + TaskId;
+
+    public static CardDrag? Parse(string? text)
+    {
+        if (text is null || !text.StartsWith(Prefix, StringComparison.Ordinal) || text.Length == Prefix.Length) return null;
+        return new CardDrag(text[Prefix.Length..]);
+    }
+
+    /// <summary>What is handed to the system when the drag begins.</summary>
+    public IDataObject Data() => new DataObject(Format, Text);
+
+    /// <summary>The card in what was dragged here, or null when it is something else.</summary>
+    public static CardDrag? From(IDataObject data) => data.GetDataPresent(Format) ? Parse(data.GetData(Format) as string) : null;
 }

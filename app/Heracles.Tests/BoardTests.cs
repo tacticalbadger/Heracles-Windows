@@ -820,3 +820,49 @@ public sealed class CardDragTests
         Assert.Null(CardDrag.Parse(text));
     }
 }
+
+/// <summary>
+/// How something dragged is carried. It was once carried as plain text, and
+/// a text box takes plain text that is dropped on it: a card let go over
+/// "Add a card", or a tab over a note's title, typed its own name for
+/// itself into the box.
+/// </summary>
+public sealed class DragDataTests
+{
+    [Fact]
+    public void ACardIsCarriedInAFormOfItsOwnAndNotAsText()
+    {
+        var data = new CardDrag("t-1").Data();
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.UnicodeText));
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.Text));
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.StringFormat));
+        Assert.Equal(new CardDrag("t-1"), CardDrag.From(data));
+    }
+
+    [Fact]
+    public void ATabIsCarriedInAFormOfItsOwnAndNotAsText()
+    {
+        var data = new Heracles.Workspaces.TabDrag("pane-1", "note-9").Data();
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.UnicodeText));
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.Text));
+        Assert.False(data.GetDataPresent(System.Windows.DataFormats.StringFormat));
+        Assert.Equal(new Heracles.Workspaces.TabDrag("pane-1", "note-9"), Heracles.Workspaces.TabDrag.From(data));
+    }
+
+    [Fact]
+    public void TextDraggedFromAnywhereIsNeitherACardNorATab()
+    {
+        // Even text that happens to read like one.
+        var text = new System.Windows.DataObject(System.Windows.DataFormats.UnicodeText, new CardDrag("t-1").Text);
+        Assert.Null(CardDrag.From(text));
+        var tab = new System.Windows.DataObject(System.Windows.DataFormats.UnicodeText, new Heracles.Workspaces.TabDrag("pane-1", "note-9").Text);
+        Assert.Null(Heracles.Workspaces.TabDrag.From(tab));
+    }
+
+    [Fact]
+    public void ACardIsNotATabAndATabIsNotACard()
+    {
+        Assert.Null(Heracles.Workspaces.TabDrag.From(new CardDrag("t-1").Data()));
+        Assert.Null(CardDrag.From(new Heracles.Workspaces.TabDrag("pane-1", "note-9").Data()));
+    }
+}

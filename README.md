@@ -11,7 +11,7 @@ The native app is a preview. Builds are published on the [releases page](https:/
 - **Nothing to install.** Unzip it anywhere and run `Heracles.exe`. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
 - **The build is not code-signed.** Windows will say it does not recognise the app. Choose **More info**, then **Run anyway**.
 - It does not update itself. To move to a newer version, replace the folder.
-- **Nobody has used it day to day yet.** It passes its automated tests and its scripted checks of the real window, and those cannot hold a mouse or press a key. What has been checked and what has not is written down, plainly, in [`CLAUDE.md`](./CLAUDE.md#not-verified).
+- **Nobody has used it day to day yet.** It passes its automated tests and its scripted checks of the real window, one of which uses a real mouse and keyboard for a minute. That is not a person using it. What has been checked and what has not is written down, plainly, in [`CLAUDE.md`](./CLAUDE.md#not-verified).
 - The first time it starts, it copies an existing library of the earlier (Electron) version of Heracles into its own database. See [Data storage](#data-storage).
 
 ## Features
@@ -79,7 +79,7 @@ tools\build.ps1 core package -Arch x64  # and for the other one
 
 Run `tools\build.ps1 core` again after any change to the Rust interface: the bindings and the DLL are generated, not kept in git.
 
-The scripts under `tools\e2e` start the built app on a throwaway library and drive its real window through UI Automation, with no mouse and no keyboard:
+The scripts under `tools\e2e` start the built app on a throwaway library and drive its real window. All but the last go through UI Automation, with no mouse and no keyboard:
 
 ```powershell
 tools\e2e\check-shell.ps1      # the window: sidebar, tabs, panes, search, Quick Open, several windows
@@ -87,6 +87,7 @@ tools\e2e\check-editor.ps1     # writing in a note
 tools\e2e\check-boards.ps1     # a board and a task
 tools\e2e\check-transfer.ps1   # importing files and exporting a note
 tools\e2e\check-legacy.ps1     # the first start beside a library of the earlier version
+tools\e2e\check-input.ps1      # a minute of real typing, clicking and dragging: leave the mouse and keys alone while it runs
 ```
 
 `tools\publish.ps1` publishes the packages as a GitHub release. Its header says what it checks first.

@@ -168,15 +168,14 @@ internal sealed class PaneLeafView : DockPanel
             var moved = e.GetPosition(this) - start;
             if (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance) return;
             pressedAt = null;
-            DragDrop.DoDragDrop(open, new DataObject(DataFormats.UnicodeText, new TabDrag(leafId, note.Id).Text), DragDropEffects.Move);
+            DragDrop.DoDragDrop(open, new TabDrag(leafId, note.Id).Data(), DragDropEffects.Move);
         };
         tab.DragOver += AllowTabs;
         tab.Drop += (_, e) => DropTab(e, index);
         return tab;
     }
 
-    private static TabDrag? Dragged(DragEventArgs e) =>
-        e.Data.GetDataPresent(DataFormats.UnicodeText) ? TabDrag.Parse(e.Data.GetData(DataFormats.UnicodeText) as string) : null;
+    private static TabDrag? Dragged(DragEventArgs e) => TabDrag.From(e.Data);
 
     private static void AllowTabs(object sender, DragEventArgs e)
     {

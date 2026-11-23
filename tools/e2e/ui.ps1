@@ -13,6 +13,7 @@
         tools\e2e\ui.ps1 click   -Id ... | -Name ... [-Right] [-Double]  real mouse click on its centre
         tools\e2e\ui.ps1 clickat -X <px> -Y <px> [-Right] [-Double]      relative to the main window
         tools\e2e\ui.ps1 drag    -X <px> -Y <px> -ToX <px> -ToY <px>      relative to the main window
+        tools\e2e\ui.ps1 dragto  -Id <from> -ToId <to> [-ToX <px>] [-ToY <px>]   real drag from the middle of one element to the middle of another, plus an offset
         tools\e2e\ui.ps1 keys    -Keys '<SendKeys syntax>'               e.g. '^+{]}' for Ctrl+Shift+]
         tools\e2e\ui.ps1 text    -Text 'echo hello'                      typed literally
         tools\e2e\ui.ps1 foreground
@@ -25,13 +26,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'focus', 'scroll', 'click', 'clickat', 'drag', 'keys', 'text', 'foreground')]
+    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'focus', 'scroll', 'click', 'clickat', 'drag', 'dragto', 'keys', 'text', 'foreground')]
     [string]$Action,
     [string]$Id,
     [string]$Name,
     [string]$Within,
     [string]$Text,
     [string]$Keys,
+    [string]$ToId,
     [int]$Depth = 8,
     [int]$X,
     [int]$Y,
@@ -83,6 +85,9 @@ if (-not ('HeraclesE2E.Native' -as [type])) {
 [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 [DllImport("user32.dll")] public static extern IntPtr GetParent(IntPtr hwnd);
 [DllImport("user32.dll")] public static extern int GetDlgCtrlID(IntPtr hwnd);
+[DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+[StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
 '@
 }
 $EM_SETSEL = 0x00B1
@@ -211,10 +216,28 @@ function Set-Foreground {
 }
 
 function Assert-Foreground {
-    if (-not (Test-Foreground)) { throw 'another program has the keyboard; nothing was typed' }
+    if (-not (Test-Foreground)) { throw 'another program has the keyboard; nothing was typed or clicked' }
+}
+
+# A real click or drag must begin and end over one of the app's own windows.
+# An element scrolled out of view still says where it would be, and that
+# place can be past the edge of its window, over another program: a click
+# sent there once landed outside the window it was meant for.
+function Assert-OverApp([int]$px, [int]$py) {
+    $point = New-Object HeraclesE2E.Native+POINT
+    $point.X = $px; $point.Y = $py
+    $under = [HeraclesE2E.Native]::WindowFromPoint($point)
+    $owner = 0
+    [HeraclesE2E.Native]::GetWindowThreadProcessId($under, [ref]$owner) | Out-Null
+    if ($processIds -notcontains $owner) { throw "the pointer at $px,$py would not be over the app; nothing was clicked" }
+}
+
+function Assert-InView($element) {
+    if ($element.Current.IsOffscreen) { throw "not in view (scroll to it first): $(Describe $element)" }
 }
 
 function Invoke-Click([int]$px, [int]$py) {
+    Assert-OverApp $px $py
     [HeraclesE2E.Input]::SetCursorPos($px, $py) | Out-Null
     Start-Sleep -Milliseconds 80
     $down = if ($Right) { 0x0008 } else { 0x0002 }
@@ -313,20 +336,65 @@ switch ($Action) {
         $element = Find-Element
         $r = $element.Current.BoundingRectangle
         if ($r.IsEmpty) { throw "not on screen: $(Describe $element)" }
+        Assert-InView $element
         Set-Foreground
+        # A click goes wherever the pointer is. If the app could not be
+        # brought forward, it would land in someone else's window.
+        Assert-Foreground
         Invoke-Click ([int]($r.X + $r.Width / 2)) ([int]($r.Y + $r.Height / 2))
         Write-Host "clicked: $(Describe $element)"
     }
+    'dragto' {
+        if (-not $Id -or -not $ToId) { throw 'give -Id (what to pick up) and -ToId (where to let go)' }
+        $from = (Find-Element).Current.BoundingRectangle
+        $target = $null
+        foreach ($window in @(Get-AppWindows)) {
+            $target = $window.FindFirst(($TreeScope::Element -bor $TreeScope::Descendants), (New-Object System.Windows.Automation.PropertyCondition ($Auto::AutomationIdProperty, $ToId)))
+            if ($target) { break }
+        }
+        if (-not $target) { throw "no element with id '$ToId'" }
+        $to = $target.Current.BoundingRectangle
+        if ($from.IsEmpty -or $to.IsEmpty) { throw 'one end of the drag is not on screen' }
+        Assert-InView (Find-Element)
+        Assert-InView $target
+        Set-Foreground
+        Assert-Foreground
+        $fx = [int]($from.X + $from.Width / 2); $fy = [int]($from.Y + $from.Height / 2)
+        $tx = [int]($to.X + $to.Width / 2) + $ToX; $ty = [int]($to.Y + $to.Height / 2) + $ToY
+        Assert-OverApp $fx $fy
+        Assert-OverApp $tx $ty
+        [HeraclesE2E.Input]::SetCursorPos($fx, $fy) | Out-Null
+        Start-Sleep -Milliseconds 150
+        [HeraclesE2E.Input]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 150
+        # A drag is taken for one only once the pointer has really moved with
+        # the button down, so it is moved through the system's own input, a
+        # little at first and then the rest of the way.
+        $steps = 30
+        for ($i = 1; $i -le $steps; $i++) {
+            $x = [int]($fx + ($tx - $fx) * $i / $steps); $y = [int]($fy + ($ty - $fy) * $i / $steps)
+            [HeraclesE2E.Input]::SetCursorPos($x, $y) | Out-Null
+            [HeraclesE2E.Input]::mouse_event(0x0001, 0, 0, 0, [UIntPtr]::Zero)
+            Start-Sleep -Milliseconds 25
+        }
+        Start-Sleep -Milliseconds 300
+        [HeraclesE2E.Input]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+        Write-Host "dragged $Id -> $ToId"
+    }
     'clickat' {
         Set-Foreground
+        Assert-Foreground
         $o = Get-WindowOrigin
         Invoke-Click ($o.Left + $X) ($o.Top + $Y)
         Write-Host "clicked at $X,$Y"
     }
     'drag' {
         Set-Foreground
+        Assert-Foreground
         $o = Get-WindowOrigin
         $fx = $o.Left + $X; $fy = $o.Top + $Y; $tx = $o.Left + $ToX; $ty = $o.Top + $ToY
+        Assert-OverApp $fx $fy
+        Assert-OverApp $tx $ty
         [HeraclesE2E.Input]::SetCursorPos($fx, $fy) | Out-Null
         Start-Sleep -Milliseconds 120
         [HeraclesE2E.Input]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)

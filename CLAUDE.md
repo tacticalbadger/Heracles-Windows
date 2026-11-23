@@ -185,8 +185,10 @@ tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           check-boards and check-transfer (the scripted
                           checks of the window, of writing in a note, of a
                           board and a task, and of files in and out),
-                          look-editor and look-boards (pictures, light and
-                          dark)
+                          check-legacy (the first start beside an Electron
+                          library), check-input (a minute of REAL mouse and
+                          keyboard), look-editor and look-boards (pictures,
+                          light and dark)
 tools/publish.ps1         a GitHub release from the packages: checks, a
                           draft, the files, then published. -DryRun sends
                           nothing. Run by the owner, when he says
@@ -240,7 +242,10 @@ Things that bite on this machine:
   absolute paths.
 - **The owner may be at this PC while a session works.** Test windows come
   to the front. Prefer UI Automation patterns to real keys and clicks, and
-  do not write to the clipboard.
+  do not write to the clipboard. One script uses real input,
+  `tools\e2e\check-input.ps1`, for what nothing else can reach: run it when
+  the handling of keys or the mouse has changed and before a release, not
+  as a matter of course, and say so when it was run.
 - With `core.autocrlf` on (this machine's setting), git warns that LF will
   become CRLF. `.gitattributes` decides: LF everywhere, CRLF for `.ps1`.
 - **The clock steps backwards now and then** (two minutes, seen
@@ -290,6 +295,7 @@ tools\e2e\check-boards.ps1            # the scripted check of a board and a task
 tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
 tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electron app's library, to be imported
 tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
+tools\e2e\check-input.ps1             # REAL mouse and keyboard, for a minute: typing, keys, clicks, drags. 23 checks. Hands off while it runs
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
 tools\e2e\launch.ps1 --e2e-seed --theme-light   # the app in light (or --theme-dark) whatever Windows is set to
@@ -307,6 +313,20 @@ a title, a priority, a deadline, a label, a place, a reminder, a subtask
 and a comment, goes down into the subtask and back, makes it a card,
 watches a second pane follow, deletes a task from its window, restarts, and
 tries to change a list in the trash.
+
+**`tools\e2e\check-input.ps1` is the one check that uses the real mouse
+and keyboard**, because nothing else reaches the last inch between Windows'
+input and the app: no automation pattern presses a key or drags. It moves
+the pointer, clicks, drags and types, in the app's own window on the
+fixture, for about a minute. Run it after any change to how keys or the
+mouse are handled (the editor's typing, drags of blocks, cards, tabs and
+dividers), and before a release; not as a matter of course, since the
+owner may be at the PC. It never copies or pastes. Its guards, all in
+`ui.ps1`: nothing is typed or clicked unless the app is the foreground
+program; a click or a drag must begin and end over one of the app's own
+windows; and an element scrolled out of view is refused (scroll to it
+first: its rectangle still says where it would be, which can be past the
+edge of its window).
 
 **Then look.** `tools\e2e\look-editor.ps1` takes six pictures, and
 `look-boards.ps1` ten (the board, a task, and the foot of the task). Twice in one
@@ -425,7 +445,7 @@ looking at (one showed Quick Open white on white in dark mode).
   buttons go by name (`Open`, `Save`, `Cancel`: English Windows). Several
   files are named in one box, each in double quotes. `check-transfer.ps1`
   has `Complete-FileDialog`.
-  `click`, `drag`, `keys`, `text` are real input on the owner's desktop.
+  `click`, `clickat`, `drag`, `dragto`, `keys`, `text` are real input on the owner's desktop.
 - `ui.ps1 find` throws when the element is not there, which ends a chain of
   commands on one line. Put a check that is expected to find nothing last,
   or in a `try`.
@@ -524,6 +544,21 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   an emoji, and failed for a reason that was not in the code. Write such
   files with the editor tools, and build a string that must contain a
   backslash from its character code (`(char)92`).
+- **What is dragged must not be carried as plain text.** A text box takes
+  any text dropped on it for itself. Tabs and cards were carried as text
+  ("so they can cross between panes"), and a card let go over "Add a
+  card", or a tab over a note's title, typed `heracles-card:…` into the
+  box. They go under names of their own now (`TabDrag.Format`,
+  `CardDrag.Format`), which cross between panes and windows just as well.
+  No test could have found this; the first minute of real input did.
+- **A text box does not pass a drag on to what it sits in.** Over a text
+  box, the box answers "not here" to anything that is not text, and what
+  is underneath never hears of it. And `AllowDrop` set to false on the box
+  does not help: it is inherited by everything inside the box, and a
+  target that does not allow drops is no target at all, not a way through
+  to its parent. A container that must take a drop anywhere within it
+  listens for the drag on its way down (`PreviewDragOver`,
+  `PreviewDrop`), as `BoardColumnView` does.
 - **The view tests share one thread, and a test that pumped it used to let
   another test run inside itself.** Every typing test lets the thread do
   what it has put off after each key; a test of another class, asked for
@@ -641,16 +676,19 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Editor behaviour: Markdown as you type, slash menu, block handle,
       drag to move and to make columns, whole-block selection, the editor's
       own undo, marks and links, paste through the core's converter
-      (built, and tested with real text boxes in no window; **never yet
-      used with a real mouse or keyboard**: see "Not verified")
+      (built, and tested with real text boxes in no window; typing, Enter,
+      Backspace, undo, the arrows, Markdown and the slash menu were also
+      done with real keys, in `check-input.ps1`; **the block handle, its
+      drags, and selecting with the mouse have never been tried by hand**:
+      see "Not verified")
 - [x] Pictures in the image store; remote pictures fetched on open (pasted,
       dropped and imported pictures are stored and shown; a picture on the
       web is fetched when its block is shown, tested against a web server
       of the test's own on this machine; a stored picture and a missing one
       were looked at in the window, in the seeded note)
 - [x] Kanban boards: columns added, renamed, moved and deleted, cards added,
-      ticked, opened and deleted (**dragging a card is written and has
-      never been done**: see "Not verified")
+      ticked, opened and deleted, and dragged onto a card and onto a
+      column (by a real mouse, in `check-input.ps1`)
 - [x] Task detail: notes, priority, dates, location, labels, reminders,
       nested subtasks, comments
 - [x] Reminders delivered by Windows, whether or not the app is running
@@ -978,43 +1016,39 @@ swaps in the text box and puts the caret where the click was.
   start the app, give a task a reminder two minutes ahead, close the app,
   wait, and click the banner.
 - Reminders with Do Not Disturb on, and on Windows 10.
-- **Dragging a card**, within a column and to another. What a drop decides
-  is tested (`Board.Drop`); the handlers that start a drag and take a drop
-  (`BoardCardView`, `BoardColumnView`) are the pattern the tabs use and
-  have never run.
-- **Everything in a board and a task window that needs a real mouse or
-  keyboard**: typing in any of its boxes, Enter in them, Esc to close the
-  task window, the calendars (a date was only ever set by the "Set a
-  date" button, which chooses today), the context menus on a card, a
-  column's header and a comment, editing a comment (its prompt), and
-  tabbing through the task window.
-- Typing through a real input method (composition, candidate windows), and
-  real key presses. The text-input spike sent finished text to the box
-  through `TextCompositionManager`, which a script can do; an input method
-  it cannot.
-- **Everything in the window that needs a real mouse or keyboard**: the
-  context menus (sidebar rows, tabs), dragging a tab within and between
-  panes, dragging a divider, Ctrl-click to open beside, the arrow keys and
-  Enter in Quick Open, and every keyboard shortcut. The scripted check
-  reaches the same code through the menus and automation where it can
-  (Split Right, Close Tab, Quick Open, Move to Trash); the rest is written
-  and has never been used.
+- **A person using it.** On 2026-11-23 the app was used for a minute with
+  a real mouse and keyboard, by `tools\e2e\check-input.ps1` (23 checks, on
+  a fixture): a click on a sidebar row; a click into a paragraph and
+  typing; Enter for a new block; `# ` making a heading as it is typed; the
+  slash menu, by typing `/task` and Enter; Enter on an empty task leaving
+  the list; Backspace in an empty block; Ctrl+Z; the Up arrow into the
+  block above; Ctrl+K, a name and Enter in Quick Open; a click on a card's
+  box; a card dragged onto a card and onto a column; a click on a card to
+  open its task; a title typed over and kept on Enter; two subtasks typed
+  one after the other; Esc closing the task window; a divider dragged; a
+  tab dragged to another pane. That run found one real fault (a dragged
+  card or tab was carried as plain text, and a text box it was dropped on
+  typed that text into itself), which is fixed. **It is a script, and it
+  did only those things.** What follows is still untried.
+- **Under a real hand, never yet tried**: the context menus (sidebar rows,
+  tabs, a card, a column's header, a comment, a block, selected text);
+  Ctrl-click to open beside; the block handle appearing under the pointer,
+  its grip dragging a block, and a column's grip; a drag selecting text
+  within a block; whole blocks selected by dragging; the link panel; the
+  calendars in a task (a date was only ever set by "Set a date", which
+  chooses today); editing a comment (its prompt); tabbing through the task
+  window; the keyboard shortcuts other than Ctrl+K and Ctrl+Z; scrolling a
+  long note; spell-checking.
+- **The system clipboard** (Ctrl+C, Ctrl+X, Ctrl+V). No check touches it,
+  on purpose: it is the owner's. Copy and paste are tested through the
+  data object the clipboard would carry.
+- **Files dropped from Explorer** onto a note. The method the drop calls is
+  tested; the drop is not.
+- Typing through a real input method (composition, candidate windows). The
+  real keys sent were plain ones.
 - Deleting a note for good while it is open in two windows, through the
   window. The model and workspace tests cover it; the only way to it in the
   window is a context menu.
-- **The editor under a real hand.** Nobody has typed in it, clicked in it
-  or dragged in it. What the tests do: send finished characters to real
-  text boxes in no window, offer keys to the same method a key press
-  reaches, and call the methods the mouse handlers call. What has never
-  run: the handlers themselves (`OnPreviewKeyDown`, the mouse overrides in
-  `BlockEditorView.Mouse.cs`, `GripView`, `ColumnGrip`, the static text's
-  mouse-down), keyboard focus moving from block to block in a real window,
-  the caret being seen, the first click in static text landing where it
-  was aimed, a drag selecting text, the block handle appearing under the
-  pointer, the block menu and the text menu, the link panel, the system
-  clipboard (Ctrl+C, Ctrl+V), files dropped from Explorer, spell-checking,
-  and scrolling a long note. **The owner should spend ten minutes typing in
-  a note before anything else is built on this.**
 - Light mode was looked at once (`look-editor.ps1`, 2026-11-23, with
   `--theme-light`): the window and a note of every kind of block read
   properly. Windows itself was in dark mode; the app following a change of
@@ -1101,10 +1135,12 @@ it), and 114 scripted checks of the real window (`check-shell.ps1` 30,
 `check-legacy.ps1` 20).
 
 **What that does not say** is under "Not verified", and three entries
-matter. Nobody has yet typed, clicked or dragged in the app with a real
-keyboard and mouse: the tests reach the code behind every key and every
-mouse gesture, with real text boxes, but not the last inch between Windows'
-input and that code. The app has never yet made itself known to Windows
+matter. No person has used the app yet. A script used it for a minute with
+a real mouse and keyboard (`check-input.ps1`: typing, keys, clicks and
+drags, and it found a fault no test could have), but it did only what it
+was written to do: the block handle, the context menus, selecting with the
+mouse and the clipboard are among what is still untried. The app has never
+yet made itself known to Windows
 (its link scheme, its reminders), because it does that only on the real
 library and has only ever been started on fixtures: the first start on the
 real library is the first time that runs. And that same first start is
@@ -1435,3 +1471,18 @@ on the Mac); no one else has read it. Plan:
 - The view tests' shared thread takes one test at a time (see "Found on
   Windows"). This was a fault in the tests since stage 4, found when a new
   slow test made it show. 604 .NET tests pass, three runs in a row.
+- **A minute of real input**, the first the app has had
+  (`tools\e2e\check-input.ps1`, 23 checks). The design asks that each
+  mouse path be driven at least once through the harness, and until now
+  none had been. At its first run 20 of 23 passed: typing, Enter, Markdown,
+  Backspace, undo, the arrows, Quick Open by its key, clicking and ticking
+  a card, dragging a card onto a card, the task window, Esc, a divider and
+  a tab dragged. Of the three that failed, one was the check asking the
+  wrong thing (text inside a quote is a paragraph), one was the harness
+  clicking where a box scrolled out of view would have been (it now
+  refuses that, and refuses any click or drag that would not be over the
+  app), and one was a real fault: what was dragged was carried as plain
+  text, so a text box under the drop typed it into itself, and a card let
+  go over "Add a card" never reached its column. Both are fixed, with
+  tests for how a card and a tab are carried, and all 23 pass. 608 .NET
+  tests pass.

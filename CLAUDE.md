@@ -127,8 +127,9 @@ app/
                           block's text while it is typed in), BlockViews
                           (a view for each kind of block), BlockEditorView
                           (the page), BlockEditorController (the document,
-                          the selection; .Pending.cs is what is not built
-                          yet)
+                          the selection; .Typing.cs: editing and keys;
+                          .Actions.cs: block actions, clipboard, pictures;
+                          BlockEditorView.Mouse.cs: the handle and drags)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
                           E2eSeed
@@ -908,7 +909,7 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-**Stage 4 (the editor's views) is under way: three of its six tasks are
+**Stage 4 (the editor's views) is under way: four of its six tasks are
 done.** Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
@@ -958,14 +959,29 @@ keyboard or touch the clipboard.
     `BlockTextBox.OfferKey` as a key press does, and what the editor leaves
     alone is carried out by the `EditingCommands` command that key is bound
     to.
-- `BlockEditorController.Pending.cs` holds, as methods that do nothing,
-  what the views already call and Task 4 builds with its tests
-  (`SetChecked`, `SetOpen`, `SetLanguage`, `ChooseEmoji`). It goes then.
-- **Next: Task 4**: block actions, the clipboard (through `IDataObject`,
-  never the system clipboard in a test), pictures, and the mouse: the first
-  click in static text (`ActivateAt`), the block handle and its menu, the
-  grips between columns, picture files dropped on the page, a drag from one
-  block's text into another, a click on a link. From the rest of
-  `BlockEditorController.swift`, `BlockEditorView.swift` (the handle, the
-  mouse) and `BlockViews.swift` (`ColumnGrip`), and the Mac's
-  `EditorBlockActionTests` and `EditorPasteboardTests`.
+- Done (Task 4): block actions, the clipboard, pictures and the mouse, in
+  `BlockEditorController.Actions.cs` and `BlockEditorView.Mouse.cs`. The
+  Mac's `EditorBlockActionTests` and `EditorPasteboardTests` pass
+  (`EditorActionTests.cs`, 28 tests with the Windows ones). 425 .NET tests
+  pass. For whoever changes it:
+  - **Everything the mouse can do is a method that takes a point**
+    (`ActivateAt`, `ClickAt`, `ShowHandle`, `BeginGripDrag` /
+    `ContinueGripDrag` / `EndGripDrag`, `BeginTextDrag` / `ContinueTextDrag`
+    / `EndTextDrag`, `FilesDraggedOver` / `FilesDropped`, `Resize`). The
+    tests call those. The mouse handlers only turn events into those calls,
+    and **the handlers themselves have never run**: no test moves the mouse.
+  - Copy and paste go through `IDataObject` (`CopySelection`,
+    `AddCopiedText`, `CutSelection`, `Paste`). Only `PasteFromClipboard`
+    and `CopyToClipboard` touch the system's clipboard, and no test calls
+    them. Pasting is the editor's wherever the caret is (Ctrl+V, Shift+Insert,
+    and the text box's own Paste command are all taken), because a text box
+    would only take text. A page copied from a browser arrives wrapped;
+    `HtmlFragment` takes the wrapping off before the core converts it.
+  - A text copied from a block only as rich text (RTF, no HTML) is pasted as
+    plain text. The Mac converts RTF to HTML first; this does not.
+- **Next: Task 5**: the editor in the app. `Notes/EditorCoordinator.cs`
+  from the Mac's `EditorCoordinator.swift` (loading, saving 300 ms after
+  typing pauses with the editor's id as the origin, pictures in and out of
+  the image store, links), the editor in `NoteDetailView` in place of the
+  read-only text, the Edit and Format menus, closing and quitting that wait
+  for every editor, automation ids, and `tools\e2e\check-editor.ps1`.

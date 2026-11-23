@@ -6,11 +6,11 @@ namespace Heracles.Editor;
 
 /// <summary>
 /// The page of an open note: the views of its blocks, stacked, and what
-/// floats over them (the selection of whole blocks, and in time the block
-/// handle, the drop line and the slash menu). It is what the editor's scroll
-/// view scrolls.
+/// floats over them (the selection of whole blocks, the block handle, the
+/// drop line and the slash menu). It is what the editor's scroll view
+/// scrolls. What the mouse does on it is in BlockEditorView.Mouse.cs.
 /// </summary>
-internal sealed class BlockEditorView : HandLaidView
+internal sealed partial class BlockEditorView : HandLaidView
 {
     private readonly BlockEditorController editor;
     private readonly SelectionOverlay overlay = new();
@@ -33,6 +33,7 @@ internal sealed class BlockEditorView : HandLaidView
         SlashMenu.Choose = editor.ChooseSlashCommand;
         SlashMenu.IsVisibleChanged += (_, _) => InvalidateMeasure();
         Hold(overlay);
+        InitializeMouse();
         Hold(SlashMenu);
     }
 
@@ -128,6 +129,7 @@ internal sealed class BlockEditorView : HandLaidView
         views = current;
         // What floats stays above the blocks.
         Raise(overlay);
+        RaiseFloating();
         Raise(SlashMenu);
         InvalidateMeasure();
     }
@@ -202,6 +204,7 @@ internal sealed class BlockEditorView : HandLaidView
         // text lands on the page.
         var height = Math.Max(y + EditorTheme.BottomPadding, editor.VisibleHeight);
         PlaceAt(overlay, new Rect(0, 0, width, height));
+        PlaceFloating();
         if (SlashMenu.Visibility == Visibility.Visible) PlaceAt(SlashMenu, slashFrame);
         return height;
     }
@@ -340,11 +343,6 @@ internal sealed class BlockEditorView : HandLaidView
             overlay.Flash = null;
         };
         flashTimer.Start();
-    }
-
-    /// <summary>The block handle comes with the mouse, in a later task.</summary>
-    public void HideHandle()
-    {
     }
 }
 

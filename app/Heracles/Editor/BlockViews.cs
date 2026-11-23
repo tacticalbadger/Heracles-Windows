@@ -236,8 +236,20 @@ internal abstract class TextHoldingView : BlockView
     {
         still = EditorTheme.StaticText(block);
         still.Cursor = Cursors.IBeam;
+        still.MouseLeftButtonDown += (_, e) => StillPressed(e, e.ClickCount);
+        // The right button puts the caret where it is too, so that the menu
+        // that follows is the text box's, for that place.
+        still.MouseRightButtonDown += (_, e) => Editor.ActivateAt(Block.Id, e.GetPosition(still));
         shown = State(block);
         Hold(still);
+    }
+
+    private void StillPressed(MouseButtonEventArgs e, int clicks)
+    {
+        e.Handled = true;
+        // A shift-click from another block selects the blocks between.
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0 && Editor.ExtendSelection(Block.Id)) return;
+        Editor.Page.StaticTextPressed(Block.Id, e.GetPosition(still), clicks, e.GetPosition(Editor.Page));
     }
 
     public override BlockTextBox? TextBox => box;
@@ -624,10 +636,30 @@ internal sealed class ToggleBlockView : BlockView
     }
 }
 
-/// <summary>A row of columns.</summary>
+/// <summary>A row of columns, with a divider to drag between each pair.</summary>
 internal sealed class ColumnsBlockView(Block block, BlockEditorController editor) : BlockView(block, editor)
 {
+    private readonly List<ColumnGrip> grips = [];
     private string shownWidths = "";
+
+    /// <summary>
+    /// Move the divider after a column by a distance, taking width from
+    /// one neighbour and giving it to the other.
+    /// </summary>
+    internal void Resize(int after, double by, IReadOnlyList<double> from)
+    {
+        if (after < 0 || after + 1 >= from.Count) return;
+        var gap = EditorTheme.ColumnGap;
+        var available = Math.Max(RenderSize.Width - gap * (from.Count - 1), 40);
+        var total = from.Sum();
+        var pair = from[after] + from[after + 1];
+        var least = total * 0.12;
+        var moved = Math.Min(Math.Max(from[after] + by / available * total, least), pair - least);
+        var widths = from.ToArray();
+        widths[after] = moved;
+        widths[after + 1] = pair - moved;
+        Editor.SetColumnWidths(Block.Id, widths);
+    }
 
     public override void Configure(Block block, int ordinal)
     {
@@ -650,13 +682,85 @@ internal sealed class ColumnsBlockView(Block block, BlockEditorController editor
         var total = columns.Sum(column => column.Block.Width);
         var x = 0.0;
         var tallest = 0.0;
+        var rights = new List<double>(columns.Count);
         foreach (var column in columns)
         {
             var share = Math.Round(available * column.Block.Width / total);
             tallest = Math.Max(tallest, Place(column, x, 0, share));
+            rights.Add(x + share);
             x += share + gap;
         }
+
+        while (grips.Count < columns.Count - 1)
+        {
+            var grip = new ColumnGrip(this, grips.Count);
+            grips.Add(grip);
+            Hold(grip);
+        }
+        while (grips.Count > Math.Max(columns.Count - 1, 0))
+        {
+            Release(grips[^1]);
+            grips.RemoveAt(grips.Count - 1);
+        }
+        for (var index = 0; index < grips.Count; index++)
+        {
+            grips[index].Visibility = IsEditable ? Visibility.Visible : Visibility.Collapsed;
+            if (IsEditable) PlaceAt(grips[index], new Rect(rights[index] + gap / 2 - 5, 0, 10, tallest));
+        }
         return tallest;
+    }
+}
+
+/// <summary>The divider between two columns: drag it to change their widths.</summary>
+internal sealed class ColumnGrip : FrameworkElement
+{
+    private readonly ColumnsBlockView row;
+    private readonly int index;
+    private IReadOnlyList<double> startWidths = [];
+    private double origin;
+
+    public ColumnGrip(ColumnsBlockView row, int index)
+    {
+        this.row = row;
+        this.index = index;
+        Cursor = Cursors.SizeWE;
+    }
+
+    protected override HitTestResult HitTestCore(PointHitTestParameters parameters) => new PointHitTestResult(this, parameters.HitPoint);
+
+    protected override void OnMouseEnter(MouseEventArgs e) => InvalidateVisual();
+
+    protected override void OnMouseLeave(MouseEventArgs e) => InvalidateVisual();
+
+    protected override void OnRender(DrawingContext drawing)
+    {
+        if (!IsMouseOver && !IsMouseCaptured) return;
+        drawing.DrawRoundedRectangle(Ui.Accent(0.6), null, new Rect(RenderSize.Width / 2 - 1, 0, 2, RenderSize.Height), 1, 1);
+    }
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        startWidths = row.Widths;
+        origin = e.GetPosition(row).X;
+        // The drag as a whole is one step to undo.
+        row.Editor.BeginUndoGroup();
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (!IsMouseCaptured) return;
+        row.Resize(index, e.GetPosition(row).X - origin, startWidths);
+        e.Handled = true;
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        if (!IsMouseCaptured) return;
+        ReleaseMouseCapture();
+        InvalidateVisual();
+        e.Handled = true;
     }
 }
 

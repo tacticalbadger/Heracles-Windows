@@ -69,6 +69,18 @@ internal sealed class BlockTextBox : RichTextBox
     /// </summary>
     public Func<Key, ModifierKeys, bool>? KeyHandler { get; set; }
 
+    /// <summary>Called when the box has put its selection on a clipboard, to add the editor's own form of it.</summary>
+    public Action<IDataObject>? Copied { get; set; }
+
+    /// <summary>Called when the box is asked to paste. Pasting is the editor's, which knows blocks and pictures.</summary>
+    public Action? PasteRequested { get; set; }
+
+    /// <summary>Called when the mouse goes down in the box. True when the editor took the click.</summary>
+    public Func<MouseButtonEventArgs, bool>? Pressed { get; set; }
+
+    /// <summary>Called to fill the box's menu as it opens.</summary>
+    public Action<ContextMenu>? MenuOpening { get; set; }
+
     public BlockTextBox()
     {
         Template = Bare;
@@ -78,7 +90,11 @@ internal sealed class BlockTextBox : RichTextBox
         MinHeight = 0;
         MinWidth = 0;
         FocusVisualStyle = null;
-        ContextMenu = null;
+        ContextMenu = new ContextMenu();
+        ContextMenuOpening += (_, _) =>
+        {
+            if (ContextMenu is { } menu) MenuOpening?.Invoke(menu);
+        };
         // The editor keeps one undo history for the whole note.
         IsUndoEnabled = false;
         AcceptsReturn = false;
@@ -91,6 +107,13 @@ internal sealed class BlockTextBox : RichTextBox
         // Ctrl+Shift+N is the window's New Section, not a numbered list.
         CommandManager.AddPreviewCanExecuteHandler(this, (_, e) =>
         {
+            if (ReferenceEquals(e.Command, ApplicationCommands.Paste))
+            {
+                // Whatever is on the clipboard: the box would only say yes to text.
+                e.CanExecute = !IsReadOnly;
+                e.Handled = true;
+                return;
+            }
             if (Array.IndexOf(NotTheBoxes, e.Command) < 0) return;
             e.CanExecute = false;
             e.ContinueRouting = true;
@@ -99,6 +122,12 @@ internal sealed class BlockTextBox : RichTextBox
         // Told to anyway, it does nothing.
         CommandManager.AddPreviewExecutedHandler(this, (_, e) =>
         {
+            if (ReferenceEquals(e.Command, ApplicationCommands.Paste))
+            {
+                e.Handled = true;
+                PasteRequested?.Invoke();
+                return;
+            }
             if (Array.IndexOf(NotTheBoxes, e.Command) >= 0) e.Handled = true;
         });
         // Text is not dragged out of a box: where it would land, and what
@@ -106,6 +135,7 @@ internal sealed class BlockTextBox : RichTextBox
         DataObject.AddCopyingHandler(this, (_, e) =>
         {
             if (e.IsDragDrop) e.CancelCommand();
+            else Copied?.Invoke(e.DataObject);
         });
         TextCompositionManager.AddPreviewTextInputStartHandler(this, (_, e) => IsComposing = e.TextComposition is FrameworkTextComposition);
         TextCompositionManager.AddPreviewTextInputUpdateHandler(this, (_, e) => IsComposing = e.TextComposition is FrameworkTextComposition);
@@ -280,6 +310,16 @@ internal sealed class BlockTextBox : RichTextBox
             return;
         }
         base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        if (Pressed?.Invoke(e) == true)
+        {
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewMouseLeftButtonDown(e);
     }
 
     // Spelling is checked only where the keyboard is: it is most of what a

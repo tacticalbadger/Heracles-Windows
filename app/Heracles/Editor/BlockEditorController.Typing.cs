@@ -744,6 +744,20 @@ internal sealed partial class BlockEditorController
             case (Key.Y, ModifierKeys.Control) or (Key.Z, ControlShift):
                 Redo();
                 return true;
+            // Pasting is the editor's wherever the caret is: it knows blocks
+            // and pictures, and a text box only text.
+            case (Key.V, ModifierKeys.Control) or (Key.Insert, ModifierKeys.Shift):
+                PasteFromClipboard();
+                return true;
+            case (Key.V, ControlShift):
+                PasteFromClipboard(plainOnly: true);
+                return true;
+            case (Key.C, ModifierKeys.Control) when box is null:
+                CopyToClipboard(cut: false);
+                return true;
+            case (Key.X, ModifierKeys.Control) when box is null:
+                CopyToClipboard(cut: true);
+                return true;
         }
         if (box is null || !IsEditable || box.IsCode) return false;
         switch (key, modifiers)

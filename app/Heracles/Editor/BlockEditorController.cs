@@ -173,6 +173,16 @@ internal sealed partial class BlockEditorController
         box.SelectionChanged += BoxSelectionChanged;
         box.GotKeyboardFocus += BoxGotKeyboardFocus;
         box.KeyHandler = (key, modifiers) => HandleKey(box, key, modifiers);
+        box.Copied = AddCopiedText;
+        box.PasteRequested = () => PasteFromClipboard();
+        box.MenuOpening = menu => FillTextMenu(box, menu);
+        box.Pressed = e =>
+        {
+            // A shift-click from another block selects the blocks between.
+            if ((Keyboard.Modifiers & ModifierKeys.Shift) != 0 && ExtendSelection(box.BlockId)) return true;
+            Page.TextBoxPressed(box.BlockId, e.GetPosition(Page));
+            return false;
+        };
     }
 
     internal void Detach(BlockTextBox box)
@@ -181,6 +191,10 @@ internal sealed partial class BlockEditorController
         box.SelectionChanged -= BoxSelectionChanged;
         box.GotKeyboardFocus -= BoxGotKeyboardFocus;
         box.KeyHandler = null;
+        box.Copied = null;
+        box.PasteRequested = null;
+        box.MenuOpening = null;
+        box.Pressed = null;
         if (ReferenceEquals(FocusedText, box)) FocusedText = null;
     }
 

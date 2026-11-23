@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Media;
 using Heracles.Editor;
 using Block = Heracles.Editor.Block;
@@ -98,6 +100,39 @@ internal sealed class EditorHarness
             if (Focused is not { } box) return;
             Views.Type(box, characters.GetTextElement());
         }
+    }
+
+    /// <summary>
+    /// Press a key. It goes to the editor first, as a key press does, and
+    /// what the editor leaves alone is carried out by the text box, by the
+    /// command that key is bound to. With whole blocks selected, the key is
+    /// the page's.
+    /// </summary>
+    public void Press(Key key, ModifierKeys modifiers = ModifierKeys.None)
+    {
+        if (Focused is not { } box)
+        {
+            Editor.HandleBlockKey(key, modifiers);
+            return;
+        }
+        if (box.OfferKey(key, modifiers)) return;
+        var shift = (modifiers & ModifierKeys.Shift) != 0;
+        var control = (modifiers & ModifierKeys.Control) != 0;
+        RoutedUICommand? command = key switch
+        {
+            Key.Back => EditingCommands.Backspace,
+            Key.Delete => EditingCommands.Delete,
+            Key.Left => shift ? EditingCommands.SelectLeftByCharacter : EditingCommands.MoveLeftByCharacter,
+            Key.Right => shift ? EditingCommands.SelectRightByCharacter : EditingCommands.MoveRightByCharacter,
+            Key.Up => shift ? EditingCommands.SelectUpByLine : EditingCommands.MoveUpByLine,
+            Key.Down => shift ? EditingCommands.SelectDownByLine : EditingCommands.MoveDownByLine,
+            Key.Home => EditingCommands.MoveToLineStart,
+            Key.End => EditingCommands.MoveToLineEnd,
+            Key.A when control => ApplicationCommands.SelectAll,
+            _ => null,
+        };
+        command?.Execute(null, box);
+        Views.Pump();
     }
 
     /// <summary>A block's frame on the page.</summary>

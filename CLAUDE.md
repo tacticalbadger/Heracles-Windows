@@ -908,7 +908,7 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-**Stage 4 (the editor's views) is under way: two of its six tasks are
+**Stage 4 (the editor's views) is under way: three of its six tasks are
 done.** Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
 tasks: the theme and the text box; block views on a page; typing, keys,
@@ -936,11 +936,36 @@ keyboard or touch the clipboard.
   widths). 600 blocks open in well under the test's three seconds. 354
   .NET tests pass. Tests: `EditorHarness.cs` (the Mac's harness, with no
   window) and `EditorLayoutTests.cs`.
+- Done (Task 3): typing, keys, undo, marks, links and the slash menu, in
+  `BlockEditorController.Typing.cs` (the Mac's one controller file is two
+  here, in the same order). The Mac's `EditorTypingTests`,
+  `EditorShortcutTests` and `EditorNavigationTests` pass with real text
+  boxes (`EditorTypingTests.cs`, 43 tests with the Windows ones). 397
+  .NET tests pass. How it works, for whoever changes it:
+  - What was typed is found by `Diff(old, now, caret)` and put into the
+    document with `typingStyle`, the marks the editor holds for what is
+    typed next. Then, if the box shows the text otherwise than the document
+    says, `Restyle` redraws it (`BlockTextBox.Show`) and puts the caret
+    back. `TypeInto` types by way of the document, for a line break (which
+    a text box would make a paragraph of) and for code's indent.
+  - **A text box reports its caret after the text has changed, and for a
+    move that moved nothing.** Marks chosen for what is typed next
+    (`chosenStyle`: Ctrl+I with nothing selected, or the end of `**bold**`)
+    therefore hold until the caret is somewhere else.
+  - An edit changes the document where it is; `Edit` clones it first, to
+    compare with and to go back to.
+  - In a test a key is `harness.Press(Key, ModifierKeys)`: it goes to
+    `BlockTextBox.OfferKey` as a key press does, and what the editor leaves
+    alone is carried out by the `EditingCommands` command that key is bound
+    to.
 - `BlockEditorController.Pending.cs` holds, as methods that do nothing,
-  what the views already call and Tasks 3 and 4 build with their tests
-  (typing, keys, block actions). It goes when the last of them is built.
-- **Next: Task 3**: typing, keys, undo, marks, links and the slash menu,
-  from `BlockEditorController.swift` and the Mac's `EditorTypingTests`,
-  `EditorShortcutTests` and `EditorNavigationTests`. The harness needs a
-  `Press(Key, ModifierKeys)`: a key goes to `HandleKey`, and one the editor
-  leaves alone is carried out by the matching `EditingCommands` command.
+  what the views already call and Task 4 builds with its tests
+  (`SetChecked`, `SetOpen`, `SetLanguage`, `ChooseEmoji`). It goes then.
+- **Next: Task 4**: block actions, the clipboard (through `IDataObject`,
+  never the system clipboard in a test), pictures, and the mouse: the first
+  click in static text (`ActivateAt`), the block handle and its menu, the
+  grips between columns, picture files dropped on the page, a drag from one
+  block's text into another, a click on a link. From the rest of
+  `BlockEditorController.swift`, `BlockEditorView.swift` (the handle, the
+  mouse) and `BlockViews.swift` (`ColumnGrip`), and the Mac's
+  `EditorBlockActionTests` and `EditorPasteboardTests`.

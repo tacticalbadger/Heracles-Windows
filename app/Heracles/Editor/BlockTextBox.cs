@@ -271,7 +271,10 @@ internal sealed class BlockTextBox : RichTextBox
         // A key pressed with Alt arrives as a system key. A key an input
         // method is using is the input method's.
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key != Key.ImeProcessed && !IsComposing && OfferKey(key, Keyboard.Modifiers))
+        // The right-hand Alt of many keyboards types characters (a brace, an
+        // at sign) and reports itself as Ctrl+Alt. Those are not commands.
+        var typesACharacter = Keyboard.IsKeyDown(Key.RightAlt) && (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (key != Key.ImeProcessed && !IsComposing && !typesACharacter && OfferKey(key, Keyboard.Modifiers))
         {
             e.Handled = true;
             return;

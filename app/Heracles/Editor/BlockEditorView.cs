@@ -1,3 +1,4 @@
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -19,13 +20,32 @@ internal sealed class BlockEditorView : HandLaidView
     private IReadOnlyList<string> selectedBlocks = [];
     private IReadOnlyList<string> pendingBlocks = [];
     private DispatcherTimer? flashTimer;
+    private Rect slashFrame;
+
+    /// <summary>The list of blocks that opens when a slash is typed.</summary>
+    public SlashMenuView SlashMenu { get; } = new() { Visibility = Visibility.Collapsed };
 
     public BlockEditorView(BlockEditorController editor)
     {
         this.editor = editor;
         Focusable = true;
         FocusVisualStyle = null;
+        SlashMenu.Choose = editor.ChooseSlashCommand;
+        SlashMenu.IsVisibleChanged += (_, _) => InvalidateMeasure();
         Hold(overlay);
+        Hold(SlashMenu);
+    }
+
+    // Keys while whole blocks are selected
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        // Only the page's own keys: one that a text box let pass is not a
+        // command to the blocks.
+        if (e.Handled || !ReferenceEquals(e.OriginalSource, this)) return;
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (editor.HandleBlockKey(key, Keyboard.Modifiers)) e.Handled = true;
     }
 
     public IReadOnlyList<BlockView> RootViews => rootViews;
@@ -108,6 +128,7 @@ internal sealed class BlockEditorView : HandLaidView
         views = current;
         // What floats stays above the blocks.
         Raise(overlay);
+        Raise(SlashMenu);
         InvalidateMeasure();
     }
 
@@ -181,7 +202,32 @@ internal sealed class BlockEditorView : HandLaidView
         // text lands on the page.
         var height = Math.Max(y + EditorTheme.BottomPadding, editor.VisibleHeight);
         PlaceAt(overlay, new Rect(0, 0, width, height));
+        if (SlashMenu.Visibility == Visibility.Visible) PlaceAt(SlashMenu, slashFrame);
         return height;
+    }
+
+    // The slash menu
+
+    /// <summary>
+    /// Put the slash menu under a place in a block's text, or above it when
+    /// there is no room below.
+    /// </summary>
+    public void PlaceSlashMenu(BlockTextBox box, int offset)
+    {
+        if (!box.IsDescendantOf(this)) return;
+        var anchor = box.PointerAt(offset).GetCharacterRect(System.Windows.Documents.LogicalDirection.Forward);
+        if (anchor.IsEmpty) anchor = new Rect(0, 0, 0, 20);
+        var corner = box.TranslatePoint(anchor.TopLeft, this);
+        var size = SlashMenu.FittingSize;
+        var x = Math.Min(corner.X, Math.Max(RenderSize.Width - size.Width - 8, 0));
+        var y = corner.Y + anchor.Height + 6;
+        var top = editor.ScrollView.VerticalOffset;
+        var bottom = editor.VisibleHeight > 0 ? top + editor.VisibleHeight : double.PositiveInfinity;
+        if (y + size.Height > bottom && corner.Y - size.Height - 6 >= top) y = corner.Y - size.Height - 6;
+        var frame = new Rect(new Point(x, y), size);
+        if (frame == slashFrame) return;
+        slashFrame = frame;
+        InvalidateMeasure();
     }
 
     protected override void DidLayOut()
@@ -299,6 +345,125 @@ internal sealed class BlockEditorView : HandLaidView
     /// <summary>The block handle comes with the mouse, in a later task.</summary>
     public void HideHandle()
     {
+    }
+}
+
+/// <summary>A command in the slash menu.</summary>
+/// <param name="Glyph">A letter or two that stands for the block, drawn beside its name.</param>
+internal sealed record SlashCommand(string Title, string Detail, string Glyph, BlockTarget Target)
+{
+    public static IReadOnlyList<SlashCommand> All { get; } =
+    [
+        new("Text", "Plain paragraph", "¶", BlockTarget.Paragraph),
+        new("Heading 1", "Big section heading", "H1", BlockTarget.Heading(1)),
+        new("Heading 2", "Medium section heading", "H2", BlockTarget.Heading(2)),
+        new("Heading 3", "Smaller section heading", "H3", BlockTarget.Heading(3)),
+        new("Heading 4", "Small heading", "H4", BlockTarget.Heading(4)),
+        new("Bullet list", "A list with bullets", "•", BlockTarget.Bullet),
+        new("Numbered list", "A list with numbers", "1.", BlockTarget.Numbered),
+        new("Task list", "Things to tick off", "[ ]", BlockTarget.Todo),
+        new("Quote", "Set a passage apart", "”", BlockTarget.Quote),
+        new("Callout", "A panel with an icon", "!", BlockTarget.Callout),
+        new("Toggle", "Blocks you can fold away", ">", BlockTarget.Toggle),
+        new("Divider", "A line across the page", "—", BlockTarget.Divider),
+        new("Code", "A block of code", "{ }", BlockTarget.Code),
+    ];
+
+    /// <summary>The commands whose names match what was typed after the slash.</summary>
+    public static IReadOnlyList<SlashCommand> Matching(string query)
+    {
+        if (query.Length == 0) return All;
+        bool Starts(SlashCommand command) => command.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase);
+        return
+        [
+            .. All.Where(Starts),
+            .. All.Where(command => !Starts(command) && command.Title.Contains(query, StringComparison.OrdinalIgnoreCase)),
+        ];
+    }
+}
+
+/// <summary>The list of blocks that opens when a slash is typed.</summary>
+internal sealed class SlashMenuView : FrameworkElement
+{
+    private const double RowHeight = 30;
+    private const int MaxRows = 9;
+
+    private IReadOnlyList<SlashCommand> items = [];
+    private int selected;
+
+    /// <summary>Called with the index of a command that was clicked.</summary>
+    public Action<int> Choose { get; set; } = _ => { };
+
+    public IReadOnlyList<SlashCommand> Items
+    {
+        get => items;
+        set
+        {
+            items = value;
+            InvalidateVisual();
+        }
+    }
+
+    public int Selected
+    {
+        get => selected;
+        set
+        {
+            selected = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>The first row drawn, so the selected row is always among those shown.</summary>
+    private int FirstRow => Math.Min(Math.Max(selected - MaxRows + 1, 0), Math.Max(items.Count - MaxRows, 0));
+
+    public Size FittingSize => new(250, Math.Min(Math.Max(items.Count, 1), MaxRows) * RowHeight + 8);
+
+    private FormattedText Words(string text, double size, Brush brush) => new(
+        text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+        new Typeface(EditorTheme.Prose, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), size, brush,
+        VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+    protected override void OnRender(DrawingContext drawing)
+    {
+        // The theme's own solid surface: the system's "window" colour is
+        // white in dark mode too.
+        var surface = EditorTheme.Themed(this, "SolidBackgroundFillColorBaseBrush", SystemColors.WindowBrush);
+        var ink = EditorTheme.Themed(this, "TextFillColorPrimaryBrush", SystemColors.WindowTextBrush);
+        var quiet = EditorTheme.Themed(this, EditorTheme.SecondaryText, Brushes.Gray);
+        var frame = new Rect(0.5, 0.5, Math.Max(RenderSize.Width - 1, 0), Math.Max(RenderSize.Height - 1, 0));
+        drawing.DrawRoundedRectangle(surface, new Pen(Ui.Hairline, 1), frame, 8, 8);
+        if (items.Count == 0)
+        {
+            drawing.DrawText(Words("No such block", 11, quiet), new Point(12, 12));
+            return;
+        }
+        var first = FirstRow;
+        for (var row = 0; row < MaxRows && first + row < items.Count; row++)
+        {
+            var item = items[first + row];
+            var line = new Rect(4, 4 + row * RowHeight, Math.Max(RenderSize.Width - 8, 0), RowHeight);
+            if (first + row == selected) drawing.DrawRoundedRectangle(Ui.Accent(0.18), null, line, 5, 5);
+            var glyph = Words(item.Glyph, 11, quiet);
+            drawing.DrawText(glyph, new Point(line.Left + 17 - glyph.Width / 2, line.Top + (RowHeight - glyph.Height) / 2));
+            var title = Words(item.Title, 13, ink);
+            drawing.DrawText(title, new Point(line.Left + 36, line.Top + (RowHeight - title.Height) / 2));
+            var detail = Words(item.Detail, 11, quiet);
+            detail.MaxTextWidth = Math.Max(line.Width - 36 - title.Width - 14, 1);
+            detail.MaxLineCount = 1;
+            detail.Trimming = TextTrimming.CharacterEllipsis;
+            drawing.DrawText(detail, new Point(line.Left + 36 + title.Width + 8, line.Top + (RowHeight - detail.Height) / 2));
+        }
+    }
+
+    protected override HitTestResult HitTestCore(PointHitTestParameters parameters) =>
+        new PointHitTestResult(this, parameters.HitPoint);
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        var row = (int)((e.GetPosition(this).Y - 4) / RowHeight) + FirstRow;
+        if (row >= 0 && row < items.Count) Choose(row);
+        e.Handled = true;
     }
 }
 

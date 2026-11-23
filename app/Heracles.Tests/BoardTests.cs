@@ -745,3 +745,24 @@ public sealed class TaskDetailTests : BoardFixture
         Assert.Empty(Model.Tasks(List.Id));
     }
 }
+
+/// <summary>A card on its way from one place to another.</summary>
+public sealed class CardDragTests
+{
+    [Fact]
+    public void ACardIsCarriedAsTextAndReadBack()
+    {
+        Assert.Equal(new CardDrag("t-1"), CardDrag.Parse(new CardDrag("t-1").Text));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("heracles-card:")]
+    [InlineData("heracles-tab:leaf|note")]
+    [InlineData("some text dragged from another program")]
+    public void OtherTextIsNotACard(string? text)
+    {
+        Assert.Null(CardDrag.Parse(text));
+    }
+}

@@ -398,7 +398,8 @@ internal abstract class TextHoldingView : BlockView
 internal sealed class TextBlockView : TextHoldingView
 {
     private static readonly Brush CheckFill = MakeCheckFill();
-    private static readonly ControlTemplate CheckTemplate = MakeCheckTemplate();
+    /// <summary>The small check box. A card on a board and a task in its window use it too.</summary>
+    internal static readonly ControlTemplate CheckTemplate = MakeCheckTemplate();
 
     private CheckBox? checkbox;
     private bool settingCheck;

@@ -252,6 +252,15 @@ public sealed class ReminderToastTests
         Assert.Equal(planned.Identifier, ReminderToast.Identifier(ReminderToast.Xml(planned)));
     }
 
+    [Fact]
+    public void WhatAToastSaysCanBeReadBack()
+    {
+        var title = "Tom & <b>Jerry</b>";
+        Assert.Equal(title, ReminderToast.Title(ReminderToast.Xml(Planned(title))));
+        Assert.Null(ReminderToast.Title("not xml at all"));
+        Assert.Null(ReminderToast.Title("<toast><visual/></toast>"));
+    }
+
     [Theory]
     [InlineData("<toast launch=\"https://example.com\"><visual/></toast>")]
     [InlineData("<toast><visual/></toast>")]
@@ -271,5 +280,47 @@ public sealed class ReminderToastTests
         Assert.NotEqual(tag, ReminderToast.Tag("heracles.reminder.t2.2026-11-30T10:00:00.000Z"));
         // Windows takes at most sixteen characters on older versions.
         Assert.InRange(tag.Length, 1, 16);
+    }
+}
+
+/// <summary>What Windows adds to the plan: a notification says the task's name, so a renamed task's is made again.</summary>
+public sealed class ReminderPlanTitleTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_796_029_200); // 2026-11-30 09:00 UTC
+
+    private const string Identifier = "heracles.reminder.t1.2026-11-30T10:00:00.000Z";
+
+    private static Reminder Wanted(string title) => new("t1", "list", title, "2026-11-30T10:00:00.000Z");
+
+    [Fact]
+    public void AReminderWhoseTaskWasRenamedIsScheduledAgainUnderItsNewName()
+    {
+        var plan = new ReminderPlan([Wanted("Call the ferry office")], [new ScheduledReminder(Identifier, "Call")], Now);
+        Assert.Equal([Identifier], plan.ToRemove);
+        Assert.Equal("Call the ferry office", Assert.Single(plan.ToAdd).Title);
+    }
+
+    [Fact]
+    public void OneThatSaysWhatItShouldIsLeftAlone()
+    {
+        var plan = new ReminderPlan([Wanted("Call")], [new ScheduledReminder(Identifier, "Call")], Now);
+        Assert.Empty(plan.ToAdd);
+        Assert.Empty(plan.ToRemove);
+    }
+
+    [Fact]
+    public void OneWhoseWordsCannotBeReadIsLeftAlone()
+    {
+        var plan = new ReminderPlan([Wanted("Call")], [new ScheduledReminder(Identifier, null)], Now);
+        Assert.Empty(plan.ToAdd);
+        Assert.Empty(plan.ToRemove);
+    }
+
+    [Fact]
+    public void AnUntitledTaskIsComparedByWhatItsNotificationSays()
+    {
+        var plan = new ReminderPlan([Wanted("  ")], [new ScheduledReminder(Identifier, "Untitled task")], Now);
+        Assert.Empty(plan.ToAdd);
+        Assert.Empty(plan.ToRemove);
     }
 }

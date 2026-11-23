@@ -9,8 +9,8 @@ using Heracles.Workspaces;
 namespace Heracles.Notes;
 
 /// <summary>
-/// One note in a pane: its icon and title, then its content in the editor.
-/// A todo list says its board is still to come.
+/// One note in a pane: its icon and title, then its content: the editor for
+/// a page, the board for a todo list.
 /// </summary>
 internal sealed class NoteDetailView : DockPanel
 {
@@ -20,8 +20,9 @@ internal sealed class NoteDetailView : DockPanel
     private readonly Button iconButton;
     private readonly TextBox title;
     private readonly ContentControl body;
+    private readonly DockPanel header;
     private EditorCoordinator? coordinator;
-    private TextBlock? message;
+    private Heracles.Boards.BoardView? board;
     private Note note;
     private bool updating;
 
@@ -52,8 +53,10 @@ internal sealed class NoteDetailView : DockPanel
         }.Id("NoteTitle:" + leafId).Named("Title");
         title.GotKeyboardFocus += (_, _) => workspace.Tree = workspace.Tree.Focus(leafId);
         title.LostKeyboardFocus += (_, _) => CommitTitle();
-        // A title set from outside (a screen reader, an automated check) never
-        // has the keyboard, so nothing would ever commit it. It is taken at once.
+        // A title changed while the box does not have the keyboard is taken at
+        // once: nothing else would ever commit it. (UI Automation's "set
+        // value" usually brings the keyboard with it, and then the title is
+        // kept like any other, when the keyboard moves on.)
         title.TextChanged += (_, _) =>
         {
             if (!updating && !title.IsKeyboardFocused) CommitTitle();
@@ -67,12 +70,7 @@ internal sealed class NoteDetailView : DockPanel
             e.Handled = true;
         };
 
-        // The header stands over the editor's text column: as wide, and as far in.
-        var header = new DockPanel
-        {
-            MaxWidth = EditorTheme.ContentWidth,
-            Margin = new Thickness(EditorTheme.Gutter - 46, 20, EditorTheme.Gutter, 4),
-        };
+        header = new DockPanel();
         SetDock(iconButton, Dock.Left);
         header.Children.Add(iconButton);
         header.Children.Add(title);
@@ -103,9 +101,17 @@ internal sealed class NoteDetailView : DockPanel
             finally { updating = false; }
         }
 
-        if (note.Kind == NoteKind.TodoList)
+        // The header stands over the editor's text column: as wide, and as far in.
+        // A board starts at the left, and so does the header over it.
+        var isBoard = note.Kind == NoteKind.TodoList;
+        header.MaxWidth = isBoard ? double.PositiveInfinity : EditorTheme.ContentWidth;
+        header.Margin = isBoard ? new Thickness(22, 20, 32, 0) : new Thickness(EditorTheme.Gutter - 46, 20, EditorTheme.Gutter, 4);
+
+        if (isBoard)
         {
-            Say("Boards arrive in a later version.");
+            if (board is null) board = new Heracles.Boards.BoardView(model, leafId, note, () => workspace.Tree = workspace.Tree.Focus(leafId));
+            else board.Update(note);
+            if (!ReferenceEquals(body.Content, board)) body.Content = board;
             return;
         }
         coordinator ??= MakeEditor();
@@ -124,21 +130,6 @@ internal sealed class NoteDetailView : DockPanel
         // A screen reader, and the end-to-end checks, read the note from here.
         made.Editor.Page.Id("NoteText:" + leafId);
         return made;
-    }
-
-    private void Say(string text)
-    {
-        message ??= new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 14,
-            Opacity = 0.6,
-            MaxWidth = EditorTheme.ContentWidth,
-            Margin = new Thickness(EditorTheme.Gutter, 8, EditorTheme.Gutter, 24),
-        }.Id("NoteText:" + leafId);
-        message.Text = text;
-        System.Windows.Automation.AutomationProperties.SetName(message, text);
-        if (!ReferenceEquals(body.Content, message)) body.Content = message;
     }
 
     /// <summary>The view is going: what was typed and not yet saved is saved now.</summary>

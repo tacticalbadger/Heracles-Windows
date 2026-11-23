@@ -129,11 +129,11 @@ $trashed = @(Get-Blocks $pane)[0]
 try { Set-UiValue $trashed 'Changed in the trash.' } catch { }
 Test-Ui 'trash: a note in the trash keeps its words' { (Get-UiName "NoteText:$pane") -eq 'Pack the lantern, the stove and a map.' }
 
-# --- 8. A todo list still waits for its board ---
+# --- 8. A todo list is a board, not a page (check-boards.ps1 goes through it) ---
 $packing = (Get-UiId -Name 'Packing' -Prefix 'note:' -Within 'Sidebar') -replace '^note:', ''
 Select-Ui "note:$packing"
 $shown = @(Get-Panes | Where-Object { Find-Ui -Id "Tab:${_}:$packing" })[0]
-Test-Ui 'todo list: it says its board is still to come' { $shown -and (Get-UiName "NoteText:$shown") -match 'Boards arrive' }
+Test-Ui 'todo list: it shows a board, and no page' { $shown -and (Find-Ui -Id "Board:$shown") -and -not (Find-Ui -Id "NoteText:$shown") }
 
 Test-Ui 'the log holds no unhandled exception' { -not ((Get-Content $LogFile -ErrorAction SilentlyContinue) -match 'unhandled exception') }
 Exit-App

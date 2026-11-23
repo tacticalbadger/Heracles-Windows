@@ -125,6 +125,13 @@ internal static class TaskDates
 /// <param name="NoteId">The todo list to open when the notification is clicked.</param>
 internal sealed record PlannedReminder(string Identifier, string Title, string NoteId, DateTimeOffset Date);
 
+/// <summary>A notification the system is holding, and what it says, where that can be read.</summary>
+internal readonly record struct ScheduledReminder(string Identifier, string? Title)
+{
+    /// <summary>One known only by its identifier, as the Mac knows them all.</summary>
+    public static implicit operator ScheduledReminder(string identifier) => new(identifier, null);
+}
+
 /// <summary>
 /// What to change so that the notifications the system holds match the
 /// reminders the library has. Worked out apart from the system calls, so it
@@ -135,11 +142,20 @@ internal sealed class ReminderPlan
     /// <summary>Marks a notification as one of this app's reminders.</summary>
     public const string Prefix = "heracles.reminder.";
 
+    /// <summary>Every reminder still to come, scheduled already or not.</summary>
+    public IReadOnlyList<PlannedReminder> Wanted { get; }
+
     public IReadOnlyList<PlannedReminder> ToAdd { get; }
 
     public IReadOnlyList<string> ToRemove { get; }
 
-    public ReminderPlan(IEnumerable<Reminder> reminders, IEnumerable<string> scheduled, DateTimeOffset now)
+    /// <summary>
+    /// The plan, knowing what each waiting notification says. One that names
+    /// a task by a title it no longer has is taken back and made again: the
+    /// identifier does not change when a task is renamed, so nothing else
+    /// would notice.
+    /// </summary>
+    public ReminderPlan(IEnumerable<Reminder> reminders, IEnumerable<ScheduledReminder> scheduled, DateTimeOffset now)
     {
         var wanted = new List<PlannedReminder>();
         var wantedIds = new HashSet<string>(StringComparer.Ordinal);
@@ -152,11 +168,22 @@ internal sealed class ReminderPlan
             var title = reminder.TaskTitle.Trim();
             wanted.Add(new PlannedReminder(identifier, title.Length == 0 ? "Untitled task" : title, reminder.TodoListId, date));
         }
+
         var held = scheduled.ToList();
-        var existing = held.ToHashSet(StringComparer.Ordinal);
-        ToAdd = wanted.Where(reminder => !existing.Contains(reminder.Identifier)).ToList();
+        var says = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var waiting in held) says.TryAdd(waiting.Identifier, waiting.Title);
+        // Waiting, and saying something other than the task's title now.
+        var retitled = wanted
+            .Where(reminder => says.TryGetValue(reminder.Identifier, out var said) && said is not null && said != reminder.Title)
+            .Select(reminder => reminder.Identifier)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Wanted = wanted;
+        ToAdd = wanted.Where(reminder => !says.ContainsKey(reminder.Identifier) || retitled.Contains(reminder.Identifier)).ToList();
         ToRemove = held
-            .Where(identifier => identifier.StartsWith(Prefix, StringComparison.Ordinal) && !wantedIds.Contains(identifier))
+            .Select(waiting => waiting.Identifier)
+            .Where(identifier => identifier.StartsWith(Prefix, StringComparison.Ordinal)
+                && (!wantedIds.Contains(identifier) || retitled.Contains(identifier)))
             .Distinct()
             .ToList();
     }

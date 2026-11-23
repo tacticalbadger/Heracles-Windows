@@ -9,6 +9,7 @@
         tools\e2e\ui.ps1 invoke  -Id <automationId> | -Name <name>     button, menu item, tree item
         tools\e2e\ui.ps1 expand  -Id ... | -Name ...   /  collapse / select
         tools\e2e\ui.ps1 setvalue -Id ... -Text <text>                 text boxes
+        tools\e2e\ui.ps1 scroll  -Id ... -Y <0 to 100>                  how far down a scrolling area is
         tools\e2e\ui.ps1 click   -Id ... | -Name ... [-Right] [-Double]  real mouse click on its centre
         tools\e2e\ui.ps1 clickat -X <px> -Y <px> [-Right] [-Double]      relative to the main window
         tools\e2e\ui.ps1 drag    -X <px> -Y <px> -ToX <px> -ToY <px>      relative to the main window
@@ -24,7 +25,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'focus', 'click', 'clickat', 'drag', 'keys', 'text', 'foreground')]
+    [ValidateSet('windows', 'tree', 'find', 'invoke', 'expand', 'collapse', 'select', 'setvalue', 'focus', 'scroll', 'click', 'clickat', 'drag', 'keys', 'text', 'foreground')]
     [string]$Action,
     [string]$Id,
     [string]$Name,
@@ -120,6 +121,14 @@ function Describe-Live($element) {
     if ($c.HelpText) { $extra += " help='$($c.HelpText)'" }
     if ($c.ItemStatus) { $extra += " status='$($c.ItemStatus)'" }
     if (-not $c.IsEnabled) { $extra += ' DISABLED' }
+    # What a text box holds, on one line and not too much of it. It comes
+    # last, so nothing before it is harder to pick out.
+    $held = $null
+    if ($element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$held)) {
+        $value = "$($held.Current.Value)" -replace '[\r\n]+', ' '
+        if ($value.Length -gt 200) { $value = $value.Substring(0, 200) }
+        $extra += " value='$value'"
+    }
     "{0} '{1}' id='{2}' [{3}]{4}" -f ($c.ControlType.ProgrammaticName -replace 'ControlType\.', ''), $c.Name, $c.AutomationId, $rect, $extra
 }
 
@@ -225,6 +234,12 @@ switch ($Action) {
         $element = Find-Element
         $element.SetFocus()
         Write-Host "focused: $(Describe $element)"
+    }
+    'scroll' {
+        # How far down, from 0 (the top) to 100 (the bottom). Across is left as it is.
+        $element = Find-Element
+        $element.GetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern).SetScrollPercent(-1, $Y)
+        Write-Host "scrolled: $(Describe $element)"
     }
     'setvalue' {
         $element = Find-Element

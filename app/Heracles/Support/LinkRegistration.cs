@@ -12,6 +12,12 @@ namespace Heracles.Support;
 /// </summary>
 internal static class LinkRegistration
 {
+    /// <summary>
+    /// Where the current user's own classes are kept, under <c>HKCU</c>. The
+    /// app registers itself here; the tests never open it.
+    /// </summary>
+    public const string ClassesKey = @"Software\Classes";
+
     private const string Scheme = Model.AppLink.Scheme;
     private const string CommandKey = @"shell\open\command";
 
@@ -69,4 +75,41 @@ internal static class AppIdentity
 
     /// <summary>Say that this process is the app. False if Windows would not have it.</summary>
     public static bool Claim() => SetCurrentProcessExplicitAppUserModelID(Id) >= 0;
+}
+
+/// <summary>
+/// What the app does at start to be known to Windows: its identity and its
+/// link scheme in the registry, and its reminders handed over and kept in
+/// step from then on. Everything it touches is passed in, so the tests use
+/// a registry key and a list of notifications of their own.
+/// </summary>
+internal static class WindowsIntegration
+{
+    /// <returns>
+    /// What now keeps Windows' notifications in step with the library, or
+    /// null when Windows has none to give. The links are registered either way.
+    /// </returns>
+    public static Boards.ReminderScheduler? Register(
+        RegistryKey classes,
+        string? exePath,
+        Model.AppModel model,
+        Func<Boards.IReminderCenter> center,
+        Action<Action, TimeSpan>? later = null)
+    {
+        AppIdentity.Register(classes);
+        if (exePath is not null) LinkRegistration.Register(classes, exePath);
+
+        Boards.IReminderCenter notifications;
+        try { notifications = center(); }
+        catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
+        {
+            Log.Error("reminders: Windows has no notifications to give", error);
+            return null;
+        }
+        var scheduler = new Boards.ReminderScheduler(model, notifications, later);
+        model.AfterChange = scheduler.SyncSoon;
+        // The reminders the library already holds, soon after start.
+        scheduler.SyncSoon();
+        return scheduler;
+    }
 }

@@ -71,7 +71,7 @@ internal static class E2eSeed
         var trip = store.CreateNote(new NewNote(ParentId: plans.Id, Title: "Trip", Icon: "🧭", Content: Document("Pack the lantern.")));
         store.SetNoteFavorited(trip.Id, true);
         store.CreateNote(new NewNote(ParentId: plans.Id, Title: "Budget", Content: Document("Ferry tickets, and a new lantern.")));
-        store.CreateNote(new NewNote(Kind: NoteKind.TodoList, ParentId: notebook.Id, Title: "Packing"));
+        Board(store, store.CreateNote(new NewNote(Kind: NoteKind.TodoList, ParentId: notebook.Id, Title: "Packing")));
         var old = store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "Old ideas"));
         store.SetNoteArchived(old.Id, true);
         var scrap = store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "Scrap"));
@@ -83,5 +83,21 @@ internal static class E2eSeed
         store.CreateNote(new NewNote(ParentId: notebook.Id, Title: "A very long title " + new string('x', 280)));
 
         Log.Info($"seed: created {store.ListNotes().Length - 1} notes");
+    }
+
+    /// <summary>A board with a card of every sort: plain, done, and one with everything a card can say.</summary>
+    private static void Board(Store store, Note list)
+    {
+        var columns = store.ListColumns(list.Id);
+        var tent = store.CreateTask(new NewTask(TodoListId: list.Id, ColumnId: columns[0].Id, Title: "Tent", Description: "The green one.", Priority: 2));
+        store.UpdateTask(tent.Id, new TaskPatch(Labels: ["camping"], DueDate: Heracles.Boards.TaskDates.DueDate(DateTimeOffset.Now.AddDays(3))));
+        var pegs = store.CreateTask(new NewTask(TodoListId: list.Id, ParentTaskId: tent.Id, Title: "Pegs"));
+        store.UpdateTask(pegs.Id, new TaskPatch(Completed: true));
+        store.CreateTask(new NewTask(TodoListId: list.Id, ParentTaskId: tent.Id, Title: "Mallet"));
+        store.CreateComment(tent.Id, "Borrow the big one?");
+        store.CreateTask(new NewTask(TodoListId: list.Id, ColumnId: columns[0].Id, Title: "Stove"));
+        store.CreateTask(new NewTask(TodoListId: list.Id, ColumnId: columns[1].Id, Title: "Map"));
+        var lantern = store.CreateTask(new NewTask(TodoListId: list.Id, ColumnId: columns[2].Id, Title: "Lantern"));
+        store.UpdateTask(lantern.Id, new TaskPatch(Completed: true));
     }
 }

@@ -13,8 +13,8 @@ namespace Heracles.Boards;
 /// </summary>
 internal interface IReminderCenter
 {
-    /// <summary>The identifier of every notification waiting, this app's reminders or not.</summary>
-    IReadOnlyList<string> Scheduled();
+    /// <summary>Every notification waiting, this app's reminders or not, with what it says where that can be read.</summary>
+    IReadOnlyList<ScheduledReminder> Scheduled();
 
     void Remove(IReadOnlyList<string> identifiers);
 
@@ -37,6 +37,13 @@ internal sealed class ReminderScheduler
 
     /// <summary>Goes up with every ask, so that only the last sync put off is the one that runs.</summary>
     private int asked;
+
+    /// <summary>
+    /// The reminders as they stood when Windows last took them all. The
+    /// library changes at every pause in typing, and almost none of that is
+    /// news about reminders: while they stand as they did, Windows is not asked.
+    /// </summary>
+    private string? handedOver;
 
     /// <param name="later">How something is put off for a while. Left out, a timer on this thread's dispatcher.</param>
     /// <param name="now">The time. Left out, the clock's.</param>
@@ -85,19 +92,45 @@ internal sealed class ReminderScheduler
         // going on without it, and the app must not stop for it.
         try
         {
-            var plan = new ReminderPlan(reminders, center.Scheduled(), now());
+            var moment = now();
+            var standing = Standing(reminders, moment);
+            if (standing == handedOver) return;
+
+            var plan = new ReminderPlan(reminders, center.Scheduled(), moment);
             if (plan.ToRemove.Count > 0) center.Remove(plan.ToRemove);
-            foreach (var reminder in plan.ToAdd) center.Add(reminder);
-            if (plan.ToAdd.Count > 0 || plan.ToRemove.Count > 0)
+            var added = 0;
+            foreach (var reminder in plan.ToAdd)
             {
-                Log.Info($"reminders: {plan.ToAdd.Count} scheduled, {plan.ToRemove.Count} taken back");
+                // One that Windows will not take (its time came while this
+                // ran) does not stop the others.
+                try
+                {
+                    center.Add(reminder);
+                    added++;
+                }
+                catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
+                {
+                    Log.Error($"reminders: one could not be scheduled ({reminder.Identifier})", error);
+                }
             }
+            if (added > 0 || plan.ToRemove.Count > 0)
+            {
+                Log.Info($"reminders: {added} scheduled, {plan.ToRemove.Count} taken back");
+            }
+            // One that was refused is tried again at the next change.
+            handedOver = added == plan.ToAdd.Count ? standing : null;
         }
         catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
         {
             Log.Error("reminders: could not be scheduled", error);
         }
     }
+
+    /// <summary>The reminders still to come, as one string: which, for which list, and under what name.</summary>
+    private static string Standing(IEnumerable<Reminder> reminders, DateTimeOffset moment) =>
+        string.Join(
+            "\n",
+            new ReminderPlan(reminders, [], moment).Wanted.Select(reminder => $"{reminder.Identifier}\t{reminder.NoteId}\t{reminder.Title}"));
 }
 
 /// <summary>
@@ -148,6 +181,13 @@ internal static class ReminderToast
             }
         }
         return null;
+    }
+
+    /// <summary>What a toast says first: the task's title. Null when it cannot be read.</summary>
+    public static string? Title(string xml)
+    {
+        try { return XElement.Parse(xml).Descendants("text").FirstOrDefault()?.Value; }
+        catch (XmlException) { return null; }
     }
 
     /// <summary>A short name for a reminder, the same every time, for Windows to tell toasts apart by.</summary>

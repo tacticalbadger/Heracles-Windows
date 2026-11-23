@@ -64,6 +64,22 @@ function Get-UiName {
     return $null
 }
 
+# What the element with this id says of its state: a block's kind, a card's facts.
+function Get-UiStatus {
+    param([Parameter(Mandatory = $true)][string]$Id)
+    $line = Find-Ui -Id $Id
+    if ($line -and $line -match " status='([^']*)'") { return $Matches[1] }
+    return $null
+}
+
+# What a text box holds (its first 200 characters, on one line).
+function Get-UiValue {
+    param([Parameter(Mandatory = $true)][string]$Id)
+    $line = Find-Ui -Id $Id
+    if ($line -and $line -match " value='(.*)'$") { return $Matches[1] }
+    return $null
+}
+
 function Invoke-Ui { param([string]$Id, [string]$Name) if ($Id) { & $script:UiScript invoke -Id $Id 6>&1 | Out-Null } else { & $script:UiScript invoke -Name $Name 6>&1 | Out-Null } }
 function Select-Ui { param([Parameter(Mandatory = $true)][string]$Id) & $script:UiScript select -Id $Id 6>&1 | Out-Null }
 function Set-UiValue { param([Parameter(Mandatory = $true)][string]$Id, [string]$Text) & $script:UiScript setvalue -Id $Id -Text $Text 6>&1 | Out-Null }

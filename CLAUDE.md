@@ -64,6 +64,22 @@ Claude's calls, open to change:
   C# cannot express the nested optional the Mac's binding uses.
 - Supported from Windows 10 version 2004.
 - The application identity is `com.heracles.notes.native`.
+- A task opens in a window of its own, not a sheet over the board: it is
+  not modal, there is one per task, and it closes when its list goes to
+  the trash. Its button says Close, where the Mac's says Done (a board's
+  last column is called Done).
+- A column is renamed where its name is, and its menu moves it left and
+  right. The Mac's board can do neither; the design asks for both.
+- A reminder is a scheduled toast under the identity above, and it opens
+  its list by a `heracles://` link with no code of the app's running. The
+  link also carries the reminder's identifier (`?reminder=…`), because the
+  tag Windows knows a toast by is too short to hold one.
+- **A run on a test library (`HERACLES_DATA_DIR` set) takes nothing of
+  Windows for itself**: it does not register the link scheme or the
+  identity, and it schedules no reminders. So no test, and no fixture,
+  can put a notification on the owner's screen or take his links.
+- A reminder whose task is renamed is scheduled again under the new name.
+  (On the Mac the notification keeps the old one.)
 - How the Mac editor's Swift value types are carried into C#
   (`app/Heracles/Editor/`): `RichText`, `TextStyle`, `TextLink`,
   `JsonValue` and `EditorSelection` are immutable with structural equality
@@ -134,9 +150,22 @@ app/
                           .Actions.cs: block actions, clipboard, pictures;
                           BlockEditorView.Mouse.cs: the handle and drags),
                           EditorAutomation (what UI Automation sees of it)
+    Boards/               a todo list. What is decided, with no view in it:
+                          TaskSupport (TaskDates, ReminderPlan), Board
+                          (columns, cards, what a card says, where a drop
+                          lands), TaskDetail (the task window's task: the
+                          way down into subtasks, every field edit, notes
+                          saved once typing pauses), ReminderScheduler
+                          (IReminderCenter, ReminderToast). Its views:
+                          BoardView (columns and cards, kept by id from one
+                          reload to the next), TaskDetailWindow (one window
+                          per task), Fields (EntryBox, StoredBox),
+                          ToastCenter (Windows' scheduled notifications)
     Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
                           (shared view helpers, LandmarkPeer), Prompts,
-                          E2eSeed
+                          E2eSeed, LinkRegistration (the link scheme, the
+                          app's identity, WindowsIntegration: what the app
+                          writes in the registry for itself at start)
   Heracles.Tests/         xunit tests: the crossing into the core
                           (BindingTests) and every class with logic
   Generated/, runtimes/   produced by the core build, not in git
@@ -145,9 +174,11 @@ app/
 tools/build.ps1           targets core, app, test, run, package, clean
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           and synthetic input), adapted from Toolbox;
-                          ui-check (helpers), check-shell and check-editor
-                          (the scripted checks of the window and of writing
-                          in a note), look-editor (pictures, light and dark)
+                          ui-check (helpers), check-shell, check-editor and
+                          check-boards (the scripted checks of the window,
+                          of writing in a note, and of a board and a task),
+                          look-editor and look-boards (pictures, light and
+                          dark)
 tools/                    (to come) publish.ps1
 docs/                     the design, the plans, the Mac's rewrite notes
 VERSION                   marketing version; build number = commit count
@@ -239,21 +270,30 @@ tools\e2e\launch.ps1 -DataDir <path>  # another library folder (to see what the 
 tools\e2e\launch.ps1 --e2e-seed       # ...with a few notes of every kind in it
 tools\e2e\launch.ps1 -Again --new-window   # a second copy while one runs: it hands over
 tools\e2e\capture.ps1                 # PNG of every Heracles window -> build\e2e\shots
-tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, focus, click, clickat, drag, keys, text
+tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, focus, scroll, click, clickat, drag, keys, text
 tools\e2e\check-shell.ps1             # the scripted check of the window: 30 checks, exit code = failures
 tools\e2e\check-editor.ps1            # the scripted check of writing in a note: 15 checks
+tools\e2e\check-boards.ps1            # the scripted check of a board and a task: 39 checks
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
+tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
 tools\e2e\launch.ps1 --e2e-seed --theme-light   # the app in light (or --theme-dark) whatever Windows is set to
 ```
 
-**Run `tools\e2e\check-shell.ps1` after any change to the window, and
+**Run `tools\e2e\check-shell.ps1` after any change to the window,
 `tools\e2e\check-editor.ps1` after any change to the editor or to how a
-note is shown or saved.** The second opens a note, writes in a block by
-automation ("set value"), uses the Format and Edit menus, ticks a task,
-watches a second pane follow, restarts the app to see the words kept, and
-tries to change a note in the trash.
+note is shown or saved, and `tools\e2e\check-boards.ps1` after any change
+to a board, a task or reminders.** The second opens a note, writes in a
+block by automation ("set value"), uses the Format and Edit menus, ticks a
+task, watches a second pane follow, restarts the app to see the words kept,
+and tries to change a note in the trash. The third adds, renames, moves and
+deletes a column, adds and ticks cards, opens a card as a task and gives it
+a title, a priority, a deadline, a label, a place, a reminder, a subtask
+and a comment, goes down into the subtask and back, makes it a card,
+watches a second pane follow, deletes a task from its window, restarts, and
+tries to change a list in the trash.
 
-**Then look.** `tools\e2e\look-editor.ps1` takes six pictures. Twice in one
+**Then look.** `tools\e2e\look-editor.ps1` takes six pictures, and
+`look-boards.ps1` ten (the board, a task, and the foot of the task). Twice in one
 day a picture showed what 436 passing tests could not: emoji drawn as white
 blobs, and the block being typed in black on a dark page. Colour is in no
 automation tree.
@@ -269,7 +309,8 @@ New checks use the helpers in `tools\e2e\ui-check.ps1` (`Test-Ui`,
 
 App arguments: a `heracles://` link, `--new-window`, `--e2e-seed` (a
 testing aid that does nothing unless `HERACLES_DATA_DIR` is set and the
-library is empty; among its notes is "Every kind of block"), and
+library is empty; among its notes are "Every kind of block" and the todo
+list "Packing", a board with cards of every sort), and
 `--theme-light` or `--theme-dark` (a testing aid: the theme, whatever
 Windows is set to).
 
@@ -293,7 +334,10 @@ looking at (one showed Quick Open white on white in dark mode).
   `instance: handed over to the running app`; `seed: created <n> notes`;
   `library: opened, <n> notes` or `library: could not be opened: <reason>`;
   `window: opened (<n> open)`, `window: closed (<n> open)`;
-  `instance: second launch: <args>`; `error shown: <text>`; `exit`.
+  `instance: second launch: <args>`; `error shown: <text>`; `exit`. On the
+  real library only (never on a fixture): `windows: links and reminders
+  registered`, and `reminders: <n> scheduled, <m> taken back` when a sync
+  changed anything.
 - Automation ids. Sidebar: `Sidebar` (the list), rows `note:<id>` (in the
   tree), `favorite:<id>`, `archived:<id>`, `trashed:<id>`, headers
   `notebook:<id>`, `section:favorites|archive|trash`, `toggle:<id>`,
@@ -301,8 +345,8 @@ looking at (one showed Quick Open white on white in dark mode).
   `Tab:<leafId>:<noteId>`, `TabClose:<leafId>:<noteId>`,
   `EmptyPane:<leafId>`, `Divider:<splitId>:<n>`. A note: `NoteTitle:<leafId>`,
   `NoteIcon:<leafId>`, `NoteText:<leafId>` (the editor's page, a Document
-  whose name is the note's words; for a todo list, the line that says its
-  board is to come). In a note: `Block:<blockId>` for each block with text
+  whose name is the note's words; a todo list has a board in its place).
+  In a note: `Block:<blockId>` for each block with text
   (an Edit: its name and value are its words, **its value can be set**, its
   item status is its kind: `paragraph`, `heading 2`, `bullet`, `todo`,
   `todo done`, `code rust`; `focus` puts the caret at its end),
@@ -316,10 +360,42 @@ looking at (one showed Quick Open white on white in dark mode).
   `ErrorOk`. `StartupError` shows only when the library did not open. Menu
   items go by name (`ui.ps1 expand -Name View`, then `invoke -Name 'Split
   Right'`).
+- Automation ids of a board: `Board:<leafId>`, `Column:<columnId>` (named
+  by the column; its item status is `2 cards`), `ColumnName:<columnId>`
+  (a text box: the name is changed where it is), `ColumnMenu:<columnId>`
+  and, once that is invoked, `ColumnLeft:`, `ColumnRight:` and
+  `ColumnDelete:<columnId>`; `NewColumn:<leafId>`, `NewCard:<columnId>`;
+  `Card:<taskId>` (a button named by the card: `invoke` opens the task; its
+  item status is the card in words, `done, P1, due Nov 26, 1/2 subtasks,
+  camping`), `CardDone:<taskId>`. A card's id is the same in every pane.
+- Of the task window: `TaskDetail` (its content; look `-Within` it),
+  `TaskFields` (the part that scrolls), `TaskTitle`, `TaskDone`,
+  `TaskNotes`, `TaskPriority:<1 to 4>` (item status `chosen`),
+  `TaskDueSet`, `TaskDue`, `TaskDueClear` and the same three for
+  `Deadline`, `TaskLocation`, `TaskMakeCard` and then `MakeCard:<columnId>`,
+  `TaskNewLabel`, `Label:<text>`, `LabelRemove:<text>`, `TaskReminderDay`,
+  `TaskReminderTime`, `TaskAddReminder`, `TaskReminderProblem`,
+  `Reminder:<stored>`, `ReminderRemove:<stored>`, `TaskNewSubtask`,
+  `Subtask:<taskId>` (`invoke` opens it), `SubtaskDone:`, `SubtaskRemove:`,
+  `TaskNewComment`, `Comment:<commentId>`, `CommentEdit:`, `CommentDelete:`,
+  `TaskPath` (the tasks above this one), `TaskBack`, `TaskDelete`,
+  `TaskClose`.
+- **A box that takes something new** (`NewColumn:`, `NewCard:`,
+  `TaskNewLabel`, `TaskNewSubtask`, `TaskNewComment`) hands it over on
+  Enter, or by the button `Add:<the box's id>` that appears once the box
+  holds text. A check sets the value and invokes that button
+  (`Add-UiEntry` in `check-boards.ps1`). **A box that holds something
+  stored** (`TaskTitle`, `TaskLocation`, `ColumnName:`, `NoteTitle:`) keeps
+  it on Enter or when the keyboard leaves it: a check sets the value and
+  then focuses something else (`Set-UiStored`).
+- `ui.ps1 find` prints what a text box holds as `value='...'` at the end
+  of its line (`Get-UiValue`), and an item status as `status='...'`
+  (`Get-UiStatus`).
 - A hidden element is still in the tree, marked `[offscreen]`; so is a row
   scrolled out of view. `Find-Ui` asks whether something exists,
   `Find-UiShown` whether it can be seen.
-- `invoke`, `setvalue`, `select`, `expand` touch neither mouse nor keyboard.
+- `invoke`, `setvalue`, `select`, `expand`, `scroll` touch neither mouse nor
+  keyboard. (`setvalue` does move the keyboard focus into the box.)
   `click`, `drag`, `keys`, `text` are real input on the owner's desktop.
 - `ui.ps1 find` throws when the element is not there, which ends a chain of
   commands on one line. Put a check that is expected to find nothing last,
@@ -398,9 +474,14 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   click on the highlighted row therefore did nothing in Quick Open. Quick
   Open keeps its own highlight and treats any selection as a choice; the
   sidebar handles a click on the selected row by hand.
-- **A value set through UI Automation does not move the keyboard**, so a
-  title set that way never lost focus and was never committed. The title
-  box commits at once when it is changed without having the keyboard.
+- **A value set through UI Automation puts the keyboard in the box, and
+  leaves it there.** (These notes once said the opposite. Seen 2026-11-23:
+  after `setvalue` the box is the focused element, and it already was when
+  its text changed.) So nothing set that way is ever "committed" by the
+  keyboard leaving, and a rule of the form "taken at once when changed
+  without the keyboard" never fires. A box for something new has a button
+  to hand it over; a box for something stored is kept when a check moves
+  the focus on.
 - A list row under the Fluent theme is about 44 px high by default.
   `Ui.Row` makes the rows this app uses.
 - `Emoji.Wpf` clashes with anything of ours named `Emoji`: write
@@ -414,6 +495,14 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   an emoji, and failed for a reason that was not in the code. Write such
   files with the editor tools, and build a string that must contain a
   backslash from its character code (`(char)92`).
+- The same goes for a replacement made by `perl` or `sed` from the shell:
+  `@"Software\Classes"` arrived as `SoftwareClasses`, in the line that
+  opens the registry key the app registers itself under. It compiled. It
+  was seen by reading the line back, before it ever ran. **Read back any
+  line with a backslash in it that a shell command wrote**, and give such
+  a string a test (`LinkRegistration.ClassesKey` has one). A `$(...)` in a
+  double-quoted shell string is run by the shell, too: that emptied three
+  lines of `ui.ps1` once.
 - **A `\u` escape typed into a file through the session's own editing
   tools arrives as the character itself**, not as the six characters. Most
   of the time that is harmless (an em dash is an em dash). U+2028 and
@@ -511,16 +600,25 @@ harness; "Not verified" below says what the checks could not reach.
       and dropped pictures are stored and shown, tested; a picture on the
       web is fetched when its block is shown, written and never run; no
       picture has been looked at in the window)
-- [ ] Kanban boards with drag between columns
-- [ ] Task detail: notes, priority, dates, location, labels, reminders,
+- [x] Kanban boards: columns added, renamed, moved and deleted, cards added,
+      ticked, opened and deleted (**dragging a card is written and has
+      never been done**: see "Not verified")
+- [x] Task detail: notes, priority, dates, location, labels, reminders,
       nested subtasks, comments
 - [ ] Reminders delivered by Windows, whether or not the app is running
+      (built and tested up to Windows' own list: a reminder handed over
+      under a test identity was listed there and taken back. **The app
+      itself has never registered or scheduled anything**, because it has
+      only ever run on fixtures; no reminder of its own has been seen to
+      arrive, and none has been clicked)
 - [ ] Import of Markdown and HTML files; export as Markdown
 - [ ] The Electron library imported on first start, with a summary
 - [x] Quick Open, the icon picker, the menu bar (with Edit and Format)
 - [ ] `heracles://note/<id>` links, with `#block=<id>` (parsed, followed and
       handed over between copies, and the editor scrolls to the block and
-      marks it; not yet registered with Windows)
+      marks it; the scheme is registered with Windows at start, which is
+      tested against a registry key of the test's own and has never run
+      against the real one)
 - [x] Nothing lost on quit: closing a tab, a pane or a window, and
       quitting, save every editor first
 - [ ] Packages for ARM64 and x64, and a release script
@@ -812,7 +910,32 @@ swaps in the text box and puts the caret where the click was.
   with that link. A click on the banner itself was not made: UI Automation
   could not find the banner, and a real click on the owner's desktop was
   not taken. The owner should click one by hand when reminders are built.
+- **The app making itself known to Windows.** Reminders are built
+  (2026-11-23), and every part is tested: the plan, the scheduler against
+  a made-up list, the toast's XML, the registry keys under a key of the
+  test's own, and `ToastCenter` against Windows' real list under a test
+  identity (opt-in: `HERACLES_TEST_TOASTS=1`, run once, passed). What has
+  never run is the app doing it for itself, since that happens only on the
+  real library and the app has only ever been started on fixtures: the
+  dozen lines of `App.RegisterWithWindows`, the scheme key under the real
+  `HKCU\Software\Classes`, a toast under the identity
+  `com.heracles.notes.native`, one arriving, and one being clicked. **The
+  first start on the real library is the first time any of it runs.** A
+  failure there is caught and logged (`windows: … could not be
+  registered`), and the app goes on without reminders. To see it work:
+  start the app, give a task a reminder two minutes ahead, close the app,
+  wait, and click the banner.
 - Reminders with Do Not Disturb on, and on Windows 10.
+- **Dragging a card**, within a column and to another. What a drop decides
+  is tested (`Board.Drop`); the handlers that start a drag and take a drop
+  (`BoardCardView`, `BoardColumnView`) are the pattern the tabs use and
+  have never run.
+- **Everything in a board and a task window that needs a real mouse or
+  keyboard**: typing in any of its boxes, Enter in them, Esc to close the
+  task window, the calendars (a date was only ever set by the "Set a
+  date" button, which chooses today), the context menus on a card, a
+  column's header and a comment, editing a comment (its prompt), and
+  tabbing through the task window.
 - Typing through a real input method (composition, candidate windows), and
   real key presses. The text-input spike sent finished text to the box
   through `TextCompositionManager`, which a script can do; an input method
@@ -870,6 +993,14 @@ Found and not yet fixed. Each is small; none loses data.
   in the Format menu, except Duplicate, Delete and Copy Link to Block.
 - A numbered list begun by typing `+1. ` is not a list here and is on the
   Mac (see "Current state", stage 3).
+- Emoji in a card's title, a label or a comment are drawn in one colour,
+  as they are in the sidebar's titles and in tabs.
+- What is typed in a box for something new (a card, a label, a comment)
+  and not handed over is dropped when the board or the task window goes.
+  The Mac does the same.
+- A task window is not reopened when the app starts again.
+- A reminder can be set for a time already past. It is kept on the task and
+  never scheduled. (The Mac allows the same.)
 - The title and icon stand over the editor's column by fixed margins, so
   they sit a few pixels off it when the scroll bar shows.
 
@@ -884,34 +1015,35 @@ stage 3 were pushed on 2026-11-23, on the owner's word.** What is committed
 after that stays local until he says push: `git log origin/main..HEAD`
 lists it.
 
-**Where things stand: stages 0 to 4 of the design's seven are done. The
-app can be browsed, and a note can be written in it.** One process per
-library, any number of windows, a sidebar, panes and tabs, Quick Open, and
-a native block editor with the Mac editor's behaviour: every kind of block,
-Markdown as it is typed, the slash menu, marks and links, the editor's own
-undo, copy and paste, pictures, and saving that loses nothing on close or
-quit. From a clean build at the end of stage 4: no warnings, 203 Rust tests, 438 .NET tests (537 now, with stage 5's first task), and
-45 scripted checks of the real window (`check-shell.ps1` 30,
-`check-editor.ps1` 15).
+**Where things stand: stages 0 to 4 of the design's seven are done, and
+stage 5 is built and waits only for its last check from a clean build.
+The app can be browsed, a note can be written in it, and a todo list is a
+board.** One process per library, any number of windows, a sidebar, panes
+and tabs, Quick Open; a native block editor with the Mac editor's
+behaviour (every kind of block, Markdown as it is typed, the slash menu,
+marks and links, the editor's own undo, copy and paste, pictures, and
+saving that loses nothing on close or quit); boards with columns and
+cards, a window for each task with everything the Mac's task has, and
+reminders handed to Windows. As of stage 5's second task: no warnings, 203
+Rust tests, 555 .NET tests and one skipped on purpose, and 84 scripted
+checks of the real window (`check-shell.ps1` 30, `check-editor.ps1` 15,
+`check-boards.ps1` 39).
 
-**What that does not say** is under "Not verified", and the first entry
-matters: nobody has yet typed, clicked or dragged in the editor with a real
-keyboard and mouse. The tests reach the code behind every key and every
+**What that does not say** is under "Not verified", and two entries
+matter. Nobody has yet typed, clicked or dragged in the app with a real
+keyboard and mouse: the tests reach the code behind every key and every
 mouse gesture, with real text boxes, but not the last inch between Windows'
-input and that code.
+input and that code. And the app has never yet made itself known to
+Windows (its link scheme, its reminders), because it does that only on the
+real library and has only ever been started on fixtures: the first start
+on the real library is the first time that runs.
 
 **In hand: stage 5**, boards, task details and reminders. Plan:
 `docs/superpowers/plans/2026-11-23-windows-stage-5-boards-and-reminders.md`,
-three tasks. **Task 1 is done**: everything a board and a task window
-decide, with no view in it (`Boards/`: `TaskSupport.cs`, `Board.cs`,
-`TaskDetail.cs`, `ReminderScheduler.cs`; `Model/AppModel.Boards.cs`;
-`Support/LinkRegistration.cs`), and 99 tests for it against a real core.
-Nothing in the app uses it yet: a todo list still says "Boards arrive in a
-later version." Task 2 is the views (`BoardView`, the task window), the
-real Windows notifications behind `IReminderCenter`, and a scripted check.
-Then stage 6 (import and export of files, the Electron library imported on
-first start), and stage 7 (packages, a release script, and 0.2.0 when the
-owner asks).
+three tasks. Tasks 1 and 2 are done; task 3 is the check from a clean
+build. Then stage 6 (import and export of files, the Electron library
+imported on first start, what is left of the menus), and stage 7
+(packages, a release script, and 0.2.0 when the owner asks).
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.
@@ -1123,3 +1255,45 @@ keyboard or touch the clipboard.
   sidebar now draws its rows again only when they would come out different
   (`SidebarRows.ShowTheSame`), and stays scrolled to where it was when it
   does.
+
+**Stage 5 (boards, task details and reminders)**, built 2026-11-23. Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-5-boards-and-reminders.md`.
+
+- Done (Task 1): what a board and a task window decide, in classes with no
+  view in them, against a real core. `TaskDates` and `ReminderPlan` are the
+  Mac's with its seven tests; `Board`, `TaskDetail`, `ReminderScheduler`
+  (behind `IReminderCenter`), and the registry keys (written under a key
+  that is passed in) are new here. Six rules were broken on purpose, one at
+  a time, and each was caught.
+- Done (Task 2): the views, and Windows. `BoardView` and `TaskDetailWindow`
+  draw `Board` and `TaskDetail` and call them; views are kept by column, by
+  card and by subtask from one reload to the next, so a box being typed in
+  keeps the keyboard when the board changes under it. `ToastCenter` is
+  Windows' own list of scheduled notifications; `App.RegisterWithWindows`
+  hands the reminders over at start, on the real library only.
+  `check-boards.ps1` passes its 39 checks, and the pictures were looked at
+  in dark and in light.
+- For whoever changes it:
+  - **A board redraws only when the change feed said it changed**
+    (`AppModel.BoardVersion`), and a task window the same. Each edit in
+    `TaskDetail` also reads the task again itself, so the tests need no
+    view.
+  - Notes in a task are held by `TaskDetail` while they are typed
+    (`TypeNotes`), saved 600 ms after typing pauses and before the window
+    moves to another task or closes. `Notes` is what is being typed, or
+    else what is stored: drawing it never replaces typing.
+  - A subtask made a card becomes the task the window starts from: there is
+    no way back up to a task it is no longer under. (The Mac leaves the old
+    breadcrumb.)
+  - A reminder's identifier is the Mac's
+    (`heracles.reminder.<taskId>.<remindAt>`), which is longer than the tag
+    Windows knows a toast by. It rides in the toast's own link
+    (`ReminderToast`), and is read back out of the toast's content. So is
+    the title, which is how a renamed task's reminder is found and made
+    again.
+  - The scheduler asks Windows nothing while the reminders stand as they
+    did when it last handed them all over. The library changes at every
+    pause in typing; a reminder almost never does.
+  - Tests write their log lines to `%TEMP%\heracles-tests-log`, not into
+    the log of the app the owner runs (a module initialiser in
+    `TestLibrary.cs`). Before this stage they wrote into the real one.

@@ -18,23 +18,32 @@ internal sealed class FakeReminderCenter : IReminderCenter
     /// <summary>Set to make the next call fail, as Windows can.</summary>
     public Exception? Failure { get; set; }
 
-    public IReadOnlyList<string> Scheduled()
+    /// <summary>A reminder Windows will not take, by a word in its title.</summary>
+    public string? Refused { get; set; }
+
+    /// <summary>What each notification held says, where it says anything.</summary>
+    public Dictionary<string, string> Says { get; } = [];
+
+    public IReadOnlyList<ScheduledReminder> Scheduled()
     {
         Asked++;
         if (Failure is { } failure) throw failure;
-        return Held.ToList();
+        return Held.Select(identifier => new ScheduledReminder(identifier, Says.GetValueOrDefault(identifier))).ToList();
     }
 
     public void Remove(IReadOnlyList<string> identifiers)
     {
         Removed.AddRange(identifiers);
         Held.RemoveAll(identifiers.Contains);
+        foreach (var identifier in identifiers) Says.Remove(identifier);
     }
 
     public void Add(PlannedReminder reminder)
     {
+        if (Refused is { } word && reminder.Title.Contains(word)) throw new ArgumentException("The delivery time is not in the future.");
         Added.Add(reminder);
         Held.Add(reminder.Identifier);
+        Says[reminder.Identifier] = reminder.Title;
     }
 }
 
@@ -158,6 +167,51 @@ public sealed class ReminderSchedulerTests : BoardFixture
     }
 
     [Fact]
+    public void WindowsIsNotAskedAgainWhileTheRemindersAreAsTheyWere()
+    {
+        var call = TaskWithReminders("Call", "2026-11-30T10:00:00.000Z");
+        var scheduler = Scheduler();
+        scheduler.Sync();
+        Assert.Equal(1, center.Asked);
+
+        // Typing in a note, renaming a card: the library changes all day, and
+        // none of it is news about reminders.
+        AddCard("Up Next", "Write");
+        Model.RenameTask(call.Id, "Call");
+        scheduler.Sync();
+        scheduler.Sync();
+        Assert.Equal(1, center.Asked);
+
+        // A new title is news: the notification must say it.
+        Model.RenameTask(call.Id, "Call the ferry office");
+        scheduler.Sync();
+        Assert.Equal(2, center.Asked);
+    }
+
+    [Fact]
+    public void ARenamedTaskIsRemindedOfByItsNewName()
+    {
+        var call = TaskWithReminders("Call", "2026-11-30T10:00:00.000Z");
+        var scheduler = Scheduler();
+        scheduler.Sync();
+        Model.RenameTask(call.Id, "Call the ferry office");
+        scheduler.Sync();
+        Assert.Equal("Call the ferry office", center.Added.Last().Title);
+        Assert.Single(center.Held);
+    }
+
+    [Fact]
+    public void OneReminderWindowsWillNotTakeDoesNotStopTheOthers()
+    {
+        TaskWithReminders("Call", "2026-11-30T10:00:00.000Z");
+        TaskWithReminders("Refuse me", "2026-11-30T10:30:00.000Z");
+        TaskWithReminders("Write", "2026-11-30T11:00:00.000Z");
+        center.Refused = "Refuse";
+        Scheduler().Sync();
+        Assert.Equal(["Call", "Write"], center.Added.Select(reminder => reminder.Title));
+    }
+
+    [Fact]
     public void WhenWindowsRefusesNothingIsLostAndTheNextSyncTriesAgain()
     {
         TaskWithReminders("Call", "2026-11-30T10:00:00.000Z");
@@ -237,6 +291,14 @@ public sealed class WindowsRegistrationTests : IDisposable
     }
 
     [Fact]
+    public void TheAppRegistersAmongTheUsersOwnClasses()
+    {
+        // Spelt out by character: a backslash lost on the way into the source
+        // would put the keys where Windows never looks.
+        Assert.Equal(["Software", "Classes"], LinkRegistration.ClassesKey.Split((char)92));
+    }
+
+    [Fact]
     public void TheIdentityIsTheNativeAppsOwn()
     {
         Assert.Equal("com.heracles.notes.native", AppIdentity.Id);
@@ -260,5 +322,91 @@ public sealed class AppLinkFromAReminderTests
     {
         Assert.Equal(new AppLink("abc-123", null), AppLink.Parse("heracles://note/abc-123?reminder=heracles.reminder.t1"));
         Assert.Equal(new AppLink("abc-123", "b-9"), AppLink.Parse("heracles://note/abc-123?reminder=x#block=b-9"));
+    }
+}
+
+/// <summary>What the app does at start to be known to Windows, with a registry key and a notification list of the test's own.</summary>
+public sealed class WindowsIntegrationTests : BoardFixture
+{
+    private readonly string path = string.Join((char)92, "Software", "HeraclesTests", Guid.NewGuid().ToString("N"));
+    private readonly FakeReminderCenter center = new();
+    private readonly List<(Action Work, TimeSpan After)> waiting = [];
+
+    private void RunWaiting()
+    {
+        var due = waiting.ToList();
+        waiting.Clear();
+        foreach (var (work, _) in due) work();
+    }
+
+    private void InAKeyOfItsOwn(Action<RegistryKey> work)
+    {
+        var parent = string.Join((char)92, "Software", "HeraclesTests");
+        try
+        {
+            using var classes = Registry.CurrentUser.CreateSubKey(path);
+            work(classes);
+        }
+        finally
+        {
+            Registry.CurrentUser.DeleteSubKeyTree(path, throwOnMissingSubKey: false);
+            using var shared = Registry.CurrentUser.OpenSubKey(parent, writable: false);
+            if (shared is { SubKeyCount: 0, ValueCount: 0 }) Registry.CurrentUser.DeleteSubKey(parent, throwOnMissingSubKey: false);
+        }
+    }
+
+    [Fact]
+    public void TheAppMakesItselfKnownAndHandsItsRemindersOver()
+    {
+        var call = AddCard("Up Next", "Call");
+        Model.UpdateTask(call.Id, new TaskPatch(Reminders: [TaskDates.Format(DateTimeOffset.UtcNow.AddDays(2))]));
+
+        InAKeyOfItsOwn(classes =>
+        {
+            var exe = string.Join((char)92, "C:", "Apps", "Heracles.exe");
+            var scheduler = WindowsIntegration.Register(classes, exe, Model, () => center, (work, after) => waiting.Add((work, after)));
+
+            Assert.NotNull(scheduler);
+            Assert.True(AppIdentity.IsRegistered(classes));
+            Assert.True(LinkRegistration.IsRegistered(classes, exe));
+
+            // The reminders already in the library are handed over soon after start.
+            RunWaiting();
+            Assert.Equal(["Call"], center.Added.Select(reminder => reminder.Title));
+
+            // And from then on, whenever the library changes.
+            var write = AddCard("Up Next", "Write");
+            Model.UpdateTask(write.Id, new TaskPatch(Reminders: [TaskDates.Format(DateTimeOffset.UtcNow.AddDays(3))]));
+            RunWaiting();
+            Assert.Equal(["Call", "Write"], center.Added.Select(reminder => reminder.Title));
+        });
+    }
+
+    [Fact]
+    public void WithNoPathToItselfTheAppStillHasItsReminders()
+    {
+        InAKeyOfItsOwn(classes =>
+        {
+            var scheduler = WindowsIntegration.Register(classes, null, Model, () => center, (work, after) => waiting.Add((work, after)));
+            Assert.NotNull(scheduler);
+            Assert.True(AppIdentity.IsRegistered(classes));
+            Assert.Null(classes.OpenSubKey("heracles"));
+        });
+    }
+
+    [Fact]
+    public void WhenWindowsHasNoNotificationsTheLinksAreStillRegistered()
+    {
+        InAKeyOfItsOwn(classes =>
+        {
+            var exe = string.Join((char)92, "C:", "Apps", "Heracles.exe");
+            var scheduler = WindowsIntegration.Register(
+                classes, exe, Model, () => throw new System.Runtime.InteropServices.COMException("The notification platform is unavailable."));
+            Assert.Null(scheduler);
+            Assert.True(LinkRegistration.IsRegistered(classes, exe));
+            // Nothing follows the library, and nothing fails when it changes.
+            AddCard("Up Next", "Call");
+            Assert.Null(Model.LastError);
+        });
     }
 }

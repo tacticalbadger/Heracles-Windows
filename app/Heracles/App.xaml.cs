@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
+using Heracles.Boards;
 using Heracles.Model;
+using Microsoft.Win32;
 
 namespace Heracles;
 
@@ -10,6 +12,7 @@ public partial class App : Application
     private readonly List<MainWindow> windows = [];
     private SingleInstance? instance;
     private MainWindow? frontmost;
+    private ReminderScheduler? reminders;
     private bool exiting;
 
     /// <summary>The library, once it is open. Every window reads from this one store.</summary>
@@ -84,12 +87,41 @@ public partial class App : Application
 
         Model.PendingLinkChanged += TakePendingLink;
         Model.ErrorChanged += ShowError;
+        RegisterWithWindows(Model);
 
         var saved = WindowStates.Load(AppPaths.WindowsPath);
         if (saved.Count == 0) OpenWindow();
         foreach (var window in saved) OpenWindow(window);
 
         if (e.Args.Select(AppLink.Parse).FirstOrDefault(link => link is not null) is { } link) Model.PendingLink = link;
+    }
+
+    /// <summary>
+    /// Tell Windows who the app is, so that a <c>heracles://</c> link starts this
+    /// copy and reminders are delivered under its name, and hand the reminders
+    /// over. All of it is the current user's own (under <c>HKCU</c>), and needs no
+    /// administrator.
+    ///
+    /// A run on a test library does none of it: it must not take the user's
+    /// links for itself, nor put a test's reminders on the screen.
+    /// </summary>
+    private void RegisterWithWindows(AppModel model)
+    {
+        if (AppPaths.IsTestLibrary) return;
+        // Windows can refuse any of this (a locked-down registry, notifications
+        // switched off by policy). The app is no worse for it than before it
+        // had reminders, so it says so in the log and goes on.
+        try
+        {
+            AppIdentity.Claim();
+            using var classes = Registry.CurrentUser.CreateSubKey(LinkRegistration.ClassesKey);
+            reminders = WindowsIntegration.Register(classes, Environment.ProcessPath, model, () => new ToastCenter(AppIdentity.Id));
+            Log.Info(reminders is null ? "windows: links registered, reminders not" : "windows: links and reminders registered");
+        }
+        catch (Exception error) when (error is not (OutOfMemoryException or StackOverflowException))
+        {
+            Log.Error("windows: links and reminders could not be registered", error);
+        }
     }
 
     /// <summary>Open a window on the library, as it was saved or as new.</summary>

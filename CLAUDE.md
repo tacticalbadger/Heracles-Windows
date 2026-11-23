@@ -653,6 +653,63 @@ screen corner before and during. Take it with the thread made DPI-aware
 that the picture is of the middle of the screen and shows nothing. UI
 Automation did not find the banner at all, by window or by its text.
 
+### Views with no window
+
+Run 2026-11-23, before the editor's views were written: a throwaway
+program with real `RichTextBox`es and `TextBlock`s (.NET 10, Segoe UI
+15 px, a line height of 24).
+
+**A window off the screen is not a window nobody notices.** Shown at
+-20000 with `ShowActivated` off, it does not come forward. But the first
+`Focus()` on anything in it makes it the foreground window: the owner's
+keystrokes would go to a test. So no test shows a window.
+
+**Views work with no window at all.** A tree of elements measured and
+arranged by hand (`Measure`, `Arrange`, `UpdateLayout` on its root) lays
+out its text boxes fully:
+
+- `Focus()` returns false and nothing moves, so the editor keeps its own
+  record of which text box has the caret (the Mac editor does the same when
+  it has no window).
+- Text sent with `TextCompositionManager.StartComposition` is typed into the
+  box, **after the dispatcher has run its Background work**: a
+  `RichTextBox` queues typing. A hundred keys, each followed by that pump,
+  took 95 ms (2 s in a shown window, which renders between keys).
+- `EditingCommands` (Backspace, the caret moves, select by word) work.
+- `TextPointer.GetLineStartPosition(-1, out n)` gives `n == 0` on the first
+  line and `GetLineStartPosition(1, out n)` gives `n == 0` on the last;
+  `GetCharacterRect` and `GetPositionFromPoint` answer.
+
+**A text box and static text measure alike when their padding matches.**
+
+- A `RichTextBox`'s document keeps a `PagePadding` of 5 at each side.
+  Setting it to nothing is undone (set on the document before or after it is
+  given to the box, or in `Loaded`); only setting it in `OnApplyTemplate`
+  holds. Left at 5, with a `TextBlock` given `Padding` 5 at each side, the
+  same paragraph was the same height in both, in 45 of 45 cases: five
+  widths from 180 to 720, text that wraps, marks, line breaks, emoji,
+  Chinese and Japanese, and one long word. With the paddings unequal, 5 of
+  45 differed by a line.
+- What that needs: a template for the box that is only its content host
+  (a `Border` named `PART_ContentHost`), no border, no padding, no minimum
+  height; the paragraph's margin nothing; and the same `LineHeight` with
+  `LineStackingStrategy.BlockLineHeight` on both.
+
+**What things cost** (200 of each, made and laid out, no window): a text
+box 2.5 ms; static text 0.34 ms; static text with two colour emoji 1.1 ms
+(an `EmojiInline` is about 0.4 ms). **The library's own `TextBlock` is
+4.5 ms each even with no emoji in it**, slower than a text box. So static
+text is a plain `TextBlock` whose runs are split by `EmojiData.MatchOne`,
+with an `EmojiInline` only where there is an emoji (`EmojiData.MatchStart`
+says cheaply whether a string can hold one).
+
+**Decided from this (Claude's call): one text box, where the caret is.**
+The first spike's "text boxes near the viewport" is narrowed to the block
+being typed in; every other block is static text. Static text costs a
+seventh, shows emoji in colour, and needs no rule about spelling. The cost
+is that the first click in a block lands on static text, so the editor
+swaps in the text box and puts the caret where the click was.
+
 ## Not verified
 
 - The x64 build has only run under emulation, on the ARM64 dev machine.
@@ -821,5 +878,11 @@ Reviewed by the session that wrote it; no one else has read it.
 - Nothing in the app uses the model yet: a note is still shown through
   `ReadOnlyDocument`.
 
-After stage 3: stage 4, the editor's views, which reads "Spike findings"
-above. Plans are in `docs/superpowers/plans/`.
+**Stage 4 (the editor's views) is planned and not begun.** Plan:
+`docs/superpowers/plans/2026-11-23-windows-stage-4-editor-views.md`, six
+tasks: the theme and the text box; block views on a page; typing, keys,
+undo, marks and the slash menu; block actions, the clipboard, pictures and
+the mouse; the editor in the app; verify. A fifth spike was run for it
+("Views with no window", above), and what it decided is in the plan: one
+text box, where the caret is; tests that never show a window, take the
+keyboard or touch the clipboard. **Next: Task 1.**

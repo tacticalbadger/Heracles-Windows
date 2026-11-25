@@ -54,7 +54,7 @@ if (-not $Arch) {
 }
 $Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 $Package = Join-Path $Root "build\release\Heracles-$Version-win-$Arch"
-if (-not (Test-Path (Join-Path $Package 'Heracles.exe'))) { throw "no package at $Package: this needs the package that was published" }
+if (-not (Test-Path (Join-Path $Package 'Heracles.exe'))) { throw "no package at ${Package}. This needs the package that was published" }
 
 $Work = Join-Path $Root 'build\update-published'
 $Fixture = Join-Path $Work 'fixture'
@@ -106,7 +106,7 @@ try {
     $published = Read-UpdateFeed -Path $fetched -Public $config.key
 }
 finally { Remove-Item -LiteralPath $fetched -Force -ErrorAction SilentlyContinue }
-if ($published.version -ne $Version) { throw "what is published is $($published.version), not $Version: there is nothing here to check it against" }
+if ($published.version -ne $Version) { throw "what is published is $($published.version), not ${Version}. There is nothing here to check it against" }
 $NewBuild = [int]$published.build
 if (-not $published.archives.PSObject.Properties[$Arch]) { throw "the published feed names no archive for $Arch" }
 Write-Host "published: $Version, build $NewBuild, signed with the update key"

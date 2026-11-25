@@ -949,6 +949,14 @@ rules, the Mica backdrop problem, and everything about the RDP control.
 - In a raw string with `$$`, two closing braces in a row end an
   interpolation, so JSON that ends `}}}` after one does not compile. Put
   spaces between them, or use `$$$`.
+- **A script that cannot be run yet can still be parsed.**
+  `check-published-update.ps1` is for after a release, so it was committed
+  unrun, with `"...at $Package: this needs..."` in it: PowerShell reads
+  `$Package:` as a variable on a drive, and the whole file is a parse
+  error. It was found by its first run, after the release it was for.
+  Before committing a script: `[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$errors)`
+  for every `.ps1` under `tools\`, and write `${name}:` where a colon
+  follows a variable in a string.
 - **`ui.ps1` and `capture.ps1` used to drive, and photograph, every process
   named `Heracles`**, whatever folder it ran from: with the owner's own
   copy open, a check would have read, clicked and moved things to the
@@ -1052,9 +1060,10 @@ harness; "Not verified" below says what the checks could not reach.
       the owner signed it (built with tests for every rule, and rehearsed
       whole by `check-update.ps1`: an old copy replaced itself with a new
       one and came back as it; an altered archive and an altered feed were
-      each refused. **Never yet from one published version to the next**,
-      which cannot be until a second release with a feed exists: see "Not
-      verified")
+      each refused. Once 0.3.0 was out, a copy with the real key took the
+      published update from GitHub and became it. **Never yet from one
+      published version to the next**, which cannot be until a second
+      release with a feed exists: see "Not verified")
 - [x] "The original app" for the Electron app, in the app, the core and
       the README, and the licence, as on the Mac
 
@@ -1431,15 +1440,20 @@ swaps in the text box and puts the caret where the click was.
   confirmed against a machine that has run the Electron build (Electron
   names it `heracles`; Windows file names ignore case): not done.
 - **An update from one published version to the next.** It cannot be tried
-  until there are two releases with a feed, and 0.3.0 is the first. What
-  stands in for it is the rehearsal (`check-update.ps1`, 31 checks, passed
-  on both packages): an old copy replaced by a new one through the app's
-  own windows and its own Exit, and the two refusals. In the rehearsal the
-  two versions differ only in the app's own assembly and the made-up
-  numbers, the key is one made for the run, and the feed comes from this
-  machine over plain HTTP. **The first real update is the one from 0.3.0
-  to whatever comes next.** If it fails, copies of 0.3.0 stay on 0.3.0
-  until their users put a newer one in by hand, as they did this one.
+  until there are two releases with a feed, and 0.3.0 is the first. Two
+  things stand in for it. The rehearsal (`check-update.ps1`, 31 checks,
+  passed on both packages): an old copy replaced by a new one through the
+  app's own windows and its own Exit, and the two refusals, with nothing
+  real in it. And, once 0.3.0 was out, `check-published-update.ps1` (11
+  checks, passed on both): a copy with the real key in it read the
+  published feed, took the published archive from GitHub over HTTPS and
+  became 0.3.0, file for file. **In that one only the old copy's version
+  was made up** (its own assembly compiled again as 0.0.9; the rest of it
+  was the 0.3.0 package). So what is left unproved is narrow: a copy that
+  really is an older release, with whatever else then differs between
+  the two. **The first real update is the one from 0.3.0 to whatever
+  comes next.** If it fails, copies of 0.3.0 stay on 0.3.0 until their
+  users put a newer one in by hand, as they did this one.
 - **Updates under a hand.** Nobody has clicked Check for Updates, read the
   window, or pressed Install and Restart. The rehearsal does all three by
   automation. Skip This Version, Remind Me Later and Cancel during a
@@ -1549,12 +1563,15 @@ As of 2026-11-25, on `main`. `main` on GitHub was replaced on 2026-11-22
 its history are no longer there. Any other clone of this repository must
 `git fetch origin` and `git reset --hard origin/main` before it is used,
 and must never push its old history. 0.2.0 and 0.2.1 were released on
-2026-11-23. **This commit is 0.3.0, pushed and released on the owner's
-word of 2026-11-25** ("this version needs feature parity and testing, with
-a new release pushed to git hub"); how the release went is written by the
-commit after this one, under "Since stage 7" at the end. What is committed
-after a push stays local until he says push: `git log origin/main..HEAD`
-lists it.
+2026-11-23. **The latest release is 0.3.0** (2026-11-25, on the owner's
+word: "this version needs feature parity and testing, with a new release
+pushed to git hub".
+https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.3.0,
+the tag `v0.3.0` at commit `01edb61`, build 50, with a disc image and an
+update archive for each processor, `update-feed.json` and `SHA256SUMS`).
+How the release went is under "Since stage 7" at the end. **All of `main`
+is pushed, this commit included.** What is committed after that stays
+local until he says push: `git log origin/main..HEAD` lists it.
 
 **What 0.3.0 is: the Mac app's last sixteen commits, brought across.** The
 Mac repository was read from `5dd0252`, which this app was built against,
@@ -1590,8 +1607,14 @@ updates, 6 of the icon on reminders, 1 of the hand-over), 116 scripted
 checks of the real window by automation (`check-shell.ps1` 32,
 `check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
 `check-legacy.ps1` 20), 19 of a packaged disc (`check-disc.ps1`), 31 of a
-whole update (`check-update.ps1`), and 23 by a real mouse and keyboard
-(`check-input.ps1`). Every rule an update rests on was broken on purpose
+whole update (`check-update.ps1`), 23 by a real mouse and keyboard
+(`check-input.ps1`), and, once it was out, 11 of the published update
+taken from GitHub (`check-published-update.ps1`). The checks were run
+against the packages that were released: the disc, the update and the
+published update on both, the window checks and real input on the ARM64
+one, and `check-shell.ps1` on the x64 one too (under emulation, as
+everything of x64 is here). Every rule an update rests on was broken on
+purpose
 once (ten of them: the feed's signature, the archive's checksum, files
 landing outside the folder, a feed from the command line, an older
 build offered, somebody's folder removed, the three guards on the copy
@@ -1602,8 +1625,10 @@ time a test failed.
 matter most are the ones 0.2 already had (nobody has used the app; it has
 never run on the real library) and one that is new: **no copy has yet
 updated itself from one published version to the next**, because 0.3.0 is
-the first that can. The rehearsal stands in for it. The first real update
-is the one to whatever is released after 0.3.0.
+the first that can. The rehearsal stands in for it, and so does a copy
+that took the published 0.3.0 from GitHub with only its own version made
+up. The first real update is the one to whatever is released after
+0.3.0.
 
 **What is left, and it is the owner's**:
 
@@ -2175,3 +2200,57 @@ does it. Reviewed by the session that wrote it; no one else has read it.
   update itself went through at the first try: found, fetched, checked,
   handed over on quit, installed in a second, and the app back as the new
   version.
+- **The push that was refused.** The work was committed as `bfc11f0` and
+  `486d89d` on top of `6132977`, and both packages were built from it
+  (build 49) and passed everything, real input included. Then `git push`
+  was refused: GitHub had `4946a75`, the licence, made on the Mac two days
+  earlier. Nothing was forced. The two commits were rebased onto it
+  (`b75f31b`, `01edb61`): `LICENSE` and the README's licence line taken as
+  that commit has them, the notes of both kept. No code differed from what
+  had been checked, but the commit count was now 50, so the packages of
+  build 49 were thrown away, never having gone anywhere, and everything
+  below was done again on build 50.
+- **The release** (2026-11-25, on the owner's word). From `01edb61`,
+  pushed first: 203 Rust tests and 763 .NET tests, no warnings. Both
+  packages (`Heracles-0.3.0-win-arm64.iso`, 176 MB, and `.zip`, 61 MB;
+  `Heracles-0.3.0-win-x64.iso`, 165 MB, and `.zip`, 66 MB), each image
+  and each archive read back by the package step, and the feed, signed
+  with the update key ("no feed is published yet: build 50 will be the
+  first with one"). Against those packages: `check-disc.ps1` on both (19
+  each); all five automation checks on the ARM64 package (116) and
+  `check-shell.ps1` on the x64 one (32); `check-update.ps1` on both (31
+  each, the x64 one under emulation, the ARM64 one in light with
+  pictures, which were looked at, as the dark ones had been); and
+  `check-input.ps1` on the ARM64 package (23, by a real mouse and
+  keyboard, with the owner told first, as it had been on build 49). The
+  dry run read right, and `tools\publish.ps1` published at its first run:
+  the tag `v0.3.0`, a draft, six files, published, and the feed read back
+  from `releases/latest/download/update-feed.json`, the same bytes as the
+  one that was built.
+- **Read back from GitHub with no credential**: `v0.3.0` at `01edb61`, not
+  a draft, not a pre-release, the latest release, and the digest GitHub
+  gives for each of the six files is the local file's.
+- **Then a copy took the published update** (`check-published-update.ps1`,
+  11 checks, on both packages; the x64 one under emulation). The package
+  with its own assembly compiled again as 0.0.9, build 1, and the real
+  feed address and the real update key in it as every copy has them: it
+  read the published feed, believed it, was offered 0.3.0 with the release
+  notes, fetched the archive from GitHub, found it to be the one the feed
+  describes, quit through its own Exit, and came back as 0.3.0, build 50,
+  file for file what was packaged. Asked again, it was offered nothing.
+  **Only the old copy's version was made up.** That script's own first run
+  was a parse error (see "Found on Windows"): it had been committed
+  unrun, since it could not run before there was a release.
+- Three of the publish script's new refusals were then seen, in dry runs
+  once the release was out: as things stood ("build 50 is not higher than
+  the published build 50"), with the feed moved away ("there is no
+  update-feed.json"), and with a feed signed by a key made for the
+  purpose ("is not signed with the update key", once for each package).
+  The feed was put back, the same bytes. Not seen: a package for one
+  processor only, a feed describing other archives, and the wrong
+  addresses.
+- Still untried in `tools\publish.ps1`: `-Replace`, `-Prerelease`, and
+  carrying on with a draft that a failed run left behind.
+- The packages on this machine are the released ones of 0.3.0, build 50,
+  under `build\release`. `tools\e2e\check-published-update.ps1` needs
+  them, and they go with the next clean build.

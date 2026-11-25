@@ -6,10 +6,16 @@ namespace Heracles.Support;
 /// on a copy. Such a run takes nothing of the user's for itself: not the link
 /// scheme, and no notifications.
 /// </param>
-internal sealed record AppLocations(string DataDirectory, string LogPath, bool IsTestLibrary);
+/// <param name="UpdatesDirectory">
+/// What the app keeps about updates: when it last looked, and what it has
+/// downloaded. It is about this copy on this PC, so it is beside the log
+/// and not in the library; a run on a test library keeps its own, inside
+/// that library's folder, and never touches the real app's.
+/// </param>
+internal sealed record AppLocations(string DataDirectory, string LogPath, bool IsTestLibrary, string UpdatesDirectory);
 
 /// <summary>
-/// Where the app keeps its files. The library folder is the one the Electron
+/// Where the app keeps its files. The library folder is the one the original
 /// app used, so its database is found beside the new one on first launch.
 /// Two environment variables point a run somewhere else: tests use them so
 /// that the real library is never touched.
@@ -27,10 +33,12 @@ internal static class AppPaths
         // A variable set to nothing is the same as one not set.
         string? Override(string name) => environment(name) is { Length: > 0 } value ? value : null;
 
+        var trial = Override(DataDirectoryVariable);
         return new AppLocations(
-            Override(DataDirectoryVariable) ?? Path.Combine(appData, "Heracles"),
+            trial ?? Path.Combine(appData, "Heracles"),
             Override(LogPathVariable) ?? Path.Combine(localAppData, "Heracles", "heracles.log"),
-            IsTestLibrary: Override(DataDirectoryVariable) is not null);
+            IsTestLibrary: trial is not null,
+            UpdatesDirectory: trial is not null ? Path.Combine(trial, "updates") : Path.Combine(localAppData, "Heracles", "updates"));
     }
 
     // Static fields are initialised in the order written: this one first, so
@@ -45,6 +53,8 @@ internal static class AppPaths
     public static string LogPath => Current.LogPath;
 
     public static bool IsTestLibrary => Current.IsTestLibrary;
+
+    public static string UpdatesDirectory => Current.UpdatesDirectory;
 
     /// <summary>The windows that were open, kept beside the library they show.</summary>
     public static string WindowsPath => Path.Combine(DataDirectory, "windows.json");

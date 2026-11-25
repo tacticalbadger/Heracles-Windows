@@ -99,6 +99,13 @@ try {
     }
     Test-Ui "disc: Heracles.exe is a program for $Arch" { (Get-PeArchitecture $exe) -eq $Arch }
     Test-Ui 'disc: the core is beside it, for the same processor' { (Get-PeArchitecture "$drive\Heracles\heracles_core.dll") -eq $Arch }
+    # Without these two a copy never updates itself, and nothing would say so.
+    Test-Ui 'disc: the app carries the address of its update feed, and the update key' {
+        $carried = [System.IO.File]::ReadAllText("$drive\Heracles\Heracles.update.json") | ConvertFrom-Json
+        $config = [System.IO.File]::ReadAllText((Join-Path $Root 'tools\update-config.json')) | ConvertFrom-Json
+        $config.key -and $carried.key -ceq $config.key -and $carried.feed -ceq $config.feed
+    }
+    Test-Ui 'disc: the picture of its icon is beside it, for its reminders' { (Get-Item "$drive\Heracles\Heracles.png").Length -gt 1000 }
 
     # --- 2. The app, started from the disc ---
     & (Join-Path $E2e 'launch.ps1') -Exe $exe -Wait 0 --e2e-seed 6>&1 | Out-Null
@@ -110,6 +117,9 @@ try {
         $log = Get-Content $LogFile -ErrorAction SilentlyContinue
         ($log -match 'seed: created \d+ notes') -and ($log -match 'library: opened, \d+ notes')
     }
+    # A copy on a library of a test's own must not look for the published
+    # app, even with the real feed and key beside it.
+    Test-Ui 'log: on a test library it does not look for updates' { (Get-Content $LogFile -ErrorAction SilentlyContinue) -match 'updates: off: .*HERACLES_DATA_DIR' }
     $trip = (Get-UiId -Name 'Trip' -Prefix 'note:' -Within 'Sidebar') -replace '^note:', ''
     Test-Ui 'app: the notes are in the sidebar' { $trip }
     if ($trip) { Select-Ui "note:$trip" }

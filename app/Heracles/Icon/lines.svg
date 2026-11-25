@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- The lines of text: one beside each box, and a paragraph below. -->
+  <g fill="#DFCBB3">
+    <rect x="408" y="386" width="328" height="44" rx="22"/>
+    <rect x="408" y="522" width="248" height="44" rx="22"/>
+    <rect x="288" y="656" width="448" height="44" rx="22"/>
+    <rect x="288" y="752" width="300" height="44" rx="22"/>
+  </g>
+</svg>

@@ -2,8 +2,8 @@
 
 ## `legacy.sqlite`
 
-A small library as the Electron app kept it (`heracles.sqlite`, with the
-schema its `electron/db.cjs` ended up with after all of its migrations),
+A small library as the original app kept it (`heracles.sqlite`, with the
+schema its database ended up with after all of its migrations),
 for the tests of the first-start import to bring across. It is the same
 shape as the libraries `core/tests/legacy_import.rs` builds for the core's
 own tests, and was written by a throwaway Rust test using those same

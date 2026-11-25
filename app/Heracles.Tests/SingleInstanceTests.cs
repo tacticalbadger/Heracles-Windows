@@ -67,6 +67,24 @@ public sealed class SingleInstanceTests
     }
 
     [Fact]
+    public void TheHolderCanBeReachedAsSoonAsItHoldsTheName()
+    {
+        // No waiting for the holder to get round to listening: by the time
+        // the name is held, a later copy finds somebody to hand over to. (It
+        // used to start listening a moment later, on a borrowed thread, and
+        // on a busy machine a later copy could give up before it had.)
+        for (var round = 0; round < 50; round++)
+        {
+            var name = UniqueName();
+            using var holder = SingleInstance.Claim(name, _ => { });
+
+            // Asked of Windows, which lists the pipes there are: no timing in it.
+            var pipes = Directory.GetFiles(@"\\.\pipe\").Select(Path.GetFileName);
+            Assert.True(pipes.Contains(SingleInstance.PipeName(name)), $"round {round}: nobody is listening yet");
+        }
+    }
+
+    [Fact]
     public async Task TheHolderKeepsListeningAfterOneLaunch()
     {
         var name = UniqueName();

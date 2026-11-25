@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using Heracles.Boards;
 using Heracles.Model;
+using Heracles.Updates;
 using Microsoft.Win32;
 
 namespace Heracles;
@@ -14,6 +15,8 @@ public partial class App : Application
     private MainWindow? frontmost;
     private ReminderScheduler? reminders;
     private bool exiting;
+    // This run only installs an update: see InstallUpdate.
+    private bool installing;
 
     /// <summary>The library, once it is open. Every window reads from this one store.</summary>
     internal static Store? Store { get; private set; }
@@ -34,7 +37,6 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        Log.Info($"Heracles {VersionText}");
 
         // Logged, not swallowed: the app still stops, and the log says why.
         DispatcherUnhandledException += (_, args) => Log.Error("unhandled exception", args.Exception);
@@ -45,6 +47,17 @@ public partial class App : Application
             Log.Error("unobserved task exception", args.Exception);
             args.SetObserved();
         };
+
+        // Started by a copy of the app that has fetched an update: this is
+        // the new version, run from where it was unpacked, and all it does
+        // is put itself in that copy's place. It opens no library, claims
+        // nothing, and takes nothing of Windows for itself.
+        if (UpdateInstaller.Parse(e.Args, AppContext.BaseDirectory) is { } request)
+        {
+            InstallUpdate(request);
+            return;
+        }
+        Log.Info($"Heracles {VersionText}");
 
         // One process per library: the change feed that keeps windows in step
         // lives inside the process.
@@ -82,13 +95,16 @@ public partial class App : Application
         {
             Log.Error($"library: could not be opened: {error.Message}");
             new MainWindow(error.Message).Show();
+            // A copy that cannot open its library can still be replaced by
+            // one that can.
+            UpdateCenter.Shared.Start(e.Args, () => null, () => Shutdown());
             return;
         }
 
         Model.PendingLinkChanged += TakePendingLink;
         Model.ErrorChanged += ShowError;
 
-        // A library the Electron app left behind is brought across before the
+        // A library the original app left behind is brought across before the
         // first window opens, so that the window opens on it. If it cannot be
         // read, the app starts on its own empty library and says so.
         var imported = Model.ImportLegacyLibraryIfNeeded(AppModel.LegacyDatabase(AppPaths.DataDirectory));
@@ -118,6 +134,30 @@ public partial class App : Application
         }
 
         if (e.Args.Select(AppLink.Parse).FirstOrDefault(link => link is not null) is { } link) Model.PendingLink = link;
+
+        // Over-the-air updates. Not every run looks: see UpdatePolicy.
+        UpdateCenter.Shared.Start(e.Args, () => frontmost, ExitApp);
+    }
+
+    /// <summary>
+    /// All that a run started with <c>--install-update</c> does: say that an
+    /// update is being installed, install it off this thread, and end.
+    /// </summary>
+    private void InstallUpdate(InstallRequest request)
+    {
+        installing = true;
+        // The window is put away when the work is over, not before: closed
+        // half way, an install would stop with the app's folder moved aside.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        var notice = new InstallingWindow(request.Version);
+        notice.Show();
+        Task.Run(() => UpdateCenter.RunInstaller(request)).ContinueWith(work =>
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () =>
+            {
+                if (work.Exception is { } failure) Log.Error("updates: stopped: the install failed", failure);
+                notice.MayClose = true;
+                Shutdown(work is { IsCompletedSuccessfully: true, Result: true } ? 0 : 1);
+            }));
     }
 
     /// <summary>
@@ -234,11 +274,19 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (installing)
+        {
+            base.OnExit(e);
+            return;
+        }
         // Whatever way the app is ending, an editor may still hold typing.
         Model?.SaveEverything();
         Model?.Dispose();
         Store?.Dispose();
         instance?.Dispose();
+        // Last of all, once what was typed is saved and the library closed:
+        // an update that was fetched is started, to take this copy's place.
+        UpdateCenter.Shared.InstallOnExit();
         Log.Info("exit");
         base.OnExit(e);
     }

@@ -9,7 +9,7 @@
     app turns into a new library when tools\e2e\launch.ps1 starts it there,
     and the log of that run. The real library is never touched.
 
-    -Legacy puts a small library of the Electron app's in the folder
+    -Legacy puts a small library of the original app's in the folder
     (heracles.sqlite), which the app imports the first time it starts there.
 
     Refuses to run while a build of the app started from build\ is running:
@@ -18,7 +18,7 @@
 [CmdletBinding()]
 param(
     [string]$Fixture,
-    # Leave the library of the Electron app in the folder, for the app to import when it first starts.
+    # Leave the library of the original app in the folder, for the app to import when it first starts.
     [switch]$Legacy
 )
 
@@ -44,7 +44,7 @@ New-Item -ItemType Directory -Force (Join-Path $Fixture 'data') | Out-Null
 if ($Legacy) {
     # The library the unit tests import too: see app\Heracles.Tests\Fixtures\README.md.
     Copy-Item (Join-Path $Root 'app\Heracles.Tests\Fixtures\legacy.sqlite') (Join-Path $Fixture 'data\heracles.sqlite')
-    Write-Host "ok: $Fixture (a library folder holding only the Electron app's library, no log)"
+    Write-Host "ok: $Fixture (a library folder holding only the original app's library, no log)"
 }
 else {
     Write-Host "ok: $Fixture (an empty library folder, no log)"

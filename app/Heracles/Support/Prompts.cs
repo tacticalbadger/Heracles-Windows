@@ -28,6 +28,15 @@ internal static class Prompts
         Dialog(owner, "Something went wrong", message, ok).ShowDialog();
     }
 
+    /// <summary>Say something that is no fault: a title, a line or two, and OK.</summary>
+    public static void Message(Window? owner, string title, string text)
+    {
+        var message = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, MaxWidth = 420, Margin = new Thickness(0, 0, 0, 16) }
+            .Id("MessageText").Named(text);
+        var ok = new Button { Content = "OK", IsDefault = true, IsCancel = true, MinWidth = 88 }.Id("MessageOk");
+        Dialog(owner, title, message, ok).ShowDialog();
+    }
+
     private static Window Dialog(Window? owner, string title, UIElement body, params Button[] buttons)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };

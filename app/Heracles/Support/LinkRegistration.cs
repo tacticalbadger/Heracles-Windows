@@ -57,21 +57,52 @@ internal static class AppIdentity
 {
     public const string Id = "com.heracles.notes.native";
 
+    /// <summary>The app's program file, without its extension.</summary>
+    public const string ProgramName = "Heracles";
+
+    /// <summary>The picture of the app's icon that the build puts beside the program.</summary>
+    public const string PictureName = "Heracles.png";
+
     private const string DisplayName = "Heracles";
+
+    /// <summary>Where Windows looks for the picture to show on the identity's notifications.</summary>
+    private const string IconValue = "IconUri";
 
     private static string KeyPath => $@"AppUserModelId\{Id}";
 
-    public static bool IsRegistered(RegistryKey classes)
+    /// <summary>Whether <paramref name="exePath"/> is the app's own program, and not something that hosts it.</summary>
+    public static bool IsOwnProgram(string? exePath) =>
+        exePath is not null
+        && string.Equals(Path.GetFileNameWithoutExtension(exePath), ProgramName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The picture of the icon beside the app's own program, if it is there.
+    /// Beside anything else (a host, a debugger) there is none of the app's.
+    /// </summary>
+    public static string? PictureBeside(string? exePath)
     {
-        using var identity = classes.OpenSubKey(KeyPath);
-        return identity?.GetValue("DisplayName") as string == DisplayName;
+        if (!IsOwnProgram(exePath) || Path.GetDirectoryName(exePath) is not { Length: > 0 } folder) return null;
+        var picture = Path.Combine(folder, PictureName);
+        return File.Exists(picture) ? picture : null;
     }
 
-    public static void Register(RegistryKey classes)
+    /// <summary>Whether the identity is there under its name, with this picture or, for null, with none.</summary>
+    public static bool IsRegistered(RegistryKey classes, string? picture = null)
     {
-        if (IsRegistered(classes)) return;
+        using var identity = classes.OpenSubKey(KeyPath);
+        return identity?.GetValue("DisplayName") as string == DisplayName
+            && string.Equals(identity.GetValue(IconValue) as string, picture, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static void Register(RegistryKey classes, string? picture = null)
+    {
+        if (IsRegistered(classes, picture)) return;
         using var identity = classes.CreateSubKey(KeyPath);
         identity.SetValue("DisplayName", DisplayName);
+        // A picture that is no longer there must not stay named: the app may
+        // have moved, or been replaced by a copy without one.
+        if (picture is null) identity.DeleteValue(IconValue, throwOnMissingValue: false);
+        else identity.SetValue(IconValue, picture);
     }
 }
 
@@ -83,8 +114,6 @@ internal static class AppIdentity
 /// </summary>
 internal static class WindowsIntegration
 {
-    private const string ProgramName = "Heracles";
-
     /// <returns>
     /// What now keeps Windows' notifications in step with the library, or
     /// null when Windows has none to give. The links are registered either way.
@@ -96,15 +125,13 @@ internal static class WindowsIntegration
         Func<Boards.IReminderCenter> center,
         Action<Action, TimeSpan>? later = null)
     {
-        AppIdentity.Register(classes);
+        // The identity, with the app's icon for its notifications where the
+        // picture is beside the program.
+        AppIdentity.Register(classes, AppIdentity.PictureBeside(exePath));
         // Links go to the app's own program. Started some other way (by a
         // host, in a debugger), the path is the host's, and links must not
         // be sent there.
-        if (exePath is not null
-            && string.Equals(Path.GetFileNameWithoutExtension(exePath), ProgramName, StringComparison.OrdinalIgnoreCase))
-        {
-            LinkRegistration.Register(classes, exePath);
-        }
+        if (exePath is not null && AppIdentity.IsOwnProgram(exePath)) LinkRegistration.Register(classes, exePath);
 
         Boards.IReminderCenter notifications;
         try { notifications = center(); }

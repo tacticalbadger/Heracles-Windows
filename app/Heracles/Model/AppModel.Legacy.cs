@@ -1,12 +1,12 @@
 namespace Heracles.Model;
 
-/// <summary>The Electron app's library, brought across the first time the native app starts.</summary>
+/// <summary>The original app's library, brought across the first time the app starts.</summary>
 internal sealed partial class AppModel
 {
-    /// <summary>What the Electron app called its database. It kept it in the library folder.</summary>
+    /// <summary>What the original app called its database. It kept it in the library folder.</summary>
     public const string LegacyDatabaseName = "heracles.sqlite";
 
-    /// <summary>The Electron app's database, if it is where that app keeps it.</summary>
+    /// <summary>The original app's database, if it is where that app kept it.</summary>
     public static string? LegacyDatabase(string dataDirectory)
     {
         var file = Path.Combine(dataDirectory, LegacyDatabaseName);
@@ -14,10 +14,10 @@ internal sealed partial class AppModel
     }
 
     /// <summary>
-    /// On the first start of the native app, bring the Electron app's library
-    /// across. Does nothing if this library already has content or the
-    /// import has been done: the core refuses both. The core copies the old
-    /// database before it reads it, and never changes it.
+    /// On the first start, bring the original app's library across. Does
+    /// nothing if this library already has content or the import has been
+    /// done: the core refuses both. The core copies the old database before
+    /// it reads it, and never changes it.
     /// </summary>
     /// <returns>What was imported, or null if there was nothing to do.</returns>
     public ImportReport? ImportLegacyLibraryIfNeeded(string? database)
@@ -35,7 +35,7 @@ internal sealed partial class AppModel
         catch (CoreException.Invalid) { return null; }
         catch (UniffiException error)
         {
-            LastError = "The library of the previous version of Heracles could not be imported. It has not been changed. "
+            LastError = "The library from the original Heracles could not be imported. It has not been changed. "
                 + error.Message;
             return null;
         }

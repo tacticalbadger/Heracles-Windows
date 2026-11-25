@@ -67,6 +67,16 @@ Stop-Fixture-Processes
 Start-App -AppArgs @('--e2e-seed')
 if (-not (Wait-Ui { Find-Ui -Id 'Sidebar' } 15000)) { Write-Host 'FAIL  the window did not appear'; exit 1 }
 
+# --- 0. Updates: a run on a test library must never look for the real app's ---
+Test-Ui 'updates: this run does not look for them, and says why' { (Get-Content $LogFile -ErrorAction SilentlyContinue) -match 'updates: off: ' }
+& $script:UiScript expand -Name 'Help' 6>&1 | Out-Null
+Start-Sleep -Milliseconds 300
+Test-Ui 'updates: the two items for them are in the Help menu, greyed out' {
+    (Find-Ui -Id 'UpdateCheck') -match 'DISABLED' -and (Find-Ui -Id 'UpdateAutomatic') -match 'DISABLED'
+}
+try { & $script:UiScript collapse -Name 'Help' 6>&1 | Out-Null } catch { }
+Start-Sleep -Milliseconds 200
+
 # --- 1. The sidebar ---
 $trip = (Get-UiId -Name 'Trip' -Prefix 'note:' -Within 'Sidebar') -replace '^note:', ''
 $budget = (Get-UiId -Name 'Budget' -Prefix 'note:' -Within 'Sidebar') -replace '^note:', ''

@@ -44,8 +44,18 @@ public delegate bool EnumProc(IntPtr hwnd, IntPtr lParam);
 # Real pixels, whatever the display scaling.
 [HeraclesE2E.Win]::SetThreadDpiAwarenessContext([IntPtr](-4)) | Out-Null
 
-$app = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue)
-if ($app.Count -eq 0) { Write-Host 'Heracles is not running'; exit 1 }
+# Only copies that are a test's: started from under this checkout's build
+# folder, or from a disc. A copy started from anywhere else is the owner's
+# own, and a picture of it would be a picture of his notes.
+$testRoot = (Join-Path $Root 'build').TrimEnd('\') + '\'
+$app = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue | Where-Object {
+        try {
+            $_.Path -and ($_.Path.StartsWith($testRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+                (New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot($_.Path))).DriveType -eq [System.IO.DriveType]::CDRom)
+        }
+        catch { $false }
+    })
+if ($app.Count -eq 0) { Write-Host 'Heracles is not running (no copy started from build\ or from a disc)'; exit 1 }
 $appIds = $app | ForEach-Object { [uint32]$_.Id }
 $dialogHosts = @(Get-Process -Name 'CredentialUIBroker' -ErrorAction SilentlyContinue | ForEach-Object { [uint32]$_.Id })
 

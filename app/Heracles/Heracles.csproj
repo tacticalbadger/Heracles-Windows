@@ -12,6 +12,9 @@
     <AssemblyName>Heracles</AssemblyName>
     <RootNamespace>Heracles</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- The icon of the program file, and so of its windows and of the
+         taskbar. Drawn by tools\make-icon.ps1 from the layers in Icon\. -->
+    <ApplicationIcon>Icon\Heracles.ico</ApplicationIcon>
     <!-- The UniFFI bindings marshal buffers with pointers. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- WPF0001: the Fluent theme (ThemeMode) is still flagged as evaluation API. -->
@@ -25,6 +28,12 @@
     <Compile Include="..\Generated\heracles_core.cs" Link="Core\heracles_core.cs" />
     <Content Include="..\runtimes\$(RuntimeIdentifier)\native\heracles_core.dll" Link="heracles_core.dll"
              Condition="'$(RuntimeIdentifier)' != ''" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A picture of the icon beside the program: Windows shows it on the
+         app's reminders (AppIdentity in Support\LinkRegistration.cs). -->
+    <Content Include="Icon\Heracles.png" Link="Heracles.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

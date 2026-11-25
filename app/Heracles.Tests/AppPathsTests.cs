@@ -41,4 +41,21 @@ public sealed class AppPathsTests
 
         Assert.Equal(@"C:\A\Heracles", locations.DataDirectory);
     }
+
+    [Fact]
+    public void WhatTheAppKeepsAboutUpdatesIsThisPcsOwn()
+    {
+        // Beside the log, not in the library: it is about this copy of the app.
+        Assert.Equal(@"C:\L\Heracles\updates", AppPaths.Resolve(Environment(), @"C:\A", @"C:\L").UpdatesDirectory);
+    }
+
+    [Fact]
+    public void ATestLibraryKeepsItsUpdatesToItself()
+    {
+        // A rehearsal of an update must not touch what the real app
+        // remembers, nor leave a download where the real app would find it.
+        var locations = AppPaths.Resolve(Environment(("HERACLES_DATA_DIR", @"D:\x")), @"C:\A", @"C:\L");
+
+        Assert.Equal(@"D:\x\updates", locations.UpdatesDirectory);
+    }
 }

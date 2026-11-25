@@ -11,9 +11,13 @@
       app      the WPF app -> build\app\win-<arch>\Heracles.exe
       test     Rust tests, then the .NET tests
       run      start the built app (on the real library, not a fixture)
-      package  self-contained build for handing out: a disc image (.iso) per
-               architecture and SHA256SUMS under build\release (needs "core"
-               for that architecture first)
+      package  self-contained build for handing out, under build\release: a
+               disc image (.iso) for whoever installs it, the same folder as
+               an archive (.zip) for copies that update themselves, and
+               SHA256SUMS (needs "core" for that architecture first)
+      feed     the update feed for the packages of both architectures,
+               signed with the update key -> build\release\update-feed.json
+               (needs "package" for both first; see tools\update-key.ps1)
       clean    remove build output and the generated bindings
 
     Run "core" again after any change to the Rust API: the bindings and the
@@ -29,6 +33,7 @@
     tools\build.ps1 test
     tools\build.ps1 core package            # a package for this machine's architecture
     tools\build.ps1 core package -Arch x64  # and one for the other
+    tools\build.ps1 feed                    # then the feed that announces them
 #>
 [CmdletBinding()]
 param(
@@ -50,7 +55,7 @@ $App = Join-Path $Root 'app'
 $Build = Join-Path $Root 'build'
 
 if (-not $Targets -or $Targets.Count -eq 0) { $Targets = @('core', 'app') }
-$known = @('core', 'app', 'test', 'run', 'package', 'clean')
+$known = @('core', 'app', 'test', 'run', 'package', 'feed', 'clean')
 foreach ($t in $Targets) {
     if ($known -notcontains $t) { throw "unknown target '$t' (expected: $($known -join ', '))" }
 }
@@ -71,6 +76,8 @@ $Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 
 # New-DiscImage and Compare-DiscImage, for the package.
 . (Join-Path $PSScriptRoot 'disc-image.ps1')
+# The update key, the feed and the archive, for the package and the feed.
+. (Join-Path $PSScriptRoot 'update-signing.ps1')
 
 # A shell opened before the toolchain was installed does not have these on
 # PATH yet.
@@ -267,9 +274,12 @@ function Get-DiscReadMe {
         'The app is not code-signed. If Windows shows "Windows protected your PC",',
         'choose More info, then Run anyway.',
         '',
-        'Your library is kept on your PC, under %APPDATA%\Heracles. Nothing is',
-        'written to the folder the app runs from, so a newer version is put in by',
-        'replacing that folder.',
+        'Your library is kept on your PC, under %APPDATA%\Heracles, and not in the',
+        'folder the app runs from.',
+        '',
+        'Heracles updates itself from here on: it looks for a new version once a',
+        'day, shows what changed, and replaces its own folder when you agree. For',
+        'that it must be somewhere it can change, which a place of your own is.',
         '',
         'https://github.com/tacticalbadger/Heracles-Windows'
     )
@@ -278,7 +288,8 @@ function Get-DiscReadMe {
 # A folder that runs on a PC with nothing installed (the .NET runtime is
 # inside), on a disc image for the Releases page: Windows opens an .iso as a
 # disc when it is double-clicked. Nothing in it is code-signed yet, so
-# Windows asks before running it the first time.
+# Windows asks before running it the first time. The same folder is also
+# made into an archive, which is what a copy that updates itself downloads.
 function New-Package {
     Assert-Tool 'dotnet' 'Install the .NET SDK: winget install Microsoft.DotNet.SDK.10'
     Assert-CoreBuilt $Rid " -Arch $Arch"
@@ -288,13 +299,21 @@ function New-Package {
     $release = Join-Path $Build 'release'
     $stage = Join-Path $release $name
     $iso = Join-Path $release "$name.iso"
+    $zip = Join-Path $release "$name.zip"
     $top = Join-Path $release "$name.top"
+    # Every copy from this package will take its updates on the word of this
+    # key, so there has to be one before there is a package.
+    $config = Get-UpdateConfig $Root
+    if (-not $config.key) { throw 'tools\update-config.json names no update key. Make one first: tools\update-key.ps1 -Create' }
     New-Item -ItemType Directory -Force $release | Out-Null
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
     if (Test-Path $top) { Remove-Item -Recurse -Force $top }
-    # Gone before anything is built: an image left from an earlier build must
-    # not sit beside a folder it was not made from.
+    # Gone before anything is built: an image, an archive or a feed left from
+    # an earlier build must not sit beside a folder it was not made from.
     Remove-DiscImage -Path $iso
+    foreach ($stale in $zip, (Join-Path $release 'update-feed.json')) {
+        if (Test-Path $stale) { Remove-Item -Force $stale }
+    }
 
     Step "package: dotnet publish (self-contained, $Rid, $Version build $number)"
     $project = Join-Path $App 'Heracles\Heracles.csproj'
@@ -309,9 +328,14 @@ function New-Package {
         dotnet publish $project -c Release -r $Rid --self-contained true "-p:HeraclesBuild=$number" `
             -p:DebugType=none -p:DebugSymbols=false -o $stage --nologo -v minimal
     }
-    foreach ($needed in 'Heracles.exe', 'Heracles.dll', 'heracles_core.dll', 'Emoji.Wpf.dll') {
+    foreach ($needed in 'Heracles.exe', 'Heracles.dll', 'heracles_core.dll', 'Emoji.Wpf.dll', 'Heracles.png') {
         if (-not (Test-Path (Join-Path $stage $needed))) { throw "the package is missing $needed" }
     }
+    # Where updates come from and the key they are checked against, beside
+    # the program. A copy without this file never looks for updates, which
+    # is how a build made any other way than this stays out of it.
+    $settings = [ordered]@{ feed = $config.feed; key = $config.key }
+    [System.IO.File]::WriteAllText((Join-Path $stage 'Heracles.update.json'), (($settings | ConvertTo-Json) + "`n"), [System.Text.Encoding]::ASCII)
     $packed = Get-PeArchitecture (Join-Path $stage 'heracles_core.dll')
     if ($packed -ne $Arch) { throw "the package for $Arch holds a core DLL for $packed. Run: tools\build.ps1 core -Arch $Arch, then package again." }
     # What is built here must not tell the recipient where it was built.
@@ -346,13 +370,88 @@ function New-Package {
         throw "$name.iso contains a path under this machine's profile folder."
     }
 
+    # The same folder as an archive, for copies that update themselves. It is
+    # read back as the image was: New-UpdateArchive refuses one that does not
+    # hold exactly what went in.
+    Step "package: $name.zip"
+    New-UpdateArchive -Folder $stage -Path $zip
+
     # Checksums for every package of this version that is there.
-    $lines = Get-ChildItem $release -Filter "Heracles-$Version-win-*.iso" | Sort-Object Name | ForEach-Object {
-        '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
-    }
+    $lines = Get-ChildItem $release -File | Where-Object { $_.Name -like "Heracles-$Version-win-*.iso" -or $_.Name -like "Heracles-$Version-win-*.zip" } |
+        Sort-Object Name | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
     [System.IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (($lines -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
     Write-Host ("ok: {0} ({1:N0} MB)" -f $iso, ((Get-Item $iso).Length / 1MB))
+    Write-Host ("ok: {0} ({1:N0} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
     Write-Host "ok: $(Join-Path $release 'SHA256SUMS')"
+}
+
+# The feed: one small signed file that says what the newest version is and
+# where its archives are. Installed copies read it from the newest GitHub
+# release, and believe it only if the update key signed it. Written once
+# both packages are there, since it names both; a release without it would
+# be one that nobody is ever told about.
+function New-Feed {
+    $release = Join-Path $Build 'release'
+    $config = Get-UpdateConfig $Root
+    $private = Get-StoredUpdateKey $config.keyName
+    if (-not $private) {
+        throw "the update key is not in this account's Windows credentials (as '$($config.keyName)'). See tools\update-key.ps1."
+    }
+    if ((Get-UpdatePublicKey $private) -ne $config.key) {
+        throw "the update key stored as '$($config.keyName)' is not the one tools\update-config.json names. A feed signed with it would be refused by every copy."
+    }
+
+    $archives = [ordered]@{}
+    $builds = @()
+    foreach ($arch in 'arm64', 'x64') {
+        $name = "Heracles-$Version-win-$arch"
+        $zip = Join-Path $release "$name.zip"
+        $stage = Join-Path $release $name
+        if (-not (Test-Path $zip) -or -not (Test-Path (Join-Path $stage 'Heracles.dll'))) {
+            throw "no package for $arch. A feed names both: run tools\build.ps1 core package -Arch $arch"
+        }
+        # What the copies in this package will check a feed against.
+        $settings = [System.IO.File]::ReadAllText((Join-Path $stage 'Heracles.update.json'), [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        if ($settings.key -ne $config.key -or $settings.feed -ne $config.feed) {
+            throw "the package for $arch was made with another update key or feed address than tools\update-config.json has now. Package again."
+        }
+        $builds += [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $stage 'Heracles.dll')).FilePrivatePart
+        $archives[$arch] = [ordered]@{
+            url    = "https://github.com/$($config.repository)/releases/download/v$Version/$name.zip"
+            size   = [long](Get-Item $zip).Length
+            sha256 = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    }
+    if (@($builds | Select-Object -Unique).Count -ne 1) {
+        throw "the two packages are builds $($builds -join ' and '). Package both from one commit."
+    }
+    $build = [int]$builds[0]
+
+    # A copy takes an update only if its build number is higher than its own.
+    # A release that keeps the number of the one before it is never offered
+    # to anybody, and nothing says so.
+    Step 'feed: what is published now'
+    $published = Get-PublishedUpdateBuild $config
+    if ($null -eq $published) { Write-Host "no feed is published yet: build $build will be the first with one" }
+    elseif ($build -gt $published) { Write-Host "build $build is higher than the published build $published" }
+    else { throw "build $build is not higher than the published build $published. Installed copies would never be offered this version." }
+
+    # What the update window shows.
+    $notesPath = Join-Path $Root "docs\release-notes\$Version.md"
+    if (-not (Test-Path $notesPath)) { throw "no docs\release-notes\$Version.md. It is what the update window shows of this version." }
+    $notes = [System.IO.File]::ReadAllText($notesPath, [System.Text.Encoding]::UTF8).Trim()
+
+    Step "feed: update-feed.json ($Version, build $build)"
+    $manifest = [ordered]@{
+        version   = $Version
+        build     = $build
+        published = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd')
+        notes     = $notes
+        archives  = $archives
+    }
+    $feed = Join-Path $release 'update-feed.json'
+    New-UpdateFeed -Private $private -Manifest $manifest -Path $feed
+    Write-Host "ok: $feed (signed with the key $($config.key.Substring(0, 12))...)"
 }
 
 function Start-App {
@@ -402,6 +501,7 @@ foreach ($t in $Targets) {
         'test' { Test-All }
         'run' { Start-App }
         'package' { New-Package }
+        'feed' { New-Feed }
         'clean' { Clear-All }
     }
 }

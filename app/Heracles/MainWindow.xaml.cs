@@ -222,6 +222,26 @@ public partial class MainWindow : Window
         var help = new MenuItem { Header = "_Help" };
         help.Items.Add(Command("_About Heracles", () =>
             MessageBox.Show(this, $"Heracles {App.VersionText}", "About Heracles", MessageBoxButton.OK, MessageBoxImage.Information)));
+        // Updates over the air: where the Mac has them in its app menu.
+        var updates = Heracles.Updates.UpdateCenter.Shared;
+        var check = Command("Check for _Updates…", updates.CheckForUpdates).Id("UpdateCheck");
+        var automatic = new MenuItem { Header = "Check for Updates Au_tomatically", IsCheckable = true }.Id("UpdateAutomatic");
+        automatic.Click += (_, _) => updates.ChecksAutomatically = automatic.IsChecked;
+        help.Items.Add(new Separator());
+        help.Items.Add(check);
+        help.Items.Add(automatic);
+        // The two follow the updater: greyed out in a run that does not look
+        // for updates, and while a look is under way.
+        void FollowUpdates()
+        {
+            check.IsEnabled = updates.CanCheckForUpdates;
+            automatic.IsEnabled = updates.IsActive;
+            automatic.IsChecked = updates.ChecksAutomatically;
+            // A tick is not something an automation tree says of a menu item.
+            System.Windows.Automation.AutomationProperties.SetItemStatus(automatic, automatic.IsChecked ? "ticked" : "");
+        }
+        FollowUpdates();
+        help.SubmenuOpened += (_, _) => FollowUpdates();
 
         foreach (var menu in new[] { file, edit, note, format, view, window, help }) MenuBar.Items.Add(menu);
     }

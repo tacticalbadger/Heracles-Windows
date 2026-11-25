@@ -4,7 +4,7 @@ using Heracles.Model;
 namespace Heracles;
 
 /// <summary>
-/// Shown once, after the Electron app's library has been brought across:
+/// Shown once, after the original app's library has been brought across:
 /// what came, that the old library is safe and where the copy of it is, and
 /// each thing that had to be adjusted to fit.
 /// </summary>

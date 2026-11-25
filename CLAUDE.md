@@ -14,18 +14,27 @@ core `heracles-core`.
 
 It began as an Electron app. The Mac side was rebuilt as a native app
 (Swift over the Rust core, repo https://github.com/tacticalbadger/Heracles,
-version 0.3.0). On 2026-11-22 the owner decided the Windows side does the
+version 0.4.0). On 2026-11-22 the owner decided the Windows side does the
 same: no Electron, the same core, feature parity with the Mac app.
 
-**The Mac app is the behavioural reference, at its commit `5dd0252`.** When
-the design is silent, do what the Mac app does. Two places to read it:
+**The Mac app is the behavioural reference, at its commit `91076bf`**
+(2026-11-24: its 0.4.0, and the original app removed from its repository).
+The app was first built against `5dd0252`; on 2026-11-25 the sixteen
+commits after that were read and brought across (see "Since stage 7" in
+"Current state"). When the design is silent, do what the Mac app does. Two
+places to read it:
 
-- The first commit of this repository is that tree, unchanged:
-  `git show <first commit>:macos/Sources/HeraclesApp/PaneTree.swift`,
-  `git ls-tree -r --name-only <first commit> macos/`. Find the commit with
-  `git rev-list --max-parents=0 HEAD`.
 - The Mac repository itself, cloned beside this one (`..\Heracles`). Read
-  it; never add it as a remote here and never push to it.
+  it; never add it as a remote here and never push to it. **Its working
+  tree may be behind**: `git fetch origin` there, then read from
+  `origin/main` (`git show origin/main:macos/Sources/HeraclesApp/Updates.swift`,
+  `git log --oneline 91076bf..origin/main` for what is new since). Fetching
+  changes nothing of the owner's; do not pull or check out in his clone.
+- The first commit of this repository is the Mac's tree at `5dd0252`,
+  unchanged, for what the app was first built from:
+  `git show <first commit>:macos/Sources/HeraclesApp/PaneTree.swift`. Find
+  the commit with `git rev-list --max-parents=0 HEAD`. What the Mac gained
+  after that is only in its own repository.
 
 The design is `docs/superpowers/specs/2026-11-22-native-windows-app-design.md`.
 The plans are in `docs/superpowers/plans/`, one per stage.
@@ -53,6 +62,107 @@ Owner, 2026-11-23:
 
 - A release is handed out as a disc image (an ISO), from 0.2.1 on. 0.2.0
   was two zips.
+
+Owner, 2026-11-25:
+
+- The Windows app is brought to parity with the Mac app as it now stands
+  (its 0.4.0), tested, and released. What the Mac had gained: an app icon,
+  updating itself, "the original app" where it said "Electron", and a
+  proprietary licence.
+- **The licence is the Mac's**: proprietary, all rights reserved, the
+  source published to be read. He was asked, and answered "Match the
+  Mac". **It had already been done**: his decision of 2026-11-23 (see
+  Conventions) was carried out that day by a commit made on the Mac
+  (`4946a75`), which the session that asked had not fetched. The two
+  answers agree, and `LICENSE` is as that commit left it. 0.2.0 and 0.2.1
+  went out under MIT and stay so for whoever has them; 0.3.0 is the first
+  release under the new terms.
+
+Claude's calls about updates, open to change, **each easy to change before
+a version is out and hard after**, since every copy that is out goes on
+doing what it was built to do:
+
+- **The updater is the app's own code**, where the Mac uses Sparkle. Nothing
+  like Sparkle fits an app with no installer: WinSparkle and NetSparkle run
+  an installer and show notes in a web view, and Velopack wants its own
+  packaging and has no signature of the developer's. What it has to do is
+  small (read a feed, check a signature, fetch a zip, swap a folder), and
+  the Mac's design names what must hold: an update is taken only if the
+  owner signed it; a release cannot go out in a state that silently stops
+  updates; a test run never finds the real release; no web view.
+- **The feed is `update-feed.json` on every release**, read from
+  `https://github.com/tacticalbadger/Heracles-Windows/releases/latest/download/update-feed.json`,
+  which always serves the newest full release's copy. No server. Its form
+  is in `Updates/UpdateFeed.cs`: an envelope holding a manifest (version,
+  build number, notes, and for each processor the archive's address,
+  length and SHA-256) as the exact bytes that were signed, and the
+  signature. One signature therefore covers the archives too.
+- **The signature is ECDSA on P-256 over SHA-256**, not Sparkle's Ed25519:
+  it is what Windows itself computes, in the app (.NET) and in the release
+  scripts (Windows PowerShell) alike, so neither needs a library.
+- **Heracles for Windows has an update key of its own**, not the Mac's
+  (which is in the Mac's keychain, and of another kind). The private half
+  is in the Windows credential store of the account that makes releases,
+  as `heracles-windows-update-key`; the public half is in
+  `tools\update-config.json`. `tools\update-key.ps1` makes it, shows it,
+  and writes it out to be kept. **Lose it and no copy can be updated
+  again**: there is no provision for a lost key (Sparkle has one; nothing
+  here does), so the way back is a build everyone puts in by hand.
+- **The feed's address and the key are in a file beside the program**,
+  `Heracles.update.json`, as they are in the Mac's Info.plist. Only the
+  package step writes it, so a build made any other way never looks for
+  updates.
+- **The app's folder is replaced by the new version itself.** On quit the
+  app starts the new version from where it was unpacked, with
+  `--install-update`; that copy waits for the app to be gone, copies
+  itself beside the app's folder, and swaps the two folders with two
+  renames (`Updates/UpdateInstaller.cs`). No helper program, nothing
+  running from a folder that is moved, and the long work done before
+  anything is changed. Folders beside the app named `<name>.update-new`
+  and `<name>.update-old` are the updater's while they carry its marker
+  file; one without the marker is somebody's and is never touched.
+- **The copy that installs does not take its command line at its word.**
+  Anything that can start the app can write its arguments (Windows starts
+  it with a link as its argument, and a link can be made to say
+  anything), and `--install-update --target <folder>` names a folder to
+  replace. So only a copy running from the updater's own unpacking folder
+  (`<updates>\staged`, where nothing arrives but what was checked against
+  the signed feed) installs anything, and only over a folder that holds
+  `Heracles.exe`. The app as it is installed, started with those
+  arguments, does nothing. Found by reading the code back for misuse
+  before the release, not by a test; each guard then got a test that
+  fails without it.
+- The build number decides what is newer, as on the Mac, and it is the
+  commit count, so it goes up by itself. It must stay below 65536: it is
+  the last part of a Windows file version.
+- A look sends the app's version and processor (the request's
+  `User-Agent`) and nothing else.
+- The menu items are in Help (the Mac has them in its app menu, which
+  Windows has not). The daily look is on by default, three seconds after
+  the first window and then once a day, and asks before anything is
+  fetched.
+- What the app remembers about updates is in
+  `%LOCALAPPDATA%\Heracles\updates` (beside the log: it is about this copy,
+  not about the library). A run on a test library keeps its own, inside
+  that library's folder.
+- This version is 0.3.0.
+
+Claude's other calls of 2026-11-25:
+
+- The icon is drawn from the Mac's own layers (`app\Heracles\Icon\*.svg`
+  and `icon.json`, copied from `macos/Icon/Heracles.icon`) by
+  `tools\make-icon.ps1`, with WPF, since Icon Composer is the Mac's. Windows
+  draws an icon one way whatever the theme, so only the light style is
+  used. Below 40 pixels the page is drawn larger and without its shadow.
+- Reminders carry the icon: the identity's `IconUri` names `Heracles.png`
+  beside the program.
+- `docs/review-and-native-rewrite.md` is left as it was. The Mac has deleted
+  its copy; here the owner's word of 2026-11-22 was to leave it, and the
+  question put to him on 2026-11-25 was about the licence only.
+- The app, its scripts and the README say "the original app" where they
+  said "Electron", as the Mac's now do, and the core's copy of an imported
+  library is `heracles-original-<time>.sqlite`. These notes keep the old
+  word where they record what was decided or done at the time.
 
 Claude's calls, open to change:
 
@@ -115,11 +225,12 @@ Claude's calls, open to change:
   (`Fresh` and `Clone` make copies); and `Tidy` makes the lists of blocks
   anew, so no `Blocks` or `Children` list is kept across an edit.
 
-Out of scope, because the Mac has not built them either: updating itself,
-syntax colouring in code blocks, find within a note, selecting text across
-blocks, resizing an image, per-section sort modes and dragging notes in the
-sidebar, moving a subtask under another task, HTML export. Also out: code
-signing, an installer, an app icon (the Mac has none).
+Out of scope, because the Mac has not built them either: syntax colouring
+in code blocks, find within a note, selecting text across blocks, resizing
+an image, per-section sort modes and dragging notes in the sidebar, moving
+a subtask under another task, HTML export. Also out: code signing, an
+installer, delta updates and beta channels (the Mac rules those two out
+too).
 
 ## Layout
 
@@ -128,7 +239,7 @@ core/                     heracles-core (Rust, edition 2024, UniFFI 0.32)
   src/doc/                block document model, HTML and Markdown conversion
   src/store/              SQLite schema, notes, boards, search, image store
   src/transfer.rs         import and export of files
-  src/legacy.rs           the Electron library importer
+  src/legacy.rs           the importer of the original (Electron) app's library
   src/changes.rs          the change feed
   src/ffi.rs              what crosses to the interface
   uniffi.toml             C# namespace Heracles.Core, class CoreApi
@@ -180,11 +291,28 @@ app/
                           reload to the next), TaskDetailWindow (one window
                           per task), Fields (EntryBox, StoredBox),
                           ToastCenter (Windows' scheduled notifications)
-    Support/              AppPaths, Log, WindowStates (SavedWindow), Ui
-                          (shared view helpers, LandmarkPeer), Prompts,
-                          E2eSeed, LinkRegistration (the link scheme, the
-                          app's identity, WindowsIntegration: what the app
-                          writes in the registry for itself at start)
+    Updates/              updates over the air. What is decided, with no
+                          view in it: UpdatePolicy (whether this run looks,
+                          and UpdateSettings: the file beside the program),
+                          UpdateFeed (the signed feed, UpdateSignature,
+                          UpdateAddress), UpdatePreferences (the daily
+                          look), Updater (looks and fetches: the part that
+                          talks to the web), UpdateInstaller (the swap of
+                          the app's folder, and the command line of the
+                          copy that does it), UpdateNotes (release notes
+                          read for showing). Then UpdateCenter (the app's
+                          end: the timer, what the menu follows, the
+                          hand-over on quit) and UpdateWindow (the offer;
+                          InstallingWindow)
+    Icon/                 the icon: the Mac's layers (*.svg, icon.json),
+                          and Heracles.ico and Heracles.png drawn from them
+    Support/              AppPaths, AppVersion (version and build number),
+                          Log, WindowStates (SavedWindow), Ui (shared view
+                          helpers, LandmarkPeer), Prompts, E2eSeed,
+                          LinkRegistration (the link scheme, the app's
+                          identity and its icon for reminders,
+                          WindowsIntegration: what the app writes in the
+                          registry for itself at start)
   Heracles.Tests/         xunit tests: the crossing into the core
                           (BindingTests) and every class with logic.
                           Fixtures/legacy.sqlite is a small library as the
@@ -193,25 +321,44 @@ app/
   Generated/, runtimes/   produced by the core build, not in git
   Directory.Build.props   version from VERSION, build number, PathMap
   nuget.config            pins nuget.org
-tools/build.ps1           targets core, app, test, run, package, clean
+tools/build.ps1           targets core, app, test, run, package, feed, clean
 tools/disc-image.ps1      New-DiscImage, Compare-DiscImage, Remove-DiscImage:
                           the package's ISO made, and read back by mounting
                           it (dot-sourced by build.ps1)
+tools/update-signing.ps1  the update key and what is done with it: making
+                          and checking signatures, writing and reading a
+                          feed, the credential store, the update archive
+                          made and read back, the published build number
+                          (dot-sourced by build.ps1, publish.ps1,
+                          update-key.ps1 and the rehearsal)
+tools/update-key.ps1      the update key: -Create, -Export, -Import, and
+                          with nothing, whether it is here and is the one
+                          the packages carry. Never prints the private half
+tools/update-config.json  the repository, the feed's address, the name the
+                          key is kept under, and its public half
+tools/make-icon.ps1       draws Heracles.ico and Heracles.png from the
+                          layers in app\Heracles\Icon (-Sheet: every size
+                          in one picture, to look at)
 tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           and synthetic input), adapted from Toolbox;
                           ui-check (helpers), check-shell, check-editor,
                           check-boards and check-transfer (the scripted
                           checks of the window, of writing in a note, of a
                           board and a task, and of files in and out),
-                          check-legacy (the first start beside an Electron
-                          library), check-disc (a packaged disc image opened
-                          as a drive, and the app started from it),
+                          check-legacy (the first start beside a library of
+                          the original app), check-disc (a packaged disc
+                          image opened as a drive, and the app started from
+                          it), check-update (a whole update rehearsed with
+                          nothing real in it, and the updates that must be
+                          refused; serve-folder is its web server),
                           check-input (a minute of REAL mouse and
                           keyboard), look-editor and look-boards (pictures,
                           light and dark)
 tools/publish.ps1         a GitHub release from the packages: checks, a
-                          draft, the files, then published. -DryRun sends
-                          nothing. Run by the owner, when he says
+                          draft, the files and the feed, then published,
+                          and the feed read back from where copies read
+                          it. -DryRun sends nothing. Run when the owner
+                          says
 docs/                     the design, the plans, the Mac's rewrite notes,
                           release-notes/<version>.md ("In this version")
 VERSION                   marketing version; build number = commit count
@@ -230,6 +377,9 @@ Swift tree to C# tree (`macos/Sources/HeraclesApp/` to `app/Heracles/`):
 | `Editor/*` | `Editor/` (file for file) |
 | `BoardView.swift`, `TaskDetailView.swift`, `TaskSupport.swift` | `Boards/` |
 | `Navigation.swift` | `Model/Navigation.cs` |
+| `Updates.swift` (over Sparkle) | `Updates/` (the app's own: see Decisions) |
+| `macos/Icon/` | `Icon/`, drawn by `tools/make-icon.ps1` |
+| `update-config.sh`, `release.sh`, `publish.sh`, `update-rehearsal.sh` | `tools/update-config.json`, `tools/build.ps1` (`package`, `feed`), `tools/publish.ps1`, `tools/e2e/check-update.ps1` |
 | `SelfTest.swift`, `Snapshot.swift` | not ported; `tools/e2e` instead |
 
 Types and methods keep the Mac's names where C# allows.
@@ -288,8 +438,11 @@ tools\build.ps1                 # core (release DLL + C# bindings), then the app
 tools\build.ps1 app -Restart    # rebuild the app, close the running build, start the new one
 tools\build.ps1 test            # cargo test --locked, then dotnet test on app\Heracles.Tests
 tools\build.ps1 run             # starts it on the real library, not a fixture
-tools\build.ps1 core package    # self-contained disc image (.iso) for this machine -> build\release
+tools\build.ps1 core package    # for this machine -> build\release: a disc image (.iso) to install from, and the same folder as an archive (.zip) for copies that update themselves
 tools\build.ps1 core package -Arch x64   # and for the other processor (then "core" again, for this one's bindings)
+tools\build.ps1 feed            # update-feed.json for both packages, signed with the update key (needs both, and the key)
+tools\update-key.ps1            # is the update key here, and is it the one the packages carry? (-Create, -Export <file>, -Import <file>)
+tools\make-icon.ps1             # draw the icon again after a change to app\Heracles\Icon (-Sheet <png> to look at every size)
 tools\publish.ps1 -DryRun       # what a release would send, and what would stop it; sends nothing
 tools\build.ps1 clean
 cargo test --locked             # the core alone: every test binary must say ok
@@ -314,13 +467,14 @@ tools\e2e\launch.ps1 --e2e-seed       # ...with a few notes of every kind in it
 tools\e2e\launch.ps1 -Again --new-window   # a second copy while one runs: it hands over
 tools\e2e\capture.ps1                 # PNG of every Heracles window -> build\e2e\shots
 tools\e2e\ui.ps1 tree                 # also: find, invoke, expand, select, setvalue, focus, scroll, click, clickat, drag, keys, text
-tools\e2e\check-shell.ps1             # the scripted check of the window: 30 checks, exit code = failures
+tools\e2e\check-shell.ps1             # the scripted check of the window: 32 checks, exit code = failures
 tools\e2e\check-editor.ps1            # the scripted check of writing in a note: 15 checks
 tools\e2e\check-boards.ps1            # the scripted check of a board and a task: 39 checks
 tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
 tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electron app's library, to be imported
 tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
-tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 16 checks (-Arch x64 for the other one)
+tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 19 checks (-Arch x64 for the other one)
+tools\e2e\check-update.ps1            # a whole update rehearsed from a package, with nothing real in it, and the two that must be refused: 31 checks, about six minutes (-Arch x64; -Look for pictures; -Theme light)
 tools\e2e\check-input.ps1             # REAL mouse and keyboard, for a minute: typing, keys, clicks, drags. 23 checks. Hands off while it runs
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
@@ -354,6 +508,23 @@ windows; and an element scrolled out of view is refused (scroll to it
 first: its rectangle still says where it would be, which can be past the
 edge of its window).
 
+**`tools\e2e\check-update.ps1` rehearses an update from start to finish,
+after any change to updates, to quitting, or to the package, and before a
+release.** It needs the package for the processor (`tools\build.ps1 core
+package`). From it the rehearsal makes copies that say they are versions
+9.9.1 and 9.9.2 (the app's own assembly compiled again under those
+numbers, in the packaged folder), with a key made for the run where the
+real one's public half was, a feed and an archive served from this machine
+by `serve-folder.ps1`, and a library in its work folder
+(`build\update-rehearsal`). Nothing real is in it: no release, no GitHub,
+not the update key, not the real library, not what the real app remembers
+about updates. It checks that a trial copy does not look at all; that the
+old copy is offered the new one, fetches and checks it, quits through its
+own Exit and comes back as the new version, file for file; that the new
+one is offered nothing; and that an archive and a feed altered after
+signing are each refused, for that reason, with nothing installed and (for
+the feed) nothing downloaded. All by automation: no mouse, no keys.
+
 **Then look.** `tools\e2e\look-editor.ps1` takes six pictures, and
 `look-boards.ps1` ten (the board, a task, and the foot of the task). Twice in one
 day a picture showed what 436 passing tests could not: emoji drawn as white
@@ -372,9 +543,13 @@ New checks use the helpers in `tools\e2e\ui-check.ps1` (`Test-Ui`,
 App arguments: a `heracles://` link, `--new-window`, `--e2e-seed` (a
 testing aid that does nothing unless `HERACLES_DATA_DIR` is set and the
 library is empty; among its notes are "Every kind of block" and the todo
-list "Packing", a board with cards of every sort), and
+list "Packing", a board with cards of every sort),
 `--theme-light` or `--theme-dark` (a testing aid: the theme, whatever
-Windows is set to).
+Windows is set to), `--updater-feed <address>` (the feed to read, taken
+only in a run on a test library: the everyday app takes no feed from the
+command line), and `--install-update --pid <n> --target <folder> --version
+<v> [--restart]` (what the app starts the new version with when it quits:
+that run installs the update and does nothing else).
 
 A build cannot replace a program that is running: `tools\build.ps1 app`
 refuses while an instance started from `build\` is up. A test instance
@@ -402,6 +577,16 @@ looking at (one showed Quick Open white on white in dark mode).
   changed anything. At a first start beside an Electron library: `legacy:
   imported <n> notes, <n> tasks, <n> images`, or `legacy: could not be
   imported: <reason>`.
+- Log lines of updates, each beginning `updates: `, in the Mac's words where
+  it says the same: `off: <why>` or `on, reading <feed>` once at start;
+  `found <version> (<build>)`, `nothing newer in the feed` or `stopped:
+  <reason>` for a look (`stopped: The update feed is improperly signed`);
+  `downloaded <version>`, then `<version> is verified and will be installed
+  when the app quits` or `stopped: The update is improperly signed`;
+  `<version> was handed to its installer` as the app quits; and from the
+  copy that installs, `installing <version>` and `installed <version>` or
+  `stopped: <reason>`. **A run that only installs writes no `Heracles
+  <version>` line and no `exit`.**
 - Automation ids. Sidebar: `Sidebar` (the list), rows `note:<id>` (in the
   tree), `favorite:<id>`, `archived:<id>`, `trashed:<id>`, headers
   `notebook:<id>`, `section:favorites|archive|trash`, `toggle:<id>`,
@@ -447,6 +632,17 @@ looking at (one showed Quick Open white on white in dark mode).
   `TaskNewComment`, `Comment:<commentId>`, `CommentEdit:`, `CommentDelete:`,
   `TaskPath` (the tasks above this one), `TaskBack`, `TaskDelete`,
   `TaskClose`.
+- Of updates: in the Help menu, once it is expanded, `UpdateCheck` and
+  `UpdateAutomatic` (item status `ticked`; both `DISABLED` in a run that
+  does not look). The offer: `UpdateWindow` (look `-Within` it),
+  `UpdateVersions` (named by its words: "Heracles 9.9.2 is available. You
+  have 9.9.1."), `UpdateNotes` (named by the notes, as words),
+  `UpdateStatus` (what the window now says: downloading, ready, or why
+  not), `UpdateProgress`, and the buttons `UpdateInstall`, `UpdateLater`,
+  `UpdateSkip`, `UpdateCancel`, `UpdateRestart`, `UpdateClose`, of which
+  only those that apply are showing. `UpdateInstalling` is the window of
+  the copy that installs. A plain message (`Prompts.Message`: "Heracles is
+  up to date") is `MessageText` and `MessageOk`.
 - **A box that takes something new** (`NewColumn:`, `NewCard:`,
   `TaskNewLabel`, `TaskNewSubtask`, `TaskNewComment`) hands it over on
   Enter, or by the button `Add:<the box's id>` that appears once the box
@@ -698,12 +894,70 @@ rules, the Mica backdrop problem, and everything about the RDP control.
 - `tools\build.ps1` now compiles the C# afresh every time
   (`--no-incremental`), because of this machine's clock (see above). A bare
   `dotnet build` or `dotnet test` still trusts the clock.
+- **A part of a Windows file version holds no more than 65535.** The build
+  number is the last part (`0.3.0.52`), and the scripts read it back from
+  `Heracles.dll` with `FileVersionInfo`. The update rehearsal first used the
+  Mac's made-up numbers, 99901 and 99902: the app, which reads the number
+  from its own attribute as text, said 99901, and the file said 34365. The
+  rehearsal uses 9901 and 9902. The commit count is the real number, so
+  this bites at commit 65536.
+- **A folder with a running program in it can be renamed**, on this
+  Windows 11 at least: a spike renamed the folder a copied `ping.exe` was
+  running from. What stops a rename is an open *handle* to a file inside
+  (a test holds one, and the rename is refused). So "the app's folder
+  cannot be moved while the app runs" is not something to lean on, and the
+  installer does not: it waits for the app's process to be gone.
+- **A point that is not on the curve is not a `CryptographicException`.**
+  `ECDsa.Create` with such a public key throws
+  `PlatformNotSupportedException` ("the specified curve or its parameters
+  are not valid for this platform"), with Windows' "the parameter is
+  incorrect" inside it. A test with a nonsense key found it; the check
+  that every update rests on would otherwise have thrown where it should
+  say no.
+- **The pipe a second copy hands over through was made a moment after the
+  name was taken**, on a borrowed thread (`Task.Run`). One run of the whole
+  suite, cold, failed `ASecondLaunchHandsItsArgumentsToTheHolder`, and the
+  next three passed. Asked of Windows directly (the pipes there are, listed
+  under `\\.\pipe\`), the gap was there every time: no timing in the
+  question, so no luck in the answer. The pipe is now made before `Claim`
+  returns. Whether that gap was the cause of the one failure is not
+  proven: it has not been seen since.
+- **Two backslashes in a command given to the shell tool arrive as one**,
+  even inside a here-document whose end marker is quoted; a single
+  backslash before an ordinary character arrives as it was. A Perl script
+  written that way looked for "tools`" where the README says "tools\`",
+  found nothing, and stopped (it was written to stop). Files with doubled
+  backslashes are written with the editing tools.
+- **A line number stops being an address the moment anything above it is
+  edited.** A `sed` replacement by line number, composed before three
+  edits higher in the same file, replaced a closing brace 13 lines away
+  from where it was meant. Read back at once, as these notes say to. Edit
+  by the text, not by the number.
+- In a raw string with `$$`, two closing braces in a row end an
+  interpolation, so JSON that ends `}}}` after one does not compile. Put
+  spaces between them, or use `$$$`.
+- **`ui.ps1` and `capture.ps1` used to drive, and photograph, every process
+  named `Heracles`**, whatever folder it ran from: with the owner's own
+  copy open, a check would have read, clicked and moved things to the
+  trash in his library. It went unnoticed while nobody ran the app for
+  real. Both now look only at copies started from under this checkout's
+  `build\` or from a disc (`Test-OwnCopy`). A check that starts the app
+  from anywhere else will find "Heracles is not running": put the copy
+  under `build\`.
 
 ## For the Mac repository
 
 Core changes made here that the Mac repository can take. Each is portable:
 the core's own tests pass with it on Windows, and nothing is behind a
 Windows-only switch except where a comment says so.
+
+As of 2026-11-25 the core here is the Mac's at `91076bf` (its changes
+since `5dd0252` were taken as a patch: "the original app" in comments and
+messages, and the backup named `heracles-original-<time>.sqlite`) plus the
+three changes below, which the Mac has still to take. Nothing else
+differs: `core/src/ffi.rs`, `model.rs`, `store/tasks.rs`, `transfer.rs`
+and `tests/import_export.rs` are the only files that are not the Mac's
+byte for byte.
 
 1. **`file://` picture URLs** (`core/src/transfer.rs`, one line of
    `core/tests/import_export.rs`). `file_url_path` reads the URL properly: a
@@ -776,6 +1030,20 @@ harness; "Not verified" below says what the checks could not reach.
 - [x] Packages for ARM64 and x64, and a release script (both packages
       built, started and checked, and released as 0.2.0 on 2026-11-23; a
       package is a disc image from 0.2.1)
+- [x] An app icon: the Mac's, drawn for Windows from the same layers (on
+      the program, its windows and the taskbar; seen in the title bars of
+      the window and of the update window. **On reminders it has never
+      been seen**: see "Not verified")
+- [x] Updates over the air: a daily look and Help ▸ Check for Updates…,
+      the release notes shown, installed when the user agrees, and only if
+      the owner signed it (built with tests for every rule, and rehearsed
+      whole by `check-update.ps1`: an old copy replaced itself with a new
+      one and came back as it; an altered archive and an altered feed were
+      each refused. **Never yet from one published version to the next**,
+      which cannot be until a second release with a feed exists: see "Not
+      verified")
+- [x] "The original app" for the Electron app, in the app, the core and
+      the README, and the licence, as on the Mac
 
 ## Spike findings
 
@@ -1149,6 +1417,50 @@ swaps in the text box and puts the caret where the click was.
   byte as it was afterwards. The design also asks that the folder be
   confirmed against a machine that has run the Electron build (Electron
   names it `heracles`; Windows file names ignore case): not done.
+- **An update from one published version to the next.** It cannot be tried
+  until there are two releases with a feed, and 0.3.0 is the first. What
+  stands in for it is the rehearsal (`check-update.ps1`, 31 checks, passed
+  on both packages): an old copy replaced by a new one through the app's
+  own windows and its own Exit, and the two refusals. In the rehearsal the
+  two versions differ only in the app's own assembly and the made-up
+  numbers, the key is one made for the run, and the feed comes from this
+  machine over plain HTTP. **The first real update is the one from 0.3.0
+  to whatever comes next.** If it fails, copies of 0.3.0 stay on 0.3.0
+  until their users put a newer one in by hand, as they did this one.
+- **Updates under a hand.** Nobody has clicked Check for Updates, read the
+  window, or pressed Install and Restart. The rehearsal does all three by
+  automation. Skip This Version, Remind Me Later and Cancel during a
+  download are covered by tests of what they decide, and were not pressed
+  in a window at all.
+- **Text typed in the moment before an update installs.** The install
+  quits the app through its ordinary Exit, which saves every editor first,
+  and the rehearsal takes that path (unlike the Mac's, which stops its
+  copies with a signal). But nothing was being typed when it did.
+- **A copy that cannot replace itself**: run from the disc, or from a
+  folder Windows keeps it from changing. It is meant to say so in the
+  update window and offer nothing to install (`UpdateInstaller.WhyNotHere`,
+  tested for a folder at the top of a drive and for one that is not
+  there). Not seen in a window, and not tried from a real disc.
+- **What Windows says about the new version when it arrives by itself.**
+  The first copy of the app comes from the web and Windows asks before
+  running it. An update is fetched by the app, not by a browser, so the
+  files should carry no mark of the web and nothing should be asked. On
+  this machine nothing was (the rehearsal's copies came back by
+  themselves), but those archives came from this machine. Defender, or a
+  company's rules, may think otherwise of a program that replaces itself.
+- Updates on Windows 10, on x64 hardware (the x64 rehearsal ran under
+  emulation), behind a proxy, and on a slow or broken connection. A
+  download that stalls is given up after a minute with nothing kept,
+  which a test covers only for a download that never starts.
+- **The icon on a reminder.** The identity now names the picture
+  (`IconUri`), tested against a registry key of the test's own. No
+  reminder of the app's has been seen, with or without it.
+- **The icon as Windows shows it**: in File Explorer, on the taskbar, in
+  Alt-Tab, at each of its ten sizes. It was looked at as the script draws
+  it (every size, on white and on black) and in the title bars of the
+  app's windows.
+- **The way back from a lost update key.** There is none in the app, and
+  none was tried. See "Decisions".
 
 ## Known faults
 
@@ -1186,25 +1498,144 @@ Found and not yet fixed. Each is small; none loses data.
   never scheduled. (The Mac allows the same.)
 - The title and icon stand over the editor's column by fixed margins, so
   they sit a few pixels off it when the scroll bar shows.
+- An update is the whole app each time (61 MB for ARM64, 66 for x64), and
+  while it installs there are three copies of the app on the disc: some
+  550 MB, for a few seconds. (No delta updates, as on the Mac.)
+- A daily look that fails says nothing in the app: the reason is in the
+  log (`updates: stopped: ...`). One asked for from the menu says why.
+- When an install cannot go through once the app has quit (something has
+  one of its files open, the folder cannot be changed), the app as it was
+  is started again and says nothing. The log has the reason, and the next
+  daily look offers the update again.
+- Release notes in the update window show a link as its words, and it
+  cannot be followed. (On purpose: nothing in a feed is more than words.)
+- The offer made by the daily look opens without taking the keyboard, so
+  that typing in a note is not interrupted. It may therefore open behind
+  another program's window, and wait there to be seen.
 
 ## Current state (update in every commit)
 
-**License, 2026-11-23, on the owner's word and pushed:** `LICENSE` is now
-proprietary (see Conventions) and the README's License section says so.
-Up to `6132977` the repository carried the MIT license. No code changed.
-The commit was made on the Mac from a fresh clone, so the tests were not
-run for it. Pull before other work.
+**Fetch before anything else, on every machine: `git fetch origin`, then
+`git status`.** This repository is worked on from more than one machine.
+On 2026-11-25 a session on the Windows PC built a whole release on a
+checkout that was one commit behind GitHub, where the licence commit
+below, made on the Mac two days before, was waiting. It found out when its
+push was refused, rebased its two commits onto that one, and had to
+package and check everything again, since the build number is the commit
+count. The status a session is shown when it starts says nothing of what
+is on GitHub.
 
-As of 2026-11-23, on `main`. `main` on GitHub was replaced on 2026-11-22
+**License, 2026-11-23, on the owner's word and pushed** (commit `4946a75`,
+made on the Mac from a fresh clone, so the tests were not run for it):
+`LICENSE` is proprietary (see Conventions) and the README's License
+section says so. Up to `6132977` the repository carried the MIT license.
+No code changed in that commit.
+
+As of 2026-11-25, on `main`. `main` on GitHub was replaced on 2026-11-22
 (commit `9b56acf`, a force-push on the owner's word): the Electron app and
 its history are no longer there. Any other clone of this repository must
 `git fetch origin` and `git reset --hard origin/main` before it is used,
-and must never push its old history. **All of `main` was pushed on
-2026-11-23, this commit included, and 0.2.0 and then 0.2.1 were released,
-on the owner's word.** What is committed after that stays local until he
-says push: `git log origin/main..HEAD` lists it.
+and must never push its old history. 0.2.0 and 0.2.1 were released on
+2026-11-23. **This commit is 0.3.0, pushed and released on the owner's
+word of 2026-11-25** ("this version needs feature parity and testing, with
+a new release pushed to git hub"); how the release went is written by the
+commit after this one, under "Since stage 7" at the end. What is committed
+after a push stays local until he says push: `git log origin/main..HEAD`
+lists it.
 
-**The latest release is 0.2.1, handed out as disc images** (2026-11-23, on
+**What 0.3.0 is: the Mac app's last sixteen commits, brought across.** The
+Mac repository was read from `5dd0252`, which this app was built against,
+to `91076bf`, its 0.4.0. It had gained four things, and this app now has
+them:
+
+- **An icon.** The Mac's own, a notebook page with a heading, a checklist
+  and lines of text, drawn for Windows from the same layers: on the
+  program, its windows, the taskbar and its reminders.
+- **Updates over the air.** The app looks for a new version once a day and
+  from Help ▸ Check for Updates…, shows what changed, and installs it when
+  the user agrees, after every editor has saved. It takes an update only
+  if the feed that announces it was signed with the update key, and the
+  archive is the one that feed describes. The Mac does this with Sparkle;
+  here it is the app's own code, for the reasons under "Decisions". **From
+  0.3.0 on nobody has to download a disc image again; 0.2.1 and earlier
+  have no updater and cannot be told.**
+- **"The original app"** where the app, the core and the README said
+  "Electron", and the copy an import makes named
+  `heracles-original-<time>.sqlite`.
+- **The licence**: proprietary, as the Mac's. The repository has carried
+  it since 2026-11-23 (above); 0.3.0 is the first release under it.
+
+And three things found on the way, each fixed with a test that fails
+without the fix: the pipe a second copy hands over through was made a
+moment after the name was taken (see "Found on Windows"); the harness
+would have driven the owner's own copy of the app, had one been open; and
+the copy that installs an update took its command line at its word.
+
+**Where 0.3.0 stands.** From a clean build: no warnings, 203 Rust tests,
+759 .NET tests and one skipped on purpose (151 of them new: 144 of
+updates, 6 of the icon on reminders, 1 of the hand-over), 116 scripted
+checks of the real window by automation (`check-shell.ps1` 32,
+`check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
+`check-legacy.ps1` 20), 19 of a packaged disc (`check-disc.ps1`), 31 of a
+whole update (`check-update.ps1`), and 23 by a real mouse and keyboard
+(`check-input.ps1`). Every rule an update rests on was broken on purpose
+once (nine of them: the feed's signature, the archive's checksum, files
+landing outside the folder, a feed from the command line, an older
+build offered, somebody's folder removed, and the three guards on the
+copy that installs), and each time a test failed.
+
+**What that does not say** is under "Not verified". The entries that
+matter most are the ones 0.2 already had (nobody has used the app; it has
+never run on the real library) and one that is new: **no copy has yet
+updated itself from one published version to the next**, because 0.3.0 is
+the first that can. The rehearsal stands in for it. The first real update
+is the one to whatever is released after 0.3.0.
+
+**What is left, and it is the owner's**:
+
+1. **Keep a copy of the update key, before anything else.** It is in this
+   account's Windows credentials on this PC and nowhere else. Run
+   `tools\update-key.ps1 -Export <a file outside the repository>`, put
+   what the file holds into a password manager, and delete the file. If
+   the key is lost (the account goes, Windows is put in again), no copy
+   of 0.3.0 or later can ever be updated: everyone downloads by hand
+   again, as before. Nobody but the owner can do this: a session must
+   never write the private key anywhere, and has not.
+2. *Use it.* Put 0.3.0 on this PC from its disc image, into
+   `%LOCALAPPDATA%\Programs`, and start it on the real library. That first
+   start imports a library of the original app if one is there, shows the
+   summary, and registers the app's links and reminders with Windows. Ten
+   minutes of typing, dragging blocks by their handles, right-clicking
+   things, copying and pasting. Give a task a reminder two minutes ahead,
+   close the app, and click the banner when it comes. Choose Help ▸ Check
+   for Updates…: it should say that Heracles is up to date. What goes
+   wrong goes in "Known faults", or gets fixed, and what is fixed is the
+   next release, **which that copy should then offer by itself**.
+3. *The next release*, when he says so. A version that has a release is
+   taken (the script refuses it): change `VERSION`, write
+   `docs\release-notes\<version>.md` (it is what the update window shows),
+   commit, and push on his word. Then, from the commit that was pushed:
+   `tools\build.ps1 core package -Arch x64`, then `tools\build.ps1 core
+   package` (this machine's last, so the bindings match its DLL), then
+   `tools\build.ps1 feed` (it needs both packages and the update key, and
+   refuses a build number that is not higher than the published one).
+   Check them: `tools\e2e\check-disc.ps1` and `tools\e2e\check-update.ps1`
+   for each processor (`-Arch x64` for the other). Then
+   `tools\publish.ps1 -DryRun`, and when that reads right,
+   `tools\publish.ps1`, which ends by reading the feed back from where
+   installed copies read it. The packages must be built from the very
+   commit that is pushed (the build number is the commit count, and the
+   script refuses any other), so a commit made after packaging means
+   packaging again, and the feed again.
+
+Nothing else is planned. The design's "out of scope" list, and "Known
+faults" above, are what a next session would choose from.
+
+What follows this paragraph, down to "What follows is the record", is the
+head of these notes as it stood at 0.2.1, kept for what it says of the
+disc image and of the app as a whole.
+
+**Before 0.3.0, the latest release was 0.2.1, handed out as disc images** (2026-11-23, on
 the owner's word: "the next release as an iso".
 https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.1,
 the tag `v0.2.1` at commit `2444eeb`, build 46, with
@@ -1224,8 +1655,8 @@ x64 name, three of them fail, as they should). `tools\publish.ps1` sends
 the `.iso` files, and its install text is rewritten for a disc. How the
 release went is under "Stage 7" at the end.
 
-**Where things stand: the app is built and released. All seven stages of
-the design are done.** 0.2.0 came first (2026-11-23:
+**Where things stood at 0.2.1: the app built and released, all seven
+stages of the design done.** 0.2.0 came first (2026-11-23:
 https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.2.0,
 the tag `v0.2.0` at commit `4fd1a3d`, build 44, with zips for ARM64 and
 x64), and is still there. The app
@@ -1247,9 +1678,10 @@ of a packaged disc (`check-disc.ps1`) and 23 by a real mouse and keyboard
 (`check-input.ps1`). Both packages were built, each was started and
 checked, and they are the files of the release: see "Stage 7" at the end.
 
-**What that does not say** is under "Not verified", and three entries
-matter. The release changes none of them: it was made, on the owner's
-word, before any of the three was tried. No person has used the app yet. A script used it for a minute with
+**What that did not say**, and still does not, is under "Not verified",
+and three entries matter. The releases change none of them: each was
+made, on the owner's word, before any of the three was tried. No person
+has used the app yet. A script used it for a minute with
 a real mouse and keyboard (`check-input.ps1`: typing, keys, clicks and
 drags, and it found a fault no test could have), but it did only what it
 was written to do: the block handle, the context menus, selecting with the
@@ -1259,31 +1691,6 @@ it does that only on the real library and has only ever been started on
 fixtures: the first start on the real library is the first time that runs.
 And that same first start is when a real Electron library, if there is
 one, is imported for the first time: only made-up ones have been.
-
-**What is left, and it is the owner's**:
-
-1. *Use it.* Start a build on the real library (`tools\build.ps1 run`, a
-   package, or the release's zip). That first start imports an Electron
-   library if one is there, shows the summary, and registers the app's
-   links and reminders with Windows. Ten minutes of typing, dragging blocks
-   by their handles, right-clicking things, copying and pasting. Give a
-   task a reminder two minutes ahead, close the app, and click the banner
-   when it comes. What goes wrong goes in "Known faults", or gets fixed,
-   and what is fixed is the next release.
-2. *The next release*, when he says so. A version that has a release is
-   taken (the script refuses it): change `VERSION`, write
-   `docs\release-notes\<version>.md`, commit, and push on his word. Then,
-   from the commit that was pushed: `tools\build.ps1 core package -Arch
-   x64`, then `tools\build.ps1 core package` (this machine's last, so the
-   bindings match its DLL), `tools\e2e\check-disc.ps1` for each (`-Arch
-   x64` for the other), then `tools\publish.ps1 -DryRun`, and when that
-   reads right, `tools\publish.ps1`. The packages must be built from the
-   very commit that is pushed (the build number is the commit count, and
-   the script refuses any other), so a commit made after packaging means
-   packaging again.
-
-Nothing else is planned. The design's "out of scope" list, and "Known
-faults" above, are what a next session would choose from.
 
 What follows is the record, stage by stage, as each was finished. Read it
 for how a thing was done; some of it describes the app as it was then.
@@ -1672,7 +2079,77 @@ Plan: `docs/superpowers/plans/2026-11-23-windows-stage-7-package-and-release.md`
   and the digests GitHub gives for both images are the ones in
   `SHA256SUMS`.
 - Packages are not kept: they are under `build\release`, which is not in
-  git, and they are only good for the commit they were built from. The
-  ones on this machine are the released ones of 0.2.1, build 46 (and the
-  zips of 0.2.0, whose `SHA256SUMS` the later build wrote over; GitHub
-  has that file).
+  git, and they are only good for the commit they were built from. Those
+  of 0.2.0 and 0.2.1 went from this machine with a clean build on
+  2026-11-25 (`tools\build.ps1 clean` removes all of `build\`). GitHub
+  has them.
+
+**Since stage 7: parity with the Mac's 0.4.0** (2026-11-25, on the owner's
+word: "review the mac OS app for changes made since the last commit. this
+version needs feature parity and testing, with a new release pushed to git
+hub"). No plan document was written for it: the Mac's own design for
+updates (`docs/superpowers/specs/2026-11-24-ota-updates-design.md` in its
+repository) says what must hold, and "Decisions" above says how Windows
+does it. Reviewed by the session that wrote it; no one else has read it.
+
+- The review. `git fetch origin` in `..\Heracles` brought sixteen commits
+  after `5dd0252`: a notarized disk image (0.3.1), the icon (0.3.2,
+  0.3.3), the licence, Sparkle and everything round it (0.4.0), and the
+  original app removed. Each was read as a diff. Nothing else in the
+  Swift sources changed: `TaskSupport.swift` and `LegacyImport.swift`
+  only in their words, `Commands.swift` and `HeraclesApp.swift` only for
+  updates, `SelfTest.swift` only for the icon.
+- The core: the Mac's diff of `core/` applied as a patch, clean. 203
+  tests, the same number: one of them now also asks what the backup is
+  called.
+- The icon: `tools\make-icon.ps1`, and a look at every size on white and
+  on black, and at the title bars.
+- Updates, test first, the parts with no view in them before the parts
+  with one: the policy (the Mac's nine tests, less its two flags that
+  Windows has not, plus what Windows adds), the feed and its signature,
+  what is remembered, looking and fetching against a web server of the
+  test's own, the swap of the folder, the release notes read for showing.
+  Then the window, the menu and the timer, which only the rehearsal
+  reaches.
+- For whoever changes it:
+  - **A look**: `UpdateCenter.Look` asks `Updater.CheckAsync`, which
+    fetches the feed, has `UpdateFeed.Read` check its signature before
+    reading a word of it, and compares build numbers. Only a look asked
+    for from the menu says anything when there is nothing, or when it
+    could not be done.
+  - **A fetch** is by `Updater.FetchAsync`: the archive into
+    `<updates>\download.part` with its SHA-256 worked out as it arrives,
+    refused unless length and checksum are the feed's, unpacked into
+    `<updates>\staged`, nothing kept of one that was refused.
+  - **The install** is the new version's own doing, on the old one's quit
+    (`UpdateCenter.InstallOnExit`, then `App.InstallUpdate` in the copy
+    that was started). It leaves `<name>.update-old` beside the app; the
+    new app removes that, and `staged`, when it starts, before any look.
+  - **The daily look is not timed across days.** A timer comes round
+    every hour at most and asks whether a look is due, so a PC that slept
+    or a clock that was put right does not throw it out; a last look in
+    the future counts as due.
+  - **An offer the daily look makes does not take the keyboard**
+    (`ShowActivated` off), so that someone typing in a note does not
+    press "Install Update" with the Enter key.
+  - The signature made by Windows PowerShell and the one checked by .NET
+    are the same thing by a test that holds one of each
+    (`ASignatureMadeByTheReleaseScriptsHolds`): if the scripts' signing
+    is ever changed, make a new one for that test.
+  - The rehearsal starts each copy on a library that "last looked two
+    days ago" (it writes that into `updates\preferences.json`), or
+    nothing would be looked for after the first start.
+  - `check-shell.ps1` and `check-disc.ps1` now also say that a run on a
+    test library does not look for updates. If either ever fails there,
+    a test is about to offer itself the published app.
+- What reading the code back found, before any of it was out (each then
+  given a test, or put right where no test reaches): the copy that
+  installs took its command line at its word (see "Decisions"); a copy
+  that could not open its library would, on "Install and Restart", have
+  written an empty list over the saved windows (it quits another way
+  now); and the offer took the keyboard from whoever was typing.
+- The first rehearsal passed 27 of 31, and the four were the check's own
+  (build numbers too big for a file version: see "Found on Windows"). The
+  update itself went through at the first try: found, fetched, checked,
+  handed over on quit, installed in a second, and the app back as the new
+  version.

@@ -25,8 +25,21 @@ internal sealed class SingleInstance : IDisposable
     private SingleInstance(Mutex mutex, string pipe, Action<string[]> onSecondLaunch)
     {
         this.mutex = mutex;
-        _ = Task.Run(() => Listen(pipe, onSecondLaunch, stop.Token));
+        // The pipe is there before the name is said to be held, so a later
+        // copy finds somebody to hand over to however busy this one is.
+        // (Made on a borrowed thread a moment later, it could come after a
+        // later copy had given up waiting.)
+        NamedPipeServerStream? first = null;
+        try { first = Open(pipe); }
+        catch (IOException) { /* Listen tries again. */ }
+        catch (UnauthorizedAccessException) { }
+        _ = Task.Run(() => Listen(pipe, first, onSecondLaunch, stop.Token));
     }
+
+    // Only this user's processes can connect.
+    private static NamedPipeServerStream Open(string pipe) => new(
+        pipe, PipeDirection.In, 1, PipeTransmissionMode.Byte,
+        PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
     /// <summary>
     /// Take the name. Null when another process, or this one, already holds
@@ -44,7 +57,7 @@ internal sealed class SingleInstance : IDisposable
             mutex.Dispose();
             return null;
         }
-        return new SingleInstance(mutex, "heracles-" + key, onSecondLaunch);
+        return new SingleInstance(mutex, PipeName(name), onSecondLaunch);
     }
 
     /// <summary>Hand arguments to the holder of the name. False if nobody answered in time.</summary>
@@ -52,7 +65,7 @@ internal sealed class SingleInstance : IDisposable
     {
         try
         {
-            using var client = new NamedPipeClientStream(".", "heracles-" + Key(name), PipeDirection.Out, PipeOptions.CurrentUserOnly);
+            using var client = new NamedPipeClientStream(".", PipeName(name), PipeDirection.Out, PipeOptions.CurrentUserOnly);
             client.Connect((int)Math.Max(1, timeout.TotalMilliseconds));
             var bytes = Encoding.UTF8.GetBytes(Encode(args) + "\n");
             client.Write(bytes, 0, bytes.Length);
@@ -73,6 +86,9 @@ internal sealed class SingleInstance : IDisposable
         catch (JsonException) { return []; }
     }
 
+    /// <summary>The pipe the holder of a name listens on.</summary>
+    internal static string PipeName(string name) => "heracles-" + Key(name);
+
     /// <summary>The same for a path however its letters are cased, since Windows paths ignore case.</summary>
     private static string Key(string name)
     {
@@ -80,16 +96,17 @@ internal sealed class SingleInstance : IDisposable
         return Convert.ToHexString(hash, 0, 8);
     }
 
-    private static async Task Listen(string pipe, Action<string[]> onSecondLaunch, CancellationToken token)
+    /// <param name="opened">The pipe made when the name was taken, for the first caller.</param>
+    private static async Task Listen(string pipe, NamedPipeServerStream? opened, Action<string[]> onSecondLaunch, CancellationToken token)
     {
+        // Given back if the holder goes before anyone has called.
+        await using var unused = new Unused(() => opened);
         while (!token.IsCancellationRequested)
         {
             try
             {
-                // Only this user's processes can connect.
-                await using var server = new NamedPipeServerStream(
-                    pipe, PipeDirection.In, 1, PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await using var server = opened ?? Open(pipe);
+                opened = null;
                 await server.WaitForConnectionAsync(token).ConfigureAwait(false);
 
                 var buffer = new byte[LongestMessage];
@@ -108,6 +125,12 @@ internal sealed class SingleInstance : IDisposable
             catch (IOException) { /* A caller that went away mid-message. Listen for the next. */ }
             catch (ObjectDisposedException) { return; }
         }
+    }
+
+    /// <summary>Closes the pipe that was made ahead, if it is still waiting to be used when listening ends.</summary>
+    private sealed class Unused(Func<NamedPipeServerStream?> pipe) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => pipe()?.DisposeAsync() ?? ValueTask.CompletedTask;
     }
 
     public void Dispose()

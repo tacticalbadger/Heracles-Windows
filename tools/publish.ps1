@@ -6,9 +6,15 @@
 .DESCRIPTION
         tools\publish.ps1 [-Replace] [-Prerelease] [-DryRun]
 
-    Tag v<version> (from the VERSION file), with every
-    build\release\Heracles-<version>-win-<arch>.iso and SHA256SUMS attached,
-    so the app can be downloaded from the repo's Releases page.
+    Tag v<version> (from the VERSION file), with these attached from
+    build\release, for both processors:
+
+      Heracles-<version>-win-<arch>.iso   what people download and install
+      Heracles-<version>-win-<arch>.zip   what installed copies download to
+                                          update themselves
+      update-feed.json                    what tells installed copies that
+                                          there is a new version
+      SHA256SUMS
 
     Before anything is sent: the checksums are verified, the packages must
     have been built from the current commit (their build number is the commit
@@ -16,6 +22,14 @@
     standard install text below plus docs\release-notes\<version>.md ("In
     this version") when that file exists. Keep names, hostnames and account
     details out of release notes.
+
+    And a release is refused in any state that would silently stop updates:
+    without a package for each processor; without the feed; with a feed that
+    is not signed by the key the packaged copies check against, or that
+    describes other archives than the ones being sent, or another version or
+    build; with a build number that is not higher than the one already
+    published. Once it is out, the feed is read back from the address
+    installed copies read it from, and compared with the one that was built.
 
     -Replace     re-upload the files and notes of a release that already exists
                  (not possible where releases are immutable)
@@ -54,6 +68,9 @@ $Version = (Get-Content (Join-Path $Root 'VERSION') -Raw).Trim()
 $Tag = "v$Version"
 $Out = Join-Path $Root 'build\release'
 $SumsPath = Join-Path $Out 'SHA256SUMS'
+$FeedPath = Join-Path $Out 'update-feed.json'
+# Reading a feed and checking its signature, as the app does.
+. (Join-Path $PSScriptRoot 'update-signing.ps1')
 
 function Step([string]$text) { Write-Host "==> $text" -ForegroundColor Cyan }
 
@@ -81,6 +98,7 @@ function Invoke-Git {
 # ----- The files -----
 
 $packages = @(Get-ChildItem $Out -Filter "Heracles-$Version-win-*.iso" -ErrorAction SilentlyContinue | Sort-Object Name)
+$archives = @(Get-ChildItem $Out -Filter "Heracles-$Version-win-*.zip" -ErrorAction SilentlyContinue | Sort-Object Name)
 if ($packages.Count -eq 0 -or -not (Test-Path $SumsPath)) {
     throw "no packages for $Version in build\release; run: tools\build.ps1 core package (and again with -Arch for the other architecture)"
 }
@@ -106,8 +124,63 @@ foreach ($package in $packages) {
     }
     Write-Host ("{0}  {1:N0} MB  build {2}" -f $package.Name, ($package.Length / 1MB), $fileVersion.FilePrivatePart)
 }
-if ($packages.Count -lt 2) {
-    Write-Host 'note: there is a package for one architecture only; the other is built with -Arch'
+foreach ($archive in $archives) {
+    $actual = (Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not $expected.ContainsKey($archive.Name) -or $expected[$archive.Name] -ne $actual) {
+        throw "$($archive.Name) does not match SHA256SUMS; run the package step again"
+    }
+    Write-Host ("{0}  {1:N0} MB" -f $archive.Name, ($archive.Length / 1MB))
+}
+
+# ----- Updates -----
+
+# Every copy that is out looks for the newest release's feed and takes what
+# it names. A release that is wrong here is one nobody is offered, or one
+# every copy refuses, and nothing would say so afterwards.
+Step 'Checking the update feed'
+$config = Get-UpdateConfig $Root
+$feedManifest = $null
+foreach ($arch in 'arm64', 'x64') {
+    $name = "Heracles-$Version-win-$arch"
+    if (-not (Test-Path (Join-Path $Out "$name.iso")) -or -not (Test-Path (Join-Path $Out "$name.zip"))) {
+        Stop-Publish "there is no package for $arch. Copies on that processor would never be offered this version. Run: tools\build.ps1 core package -Arch $arch"
+    }
+}
+if (-not (Test-Path $FeedPath)) {
+    Stop-Publish 'there is no update-feed.json. Without it no installed copy learns of this version. Run: tools\build.ps1 feed'
+}
+else {
+    foreach ($archive in $archives) {
+        $arch = $archive.BaseName -replace '^.*-win-', ''
+        # The key the copies in this package will check a feed against.
+        $settingsPath = Join-Path $Out ($archive.BaseName + '\Heracles.update.json')
+        if (-not (Test-Path $settingsPath)) { throw "the staged folder for $($archive.Name) has no Heracles.update.json; run the package step again" }
+        $settings = [System.IO.File]::ReadAllText($settingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+        if ($settings.feed -ne $config.feed -or $settings.key -ne $config.key) {
+            Stop-Publish "the package for $arch was made with another update key or feed address than tools\update-config.json has. Package again."
+        }
+        try { $feedManifest = Read-UpdateFeed -Path $FeedPath -Public $settings.key }
+        catch {
+            Stop-Publish "the feed is not one the copies in the $arch package would take: $($_.Exception.Message)"
+            continue
+        }
+        if (-not $feedManifest.archives.PSObject.Properties[$arch]) {
+            Stop-Publish "the feed names no archive for $arch"
+            continue
+        }
+        $named = $feedManifest.archives.$arch
+        $hash = (Get-FileHash $archive.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ([long]$named.size -ne $archive.Length -or $named.sha256 -ne $hash) {
+            Stop-Publish "the feed describes another $($archive.Name) than the one here (its length or its checksum differs). Run: tools\build.ps1 feed"
+        }
+    }
+    if ($null -ne $feedManifest) {
+        if ($feedManifest.version -ne $Version) { Stop-Publish "the feed is for version $($feedManifest.version), not $Version. Run: tools\build.ps1 feed" }
+        if ([int]$feedManifest.build -ne $commitCount) {
+            Stop-Publish "the feed is for build $($feedManifest.build), but the current commit is number $commitCount. Package again from this commit, then: tools\build.ps1 feed"
+        }
+        Write-Host ("update-feed.json  version {0}, build {1}, signed with the key in the packages" -f $feedManifest.version, $feedManifest.build)
+    }
 }
 
 # The tag points at the commit the release was built from: it has to be on GitHub.
@@ -123,6 +196,31 @@ if ($remote -notmatch 'github\.com[:/]+([^/]+)/([^/]+?)(\.git)?$') { throw "orig
 $Owner = $Matches[1]
 $Repo = $Matches[2]
 
+# The addresses built into the packages and written in the feed must be this
+# repository's: the feed where the newest release serves it, each archive
+# where this release will hold it.
+$wantedFeed = "https://github.com/$Owner/$Repo/releases/latest/download/update-feed.json"
+if ($config.feed -ne $wantedFeed) {
+    Stop-Publish "the packages read their feed from $($config.feed), which is not where this release will serve it ($wantedFeed). See tools\update-config.json."
+}
+if ($null -ne $feedManifest) {
+    foreach ($archive in $archives) {
+        $arch = $archive.BaseName -replace '^.*-win-', ''
+        $wanted = "https://github.com/$Owner/$Repo/releases/download/$Tag/$($archive.Name)"
+        if ($feedManifest.archives.PSObject.Properties[$arch] -and $feedManifest.archives.$arch.url -ne $wanted) {
+            Stop-Publish "the feed sends $arch copies to $($feedManifest.archives.$arch.url), which is not where this release will hold the archive ($wanted)"
+        }
+    }
+    # A copy takes an update only if its build number is higher than its own.
+    try {
+        $out = Get-PublishedUpdateBuild $config
+        if ($null -eq $out) { Write-Host "no feed is published yet: build $($feedManifest.build) will be the first with one" }
+        elseif ([int]$feedManifest.build -gt $out) { Write-Host "build $($feedManifest.build) is higher than the published build $out" }
+        elseif (-not $Replace) { Stop-Publish "build $($feedManifest.build) is not higher than the published build $out. Installed copies would never be offered this version." }
+    }
+    catch { Stop-Publish $_.Exception.Message }
+}
+
 # ----- The notes -----
 
 $notes = @"
@@ -137,10 +235,14 @@ Heracles is a local-first, hierarchical notebook for Windows: pages in notebooks
 
 This build is **not code-signed**. If Windows shows "Windows protected your PC", choose **More info**, then **Run anyway**. Nothing needs installing: the .NET runtime is inside the folder. Requires Windows 10 version 2004 or newer, or Windows 11.
 
+## Updates
+
+From version 0.3.0 on, Heracles updates itself: it looks for a new version once a day and from **Help > Check for Updates**, shows what changed, and replaces its own folder when you agree. So this download is only for putting Heracles on a PC for the first time, or over a version older than 0.3.0. Keep the folder in a place of your own: run from the disc, it cannot replace itself. The ``.zip`` files and ``update-feed.json`` below are what installed copies fetch; there is no need to download them.
+
 ## First run
 
 - Your library is stored only on your PC, under ``%APPDATA%\Heracles``.
-- If the earlier version of Heracles was used on this PC, its library is brought across the first time this one starts. The old library is not changed, and a copy of it is kept.
+- If the original Heracles (version 0.1) was used on this PC, its library is brought across the first time this one starts. The old library is not changed, and a copy of it is kept.
 - Reminders on tasks are delivered by Windows whether or not Heracles is running. Clicking one opens its list.
 "@
 $versionNotes = Join-Path $Root "docs\release-notes\$Version.md"
@@ -155,7 +257,7 @@ $title = "Heracles $Version"
 if ($DryRun) {
     Step "Dry run: would publish $Tag to $Owner/$Repo at $($head.Substring(0, 7))"
     Write-Host "title: $title"
-    Write-Host "files: $(($packages | ForEach-Object { $_.Name }) -join ', '), SHA256SUMS"
+    Write-Host "files: $((@($packages) + @($archives) | ForEach-Object { $_.Name }) -join ', '), update-feed.json, SHA256SUMS"
     Write-Host '--- notes ---'
     Write-Host $notes
     Write-Host '--- end of notes ---'
@@ -232,6 +334,11 @@ catch { if ((Get-StatusCode $_) -ne 404) { throw "GitHub refused the request ($(
 
 function Send-Files($release) {
     foreach ($package in $packages) { Send-Asset $release $package 'application/x-iso9660-image' }
+    foreach ($archive in $archives) { Send-Asset $release $archive 'application/zip' }
+    # The feed goes up while the release is still a draft, with the archives
+    # it names already there: the moment the release is out, it is what every
+    # installed copy reads.
+    Send-Asset $release (Get-Item $FeedPath) 'application/json'
     Send-Asset $release (Get-Item $SumsPath) 'text/plain'
 }
 
@@ -278,6 +385,35 @@ else {
 
 $published = Invoke-GitHub 'Get' "$api/releases/tags/$Tag"
 $names = @($published.assets | ForEach-Object { $_.name })
-$missing = @(@($packages | ForEach-Object { $_.Name }) + 'SHA256SUMS' | Where-Object { $names -notcontains $_ })
+$missing = @(@(@($packages) + @($archives) | ForEach-Object { $_.Name }) + 'update-feed.json' + 'SHA256SUMS' | Where-Object { $names -notcontains $_ })
 if ($missing.Count -gt 0) { throw "release $Tag is out, but GitHub does not list: $($missing -join ', ')" }
 Write-Host "published: $($published.html_url) ($($names.Count) files)"
+
+# What installed copies will read from now on, fetched the way they fetch
+# it. A pre-release is not "the newest release", so its feed is not served
+# there, and nobody is offered it: that is what a pre-release is for.
+if ($Prerelease) {
+    Write-Host 'note: a pre-release is not offered to installed copies; the feed they read is still the one of the newest full release'
+}
+else {
+    Step 'Reading the feed back from where installed copies read it'
+    $local = (Get-FileHash $FeedPath -Algorithm SHA256).Hash
+    $served = $null
+    $temp = [System.IO.Path]::GetTempFileName()
+    try {
+        # GitHub takes a moment to send "latest" to a release that has just come out.
+        for ($attempt = 0; $attempt -lt 12 -and $served -ne $local; $attempt++) {
+            if ($attempt -gt 0) { Start-Sleep -Seconds 5 }
+            try {
+                Invoke-WebRequest -Uri $config.feed -OutFile $temp -UseBasicParsing -TimeoutSec 60 -Headers @{ 'Cache-Control' = 'no-cache' } | Out-Null
+                $served = (Get-FileHash $temp -Algorithm SHA256).Hash
+            }
+            catch { $served = $null }
+        }
+    }
+    finally { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    if ($served -ne $local) {
+        throw "release $Tag is out, but $($config.feed) does not serve the feed that was built. Installed copies will not be offered this version until it does. Is this release marked as the latest?"
+    }
+    Write-Host "ok: $($config.feed) serves the feed that was built"
+}

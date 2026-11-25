@@ -122,8 +122,23 @@ function Get-NativeControl($element, [string]$class) {
 
 $Auto = [System.Windows.Automation.AutomationElement]
 $TreeScope = [System.Windows.Automation.TreeScope]
-$app = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue)
-if ($app.Count -eq 0) { Write-Host 'Heracles is not running'; exit 1 }
+# Only copies that are a test's to drive: one started from under this
+# checkout's build folder, or from a disc (check-disc.ps1 starts the app
+# from a mounted image). A copy started from anywhere else is the owner's
+# own, with his library open in it, and is never looked at or touched.
+$testRoot = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'build').TrimEnd('\') + '\'
+function Test-OwnCopy($process) {
+    try {
+        $path = $process.Path
+        if (-not $path) { return $false }
+        if ($path.StartsWith($testRoot, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+        $drive = New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot($path))
+        return $drive.DriveType -eq [System.IO.DriveType]::CDRom
+    }
+    catch { return $false }
+}
+$app = @(Get-Process -Name 'Heracles' -ErrorAction SilentlyContinue | Where-Object { Test-OwnCopy $_ })
+if ($app.Count -eq 0) { Write-Host 'Heracles is not running (no copy started from build\ or from a disc)'; exit 1 }
 $processIds = @($app | ForEach-Object { $_.Id })
 
 function Get-AppWindows {

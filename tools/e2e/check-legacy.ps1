@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    Drives the built app through its first start on a library the Electron
+    Drives the built app through its first start on a library the original
     app left behind, and says what passed.
 
 .DESCRIPTION
         tools\e2e\check-legacy.ps1 [-Exe <path>]
 
-    Puts a small Electron library in the fixture (see
+    Puts a small library of the original app in the fixture (see
     app\Heracles.Tests\Fixtures\README.md), starts the app on it, and checks
     in the real window: a summary says what came across and where the copy of
     the old library is, and lists what had to be adjusted; the old notes are

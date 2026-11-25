@@ -20,7 +20,7 @@ impl NoteKind {
         }
     }
 
-    /// Read a stored name. Anything unknown is a page, as the Electron app
+    /// Read a stored name. Anything unknown is a page, as the original app
     /// treated it.
     pub fn from_stored(name: &str) -> NoteKind {
         match name {
@@ -212,7 +212,7 @@ pub struct StoredImage {
 /// The URL scheme of images held in the image store.
 pub const IMAGE_URL_SCHEME: &str = "heracles-image";
 
-/// What importing the Electron app's library did.
+/// What importing the original app's library did.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ImportReport {
     pub notes: u32,

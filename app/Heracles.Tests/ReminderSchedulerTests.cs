@@ -290,6 +290,74 @@ public sealed class WindowsRegistrationTests : IDisposable
         Assert.True(AppIdentity.IsRegistered(classes));
     }
 
+    private const string Picture = @"C:\Apps\Heracles\Heracles.png";
+
+    private string? IconOfTheIdentity()
+    {
+        using var identity = classes.OpenSubKey($@"AppUserModelId\{AppIdentity.Id}");
+        return identity?.GetValue("IconUri") as string;
+    }
+
+    [Fact]
+    public void TheAppsIdentityCarriesItsIconForNotifications()
+    {
+        AppIdentity.Register(classes, Picture);
+        Assert.Equal(Picture, IconOfTheIdentity());
+        Assert.True(AppIdentity.IsRegistered(classes, Picture));
+    }
+
+    [Fact]
+    public void AnIdentityFromBeforeTheAppHadAnIconGainsOne()
+    {
+        // What 0.2 wrote: a name and nothing else.
+        AppIdentity.Register(classes);
+        Assert.Null(IconOfTheIdentity());
+        Assert.False(AppIdentity.IsRegistered(classes, Picture));
+
+        AppIdentity.Register(classes, Picture);
+        Assert.Equal(Picture, IconOfTheIdentity());
+        using var identity = classes.OpenSubKey($@"AppUserModelId\{AppIdentity.Id}");
+        Assert.Equal("Heracles", identity?.GetValue("DisplayName"));
+    }
+
+    [Fact]
+    public void AnAppThatMovedPointsItsIconAtWhereItIsNow()
+    {
+        AppIdentity.Register(classes, @"C:\Old\Heracles.png");
+        AppIdentity.Register(classes, Picture);
+        Assert.Equal(Picture, IconOfTheIdentity());
+    }
+
+    [Fact]
+    public void AnIdentityWhosePictureIsGoneNamesNoIcon()
+    {
+        AppIdentity.Register(classes, Picture);
+        // A copy with no picture beside it must not leave Windows looking
+        // for one where the last copy was.
+        AppIdentity.Register(classes, null);
+        Assert.Null(IconOfTheIdentity());
+        Assert.True(AppIdentity.IsRegistered(classes));
+    }
+
+    [Fact]
+    public void TheIconIsThePictureBesideTheAppsOwnProgram()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"heracles-tests-{Guid.NewGuid()}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var exe = Path.Combine(folder, "Heracles.exe");
+            Assert.Null(AppIdentity.PictureBeside(exe));
+            File.WriteAllBytes(Path.Combine(folder, "Heracles.png"), [1]);
+            Assert.Equal(Path.Combine(folder, "Heracles.png"), AppIdentity.PictureBeside(exe));
+            // Started by a host, the folder is the host's, and whatever is
+            // called Heracles.png there is not the app's.
+            Assert.Null(AppIdentity.PictureBeside(Path.Combine(folder, "dotnet.exe")));
+            Assert.Null(AppIdentity.PictureBeside(null));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
     [Fact]
     public void TheAppRegistersAmongTheUsersOwnClasses()
     {
@@ -407,6 +475,23 @@ public sealed class WindowsIntegrationTests : BoardFixture
             Assert.True(AppIdentity.IsRegistered(classes));
             Assert.Null(classes.OpenSubKey("heracles"));
         });
+    }
+
+    [Fact]
+    public void TheAppsNotificationsCarryThePictureBesideIt()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"heracles-tests-{Guid.NewGuid()}");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "Heracles.png"), [1]);
+        try
+        {
+            InAKeyOfItsOwn(classes =>
+            {
+                WindowsIntegration.Register(classes, Path.Combine(folder, "Heracles.exe"), Model, () => center, (work, after) => waiting.Add((work, after)));
+                Assert.True(AppIdentity.IsRegistered(classes, Path.Combine(folder, "Heracles.png")));
+            });
+        }
+        finally { Directory.Delete(folder, recursive: true); }
     }
 
     [Fact]

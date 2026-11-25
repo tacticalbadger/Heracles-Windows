@@ -1,6 +1,6 @@
 //! The database schema and how a connection is set up.
 //!
-//! The rules the Electron app enforced in JavaScript live in the schema
+//! The rules the original app enforced in its own code live in the schema
 //! here: foreign keys cascade deletes, and `CHECK` constraints hold the
 //! invariants that a bug could otherwise break.
 

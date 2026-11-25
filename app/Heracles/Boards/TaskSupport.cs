@@ -5,7 +5,7 @@ namespace Heracles.Boards;
 /// <summary>
 /// Reading and writing the dates stored on tasks. They are UTC timestamps in
 /// the form JavaScript's <c>toISOString</c> writes, which is what the
-/// Electron app stored.
+/// original app stored.
 /// </summary>
 internal static class TaskDates
 {

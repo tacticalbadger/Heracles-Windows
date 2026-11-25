@@ -1,4 +1,4 @@
-//! Importing the Electron app's library: what carries across, what gets
+//! Importing the original app's library: what carries across, what gets
 //! repaired on the way, and what protects the user's data while it happens.
 
 use heracles_core::{CoreError, ImportReport, NewNote, Note, NoteKind, Store, Task};
@@ -13,7 +13,8 @@ const PNG_BASE64: &str =
 const CREATED: &str = "2025-03-01T10:00:00.000Z";
 const UPDATED: &str = "2025-04-02T11:30:00.000Z";
 
-/// The schema `electron/db.cjs` ends up with after all of its migrations.
+/// The schema the original app's database ended up with after all of its
+/// migrations.
 const LEGACY_SCHEMA: &str = "
     CREATE TABLE notes (
         id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL,
@@ -118,7 +119,7 @@ struct Setup {
 fn setup() -> Setup {
     let dir = tempfile::tempdir().unwrap();
     let data_dir = dir.path().join("library");
-    let legacy_dir = dir.path().join("electron");
+    let legacy_dir = dir.path().join("original");
     std::fs::create_dir_all(&legacy_dir).unwrap();
     Setup { _dir: dir, data_dir, legacy_dir }
 }
@@ -456,6 +457,11 @@ fn the_old_database_is_backed_up_first_and_never_changed() {
     assert_eq!(std::fs::read(&legacy).unwrap(), before, "the old database must only be read");
     let backup = Path::new(&report.backup_path);
     assert!(backup.starts_with(&setup.data_dir), "the backup lives with the new library");
+    let name = backup.file_name().unwrap().to_string_lossy();
+    assert!(
+        name.starts_with("heracles-original-") && name.ends_with(".sqlite"),
+        "the backup is named for what it is a copy of, not {name}"
+    );
     let copy = Connection::open(backup).unwrap();
     let notes: i64 = copy.query_row("SELECT COUNT(*) FROM notes", [], |row| row.get(0)).unwrap();
     let html: String = copy.query_row("SELECT content FROM notes WHERE id = 'page'", [], |row| row.get(0)).unwrap();

@@ -1,4 +1,8 @@
-//! The one-time import of the Electron app's library.
+//! The one-time import of the original app's library.
+//!
+//! Heracles began as a different app, which kept its notes as HTML in a
+//! database of its own, `heracles.sqlite`. That app is no longer in this
+//! repository. This is what reads the library it left behind.
 //!
 //! The old database had no foreign keys, so it can hold things the new
 //! schema refuses: a note whose parent is gone, a card in no column. The
@@ -107,7 +111,7 @@ fn read_library(connection: &Connection) -> Result<OldLibrary> {
     if !["id", "title", "content"].iter().all(|column| note_columns.contains(*column)) {
         return Err(CoreError::invalid("that file is not a Heracles library: it has no notes table"));
     }
-    // Columns the Electron app added over time. A library last opened by an
+    // Columns the original app added over time. A library last opened by an
     // early version lacks some of them.
     let or = |column: &str, fallback: &str| {
         if note_columns.contains(column) { column.to_string() } else { fallback.to_string() }
@@ -277,7 +281,7 @@ fn check_importable(connection: &Connection) -> Result<()> {
     let done: Option<String> =
         query_optional(connection, "SELECT value FROM settings WHERE key = ?1", [IMPORT_MARKER], |row| row.get(0))?;
     if done.is_some() {
-        return Err(CoreError::invalid("the Electron library has already been imported"));
+        return Err(CoreError::invalid("the original library has already been imported"));
     }
     let content: i64 = connection.query_row(
         "SELECT (SELECT COUNT(*) FROM notes WHERE kind <> 'notebook')
@@ -286,7 +290,7 @@ fn check_importable(connection: &Connection) -> Result<()> {
         |row| row.get(0),
     )?;
     if content > 0 {
-        return Err(CoreError::invalid("this library already has content, so the Electron library cannot be imported into it"));
+        return Err(CoreError::invalid("this library already has content, so the original library cannot be imported into it"));
     }
     Ok(())
 }
@@ -301,7 +305,7 @@ struct Counts {
 
 #[uniffi::export]
 impl Store {
-    /// Bring the Electron app's `heracles.sqlite` into this library.
+    /// Bring the original app's `heracles.sqlite` into this library.
     ///
     /// The old database is copied to a backup first and is only ever read.
     /// The import is one write: if any part of it fails, this library is left
@@ -321,7 +325,7 @@ impl Store {
 
 impl Store {
     /// Copy the old database into this library's backup folder. SQLite's
-    /// backup interface takes a consistent copy even while the Electron app
+    /// backup interface takes a consistent copy even while another program
     /// has the database open.
     fn back_up(&self, source_path: &Path) -> Result<PathBuf> {
         // Read-only, so a wrong path is an error and not a new empty file.
@@ -332,7 +336,7 @@ impl Store {
         let folder = self.data_dir().join(BACKUPS_DIR);
         std::fs::create_dir_all(&folder)?;
         let moment: String = now().chars().filter(char::is_ascii_alphanumeric).collect();
-        let target = folder.join(format!("heracles-electron-{moment}.sqlite"));
+        let target = folder.join(format!("heracles-original-{moment}.sqlite"));
 
         let copied = (|| -> Result<()> {
             let mut destination = Connection::open(&target)?;

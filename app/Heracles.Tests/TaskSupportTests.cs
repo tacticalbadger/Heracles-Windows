@@ -38,7 +38,7 @@ public sealed class TaskDatesTests
     }
 
     [Fact]
-    public void TimesAreWrittenTheWayTheElectronAppWroteThem()
+    public void TimesAreWrittenTheWayTheOriginalAppWroteThem()
     {
         var date = Seconds(1_796_029_200.25);
         Assert.Equal("2026-11-30T09:00:00.250Z", TaskDates.Format(date));

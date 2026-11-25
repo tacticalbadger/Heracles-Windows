@@ -1,6 +1,6 @@
 //! Convert HTML into a document.
 //!
-//! This reads two kinds of input with one set of rules: the HTML the Electron
+//! This reads two kinds of input with one set of rules: the HTML the original
 //! app stored for each note, and arbitrary HTML from an import or a paste.
 //!
 //! The output is built only from the node types, marks, and attributes named

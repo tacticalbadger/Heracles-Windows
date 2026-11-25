@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-/// The database file inside the data directory. The Electron app's file is
+/// The database file inside the data directory. The original app's file is
 /// `heracles.sqlite`, so the two can share a directory.
 pub const DATABASE_FILE: &str = "heracles.db";
 
@@ -220,7 +220,7 @@ impl Drop for Delivering<'_> {
 }
 
 /// The current time in UTC as JavaScript's `toISOString` writes it, which is
-/// the format the Electron app stored.
+/// the format the original app stored.
 pub(crate) fn now() -> String {
     timestamp(time::OffsetDateTime::now_utc())
 }

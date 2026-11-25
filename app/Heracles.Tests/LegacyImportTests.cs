@@ -4,9 +4,9 @@ using Heracles.Model;
 namespace Heracles.Tests;
 
 /// <summary>
-/// The Electron app's library, brought across on the first start. The
+/// The original app's library, brought across on the first start. The
 /// library imported is the one described in <c>Fixtures\README.md</c>,
-/// copied to where the Electron app would have left it.
+/// copied to where the original app would have left it.
 /// </summary>
 public sealed class LegacyImportTests : IDisposable
 {
@@ -26,7 +26,7 @@ public sealed class LegacyImportTests : IDisposable
         library.Dispose();
     }
 
-    /// <summary>The library folder, which is where the Electron app kept its own.</summary>
+    /// <summary>The library folder, which is where the original app kept its own.</summary>
     private string DataDirectory => Path.Combine(library.Folder, "library");
 
     private string OldLibrary => Path.Combine(DataDirectory, "heracles.sqlite");
@@ -36,7 +36,7 @@ public sealed class LegacyImportTests : IDisposable
     private static string Sha256(string path) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
 
     [Fact]
-    public void ThereIsAnOldLibraryOnlyWhereTheElectronAppLeftOne()
+    public void ThereIsAnOldLibraryOnlyWhereTheOriginalAppLeftOne()
     {
         Assert.Null(AppModel.LegacyDatabase(DataDirectory));
         LeaveAnOldLibrary();

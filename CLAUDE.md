@@ -351,6 +351,8 @@ tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           it), check-update (a whole update rehearsed with
                           nothing real in it, and the updates that must be
                           refused; serve-folder is its web server),
+                          check-published-update (after a release: an
+                          old-looking copy takes the real update),
                           check-input (a minute of REAL mouse and
                           keyboard), look-editor and look-boards (pictures,
                           light and dark)
@@ -475,6 +477,7 @@ tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electr
 tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
 tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 19 checks (-Arch x64 for the other one)
 tools\e2e\check-update.ps1            # a whole update rehearsed from a package, with nothing real in it, and the two that must be refused: 31 checks, about six minutes (-Arch x64; -Look for pictures; -Theme light)
+tools\e2e\check-published-update.ps1  # AFTER a release: an old-looking copy with the real key takes the published update from GitHub: 11 checks (-Arch x64)
 tools\e2e\check-input.ps1             # REAL mouse and keyboard, for a minute: typing, keys, clicks, drags. 23 checks. Hands off while it runs
 tools\e2e\look-editor.ps1             # pictures of a note of every kind of block, dark and light -> build\e2e\shots\editor-*.png
 tools\e2e\look-boards.ps1             # pictures of a board and of a task, dark and light -> build\e2e\shots\board-*.png, task-*.png
@@ -524,6 +527,16 @@ own Exit and comes back as the new version, file for file; that the new
 one is offered nothing; and that an archive and a feed altered after
 signing are each refused, for that reason, with nothing installed and (for
 the feed) nothing downloaded. All by automation: no mouse, no keys.
+
+**`tools\e2e\check-published-update.ps1` is its other half, for after a
+release**: everything real but the old copy's version. The package that
+was just published, with the app's own assembly compiled again as 0.0.9
+(build 1) and nothing else changed, so it carries the real feed address
+and the real update key. Told to read the published feed (a copy on a test
+library reads none unless one is named), it has to believe that feed
+because the key signed it, fetch the archive from GitHub, quit, and come
+back as the published version, file for file what was packaged. It talks
+to GitHub and downloads some 60 MB.
 
 **Then look.** `tools\e2e\look-editor.ps1` takes six pictures, and
 `look-boards.ps1` ten (the board, a task, and the foot of the task). Twice in one
@@ -1572,17 +1585,18 @@ would have driven the owner's own copy of the app, had one been open; and
 the copy that installs an update took its command line at its word.
 
 **Where 0.3.0 stands.** From a clean build: no warnings, 203 Rust tests,
-759 .NET tests and one skipped on purpose (151 of them new: 144 of
+763 .NET tests and one skipped on purpose (155 of them new: 148 of
 updates, 6 of the icon on reminders, 1 of the hand-over), 116 scripted
 checks of the real window by automation (`check-shell.ps1` 32,
 `check-editor.ps1` 15, `check-boards.ps1` 39, `check-transfer.ps1` 10,
 `check-legacy.ps1` 20), 19 of a packaged disc (`check-disc.ps1`), 31 of a
 whole update (`check-update.ps1`), and 23 by a real mouse and keyboard
 (`check-input.ps1`). Every rule an update rests on was broken on purpose
-once (nine of them: the feed's signature, the archive's checksum, files
+once (ten of them: the feed's signature, the archive's checksum, files
 landing outside the folder, a feed from the command line, an older
-build offered, somebody's folder removed, and the three guards on the
-copy that installs), and each time a test failed.
+build offered, somebody's folder removed, the three guards on the copy
+that installs, and a look that failed counted as the day's), and each
+time a test failed.
 
 **What that does not say** is under "Not verified". The entries that
 matter most are the ones 0.2 already had (nobody has used the app; it has
@@ -1623,7 +1637,9 @@ is the one to whatever is released after 0.3.0.
    for each processor (`-Arch x64` for the other). Then
    `tools\publish.ps1 -DryRun`, and when that reads right,
    `tools\publish.ps1`, which ends by reading the feed back from where
-   installed copies read it. The packages must be built from the very
+   installed copies read it. Then `tools\e2e\check-published-update.ps1`,
+   for each processor: a copy with the real key takes what was just
+   published. The packages must be built from the very
    commit that is pushed (the build number is the commit count, and the
    script refuses any other), so a commit made after packaging means
    packaging again, and the feed again.
@@ -2147,7 +2163,13 @@ does it. Reviewed by the session that wrote it; no one else has read it.
   installs took its command line at its word (see "Decisions"); a copy
   that could not open its library would, on "Install and Restart", have
   written an empty list over the saved windows (it quits another way
-  now); and the offer took the keyboard from whoever was typing.
+  now); the offer took the keyboard from whoever was typing; and **a look
+  that could not be made counted as the day's look**, so a PC that always
+  starts before its network is up would never have looked at all. Only a
+  look that read the feed is remembered now, and one that failed is tried
+  again in an hour (`UpdatePreferences.After`, `RetryAfter`). That last
+  one was found after the first commit of 0.3.0 and before any package of
+  it went anywhere: the packages are built from the commit that has it.
 - The first rehearsal passed 27 of 31, and the four were the check's own
   (build numbers too big for a file version: see "Found on Windows"). The
   update itself went through at the first try: found, fetched, checked,

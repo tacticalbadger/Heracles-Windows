@@ -35,6 +35,23 @@ internal sealed record UpdatePreferences(bool Automatic = true, DateTimeOffset? 
         File.WriteAllText(path, JsonSerializer.Serialize(this, Form));
     }
 
+    /// <summary>
+    /// How long after a look that could not be made the next one is tried.
+    /// Not at once: with no network there is nothing to be had by asking
+    /// every minute.
+    /// </summary>
+    public static readonly TimeSpan RetryAfter = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// What is remembered once a look is over. Only a look that read the
+    /// feed is the day's look. One that could not be made (no network yet,
+    /// a feed that was refused) leaves things as they were, so that it is
+    /// tried again: counted as the day's look, a PC that always starts
+    /// before its network is up would never look at all.
+    /// </summary>
+    public UpdatePreferences After(UpdateCheckKind kind, DateTimeOffset now) =>
+        kind == UpdateCheckKind.Stopped ? this : this with { LastCheck = now };
+
     /// <summary>Whether it is time for the daily look.</summary>
     public bool IsCheckDue(DateTimeOffset now) => Automatic && UntilNextCheck(now) == TimeSpan.Zero;
 

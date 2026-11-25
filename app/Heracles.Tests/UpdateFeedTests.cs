@@ -342,6 +342,42 @@ public sealed class UpdatePreferencesTests : IDisposable
         Assert.True(new UpdatePreferences(LastCheck: Noon.AddDays(3)).IsCheckDue(Noon));
     }
 
+    [Theory]
+    [InlineData(nameof(UpdateCheckKind.Found))]
+    [InlineData(nameof(UpdateCheckKind.NothingNewer))]
+    public void ALookThatReadTheFeedIsTheDaysLook(string kind)
+    {
+        var after = new UpdatePreferences(LastCheck: Noon.AddDays(-2), SkippedBuild: 53).After(Enum.Parse<UpdateCheckKind>(kind), Noon);
+
+        Assert.Equal(Noon, after.LastCheck);
+        Assert.False(after.IsCheckDue(Noon.AddHours(1)));
+        // Nothing else that was chosen is lost by it.
+        Assert.Equal(53, after.SkippedBuild);
+        Assert.True(after.Automatic);
+    }
+
+    [Fact]
+    public void ALookThatCouldNotBeMadeIsNotTheDaysLook()
+    {
+        // The PC was not on the network yet when the app started. Counted
+        // as the day's look, a laptop that always starts that way would
+        // never look at all.
+        var before = new UpdatePreferences(LastCheck: Noon.AddDays(-2));
+        var after = before.After(UpdateCheckKind.Stopped, Noon);
+
+        Assert.Equal(before, after);
+        Assert.True(after.IsCheckDue(Noon.AddMinutes(5)));
+        Assert.True(new UpdatePreferences().After(UpdateCheckKind.Stopped, Noon).IsCheckDue(Noon));
+    }
+
+    [Fact]
+    public void AfterALookThatCouldNotBeMadeTheNextTryIsNotAtOnce()
+    {
+        // Tried again, but not every minute while there is no network.
+        Assert.True(UpdatePreferences.RetryAfter >= TimeSpan.FromMinutes(15));
+        Assert.True(UpdatePreferences.RetryAfter <= TimeSpan.FromHours(2));
+    }
+
     [Fact]
     public void HowLongUntilTheNextLook()
     {

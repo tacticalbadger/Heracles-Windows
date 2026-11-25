@@ -152,12 +152,16 @@ internal sealed class UpdateCenter
     {
         if (updater is null || looking) return;
         looking = true;
+        // Until the feed has been read, the next try is an hour off, not a day.
+        var next = UpdatePreferences.RetryAfter;
         try
         {
             await cleanup;
             var result = await updater.CheckAsync();
-            preferences = preferences with { LastCheck = DateTimeOffset.UtcNow };
+            // Only a look that read the feed is the day's look.
+            preferences = preferences.After(result.Kind, DateTimeOffset.UtcNow);
             Save();
+            if (result.Kind != UpdateCheckKind.Stopped) next = AfterALook;
             switch (result.Kind)
             {
                 case UpdateCheckKind.Found when result is { Manifest: { } manifest, Archive: { } archive }:
@@ -184,7 +188,7 @@ internal sealed class UpdateCenter
         finally
         {
             looking = false;
-            Arm(AfterALook);
+            Arm(next);
         }
     }
 
@@ -194,7 +198,8 @@ internal sealed class UpdateCenter
     {
         if (window is not null)
         {
-            window.Activate();
+            // Already on offer. Brought forward only for whoever asked.
+            if (asked) window.Activate();
             return;
         }
         var offer = new UpdateWindow(manifest, AppVersion.Current, UpdateInstaller.WhyNotHere(AppContext.BaseDirectory));

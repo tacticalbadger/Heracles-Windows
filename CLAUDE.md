@@ -1543,9 +1543,15 @@ swaps in the text box and puts the caret where the click was.
   was made up** (its own assembly compiled again as 0.0.9; the rest of it
   was the 0.3.0 package). So what is left unproved is narrow: a copy that
   really is an older release, with whatever else then differs between
-  the two. **The first real update is the one from 0.3.0 to whatever
-  comes next.** If it fails, copies of 0.3.0 stay on 0.3.0 until their
-  users put a newer one in by hand, as they did this one.
+  the two. **That has now been done, once** (2026-11-25, 0.3.1):
+  `check-published-update.ps1 -From 0.3.0`, on both processors, with the
+  released 0.3.0 package as the old copy, unchanged. It was offered 0.3.1
+  with its notes, fetched the archive from GitHub, installed it through
+  its own window and its own Exit, and came back as 0.3.1, file for file
+  (11 checks each). What that still is not: a copy on somebody's PC, on
+  its real library, with the daily look making the offer. The copy ran on
+  a test library, on this machine, and was told which feed to read (the
+  real one).
 - **Updates under a hand.** Nobody has clicked Check for Updates, read the
   window, or pressed Install and Restart. The rehearsal does all three by
   automation. Skip This Version, Remind Me Later and Cancel during a
@@ -1598,8 +1604,11 @@ swaps in the text box and puts the caret where the click was.
   on a test library registers no link scheme and no reminder identity,
   so the check plants both, pointing at the installed copy, and sees
   them removed (and does that only where the account has none of its
-  own; where it has, it sees them left alone). The app's own
-  registrations, made on a real library, were never removed this way.
+  own; where it has, it sees them left alone). **On this PC the account
+  has both, from a real copy, so only "left alone" was ever seen: the
+  script lines that remove them (`RemoveRegistrations` in
+  `Heracles.iss`) have never run.** They would run on a PC whose only
+  copy is an installed one, at its uninstall.
 
 ## Known faults
 
@@ -1676,8 +1685,16 @@ is on GitHub.
 installer.** On the owner's word, given in a Toolbox session for both
 apps (quoted under Decisions): every release is to carry an installer
 for each processor beside the disc image, and one was to be released at
-once. 0.3.0's release could not be given the files (a published release
-here takes none), so this is a new version. What changed:
+once. It is a new version and not files added to 0.3.0's release: the
+disc image changes, and the app gains one thing that installed copies
+need. (The session believed this repository's releases to be immutable,
+as Toolbox's are. GitHub says they are not: `immutable` is false on every
+one. The script's care about drafts costs nothing either way.) **The
+latest release is 0.3.1**:
+https://github.com/tacticalbadger/Heracles-Windows/releases/tag/v0.3.1,
+the tag `v0.3.1` at commit `26a618d`, build 52, with an installer, a disc
+image and an update archive for each processor, `update-feed.json` and
+`SHA256SUMS`. All of `main` is pushed, this commit included. What changed:
 
 - `tools\installer\Heracles.iss` and the installer step in `tools\build.ps1
   package` (Inno Setup 7.1.1, installed on the PC that day, per user).
@@ -2453,3 +2470,54 @@ and a fix to one belongs in the other.
   scheme and a reminder identity of its own, so the check planted
   neither and saw both left alone; the removal of ones that point at the
   removed copy has therefore not run (see "Not verified").
+- **Checked on the packages that were released** (build 52, from
+  `26a618d`): `check-disc.ps1` 21 and `check-installer.ps1` 34 on both;
+  `check-shell.ps1` 32 on each packaged build (and on the build under
+  `build\app`); `check-update.ps1` 31 on both. The x64 rehearsal failed
+  once first, at "altered archive: the update is found and offered": the
+  copy had started and said which feed it would read, and never asked
+  the local server for it within the 40 seconds the check waits. In that
+  same minute a release of Toolbox lost its upload connection, for the
+  third time that afternoon. Run again, alone, it passed. Not explained
+  further than that: the network was coming and going, and a copy's
+  first request waits on Windows working out its proxy. **Not run:
+  `check-input.ps1`**, the one with a real mouse and keyboard. Nothing in
+  how keys or the mouse are handled changed since it was run for 0.3.0
+  the same day, and the owner was at the PC (a real copy of the app had
+  been started that afternoon).
+- **Published** with `tools\publish.ps1`, after a dry run that would
+  refuse nothing: a draft, eight files (the two disc images are some
+  230 MB each now), published under `v0.3.1`, and the feed read back from
+  `releases/latest/download/update-feed.json`, the same bytes as the one
+  that was built. No upload broke off. The script had been changed an
+  hour before, after Toolbox's release went wrong with its twin: there, a
+  first run's upload broke off, a second run carried on with the draft,
+  changed its notes without naming the tag, and GitHub published it as
+  `untagged-<hex>`, where no installed copy could fetch what it was
+  offered. So this script now tries a broken upload again, leaves alone a
+  file the draft already holds whole, names the tag in every change to a
+  draft, reads the draft back before publishing (its tag, and every file
+  whole), publishes with the tag and `make_latest`, and stops if GitHub
+  answers with another tag. Of those, only the last reading-back ran
+  here; **carrying on with a draft is still untried in this repository**,
+  and was what failed in the other.
+- **Read back from GitHub**: `v0.3.1` at `26a618d`, not a draft, not a
+  pre-release, the latest release; the SHA-256 GitHub gives for each of
+  the six packages is the one in `SHA256SUMS`; an installer, an image and
+  both archives answer at their `v0.3.1` addresses.
+- **Then copies took the published update** (`check-published-update.ps1`,
+  11 checks each time): with `-From 0.3.0` on both processors, which is
+  the first update from one release to the next with nothing made up
+  (see "Not verified" for what it still is not), and once as before, on
+  ARM64, with the 0.3.1 package compiled again as 0.0.9.
+- The packages on this machine are the released ones of 0.3.1, build 52,
+  and those of 0.3.0, under `build\release`. `check-published-update.ps1
+  -From` needs the older ones; they go with the next clean build.
+- **For the owner, from this release**: Inno Setup's authors ask
+  commercial users to buy a licence (Decisions has the address); whether
+  that is you is yours to say. To move this PC's own copy to an
+  installed one: close Heracles, run the installer, delete the old
+  folder; the library is not in it. After that, `check-installer.ps1`
+  refuses to run in this account, since it will not install over and
+  then remove a real copy. And the update key still has only the one
+  copy, in this account: `tools\update-key.ps1 -Export <file>`.

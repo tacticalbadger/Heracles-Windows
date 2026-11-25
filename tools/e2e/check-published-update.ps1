@@ -5,7 +5,12 @@
     replaces itself with what that feed names.
 
 .DESCRIPTION
-        tools\e2e\check-published-update.ps1 [-Arch arm64|x64] [-Keep]
+        tools\e2e\check-published-update.ps1 [-Arch arm64|x64] [-From <version>] [-Keep]
+
+    With -From, the old copy is not made up at all: it is the package of
+    that earlier version as it was released (build\release still has to
+    hold its folder), unchanged, so the update is the one a person with
+    that version gets. Without it, read on.
 
     For after a release. tools\e2e\check-update.ps1 rehearses an update with
     nothing real in it; this is the other half, with everything real but the
@@ -35,6 +40,8 @@
 param(
     [ValidateSet('', 'arm64', 'x64')]
     [string]$Arch = '',
+    # An earlier version whose released package is the old copy, as it is.
+    [string]$From = '',
     [switch]$Keep
 )
 
@@ -61,6 +68,14 @@ $Fixture = Join-Path $Work 'fixture'
 $Data = Join-Path $Fixture 'data'
 $LogFile = Join-Path $Fixture 'heracles.log'
 $OldVersion = '0.0.9'; $OldBuild = 1
+$OldPackage = $null
+if ($From) {
+    $OldPackage = Join-Path $Root "build\release\Heracles-$From-win-$Arch"
+    if (-not (Test-Path (Join-Path $OldPackage 'Heracles.exe'))) { throw "no package of $From at ${OldPackage}. -From needs the folder that release was made from" }
+    $was = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $OldPackage 'Heracles.dll'))
+    $OldVersion = "$($was.FileMajorPart).$($was.FileMinorPart).$($was.FileBuildPart)"; $OldBuild = $was.FilePrivatePart
+    if ($OldVersion -ne $From) { throw "the package at $OldPackage says it is $OldVersion, not $From" }
+}
 
 function Step([string]$text) { Write-Host "==> $text" -ForegroundColor Cyan }
 
@@ -119,16 +134,24 @@ New-Item -ItemType Directory -Force $Data | Out-Null
 $failed = 1
 try {
     # --- the old copy: the package, saying it is an older version -----------------
-    Step "Compiling the app as $OldVersion ($OldBuild)"
-    $assembly = Join-Path $Work 'build-old'
-    & dotnet build (Join-Path $Root 'app\Heracles\Heracles.csproj') -c Release -r "win-$Arch" --no-incremental `
-        "-p:HeraclesVersion=$OldVersion" "-p:HeraclesBuild=$OldBuild" -p:DebugType=none -p:DebugSymbols=false -o $assembly --nologo -v quiet | Out-Null
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $assembly 'Heracles.dll'))) { throw "could not compile the app as $OldVersion" }
     $old = Join-Path $Work 'old\Heracles'
     New-Item -ItemType Directory -Force $old | Out-Null
-    & robocopy $Package $old /E /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "could not copy the package to $old" }
-    Copy-Item (Join-Path $assembly 'Heracles.dll') (Join-Path $old 'Heracles.dll') -Force
+    if ($OldPackage) {
+        # The earlier release itself, as it was handed out.
+        Step "Taking the released $OldVersion ($OldBuild) as the old copy"
+        & robocopy $OldPackage $old /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "could not copy the package of $OldVersion to $old" }
+    }
+    else {
+        Step "Compiling the app as $OldVersion ($OldBuild)"
+        $assembly = Join-Path $Work 'build-old'
+        & dotnet build (Join-Path $Root 'app\Heracles\Heracles.csproj') -c Release -r "win-$Arch" --no-incremental `
+            "-p:HeraclesVersion=$OldVersion" "-p:HeraclesBuild=$OldBuild" -p:DebugType=none -p:DebugSymbols=false -o $assembly --nologo -v quiet | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $assembly 'Heracles.dll'))) { throw "could not compile the app as $OldVersion" }
+        & robocopy $Package $old /E /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "could not copy the package to $old" }
+        Copy-Item (Join-Path $assembly 'Heracles.dll') (Join-Path $old 'Heracles.dll') -Force
+    }
     $wanted = Get-FolderListing $Package
 
     function Start-Copy([string]$name) {

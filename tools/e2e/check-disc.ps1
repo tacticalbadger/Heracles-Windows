@@ -7,7 +7,8 @@
         tools\e2e\check-disc.ps1 [-Arch arm64|x64]
 
     Mounts build\release\Heracles-<version>-win-<arch>.iso with a drive
-    letter, as a double-click on it does, and checks what is on it. Then it
+    letter, as a double-click on it does, and checks what is on it (the
+    Heracles folder, the installer and a README). Then it
     starts the app from the disc, on the fixture, opens a note and closes the
     app again. A disc cannot be written to, so this is also the check that
     the app keeps nothing beside itself.
@@ -86,11 +87,19 @@ try {
 
     # --- 1. The disc ---
     Test-Ui "disc: it is called 'Heracles $Version'" { (Get-DiskImage -ImagePath $Iso | Get-Volume).FileSystemLabel -ceq "Heracles $Version" }
-    Test-Ui 'disc: at its top are the Heracles folder and README.txt, and nothing else' {
-        (@(Get-ChildItem "$drive\" -Force | ForEach-Object { $_.Name } | Sort-Object) -join ', ') -ceq 'Heracles, README.txt'
+    $setupName = "Heracles-$Version-win-$Arch-setup.exe"
+    Test-Ui 'disc: at its top are the Heracles folder, the installer and README.txt, and nothing else' {
+        (@(Get-ChildItem "$drive\" -Force | ForEach-Object { $_.Name } | Sort-Object) -join ', ') -ceq (@('Heracles', $setupName, 'README.txt' | Sort-Object) -join ', ')
     }
     Test-Ui 'disc: the README begins with this version and processor' {
         (Get-Content "$drive\README.txt" -TotalCount 1) -ceq "Heracles $Version for Windows ($Arch)"
+    }
+    Test-Ui 'disc: the README names the installer that is on the disc' {
+        [System.IO.File]::ReadAllText("$drive\README.txt").Contains($setupName)
+    }
+    Test-Ui 'disc: the installer on it is the one beside the image' {
+        $beside = Join-Path $Root "build\release\$setupName"
+        (Test-Path $beside) -and (Get-FileHash -LiteralPath "$drive\$setupName" -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $beside -Algorithm SHA256).Hash
     }
     Test-Ui 'disc: the README is plain text that Notepad shows as lines' {
         $bytes = [System.IO.File]::ReadAllBytes("$drive\README.txt")

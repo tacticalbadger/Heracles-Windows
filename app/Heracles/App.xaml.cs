@@ -74,6 +74,10 @@ public partial class App : Application
         }
         Log.Info("instance: first");
 
+        // A copy the installer put here says which version it is now: it may
+        // have updated itself since, and Windows' list would not know.
+        InstalledCopy.RecordVersion();
+
         // A testing aid: the app in light or in dark whatever Windows is set
         // to, so that both can be looked at on one machine.
         if (e.Args.Contains("--theme-light")) ThemeMode = ThemeMode.Light;

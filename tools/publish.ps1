@@ -9,7 +9,11 @@
     Tag v<version> (from the VERSION file), with these attached from
     build\release, for both processors:
 
-      Heracles-<version>-win-<arch>.iso   what people download and install
+      Heracles-<version>-win-<arch>-setup.exe
+                                          the installer: what most people
+                                          download
+      Heracles-<version>-win-<arch>.iso   a disc image holding the installer
+                                          and the app's folder
       Heracles-<version>-win-<arch>.zip   what installed copies download to
                                           update themselves
       update-feed.json                    what tells installed copies that
@@ -131,6 +135,21 @@ foreach ($archive in $archives) {
     }
     Write-Host ("{0}  {1:N0} MB" -f $archive.Name, ($archive.Length / 1MB))
 }
+# The installers, made by the same package step as the image and the archive
+# beside them (it removes all three before it builds, so none is left over
+# from another build). Each carries the build number in its own version.
+$installers = @(Get-ChildItem $Out -Filter "Heracles-$Version-win-*-setup.exe" -ErrorAction SilentlyContinue | Sort-Object Name)
+foreach ($installer in $installers) {
+    $actual = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (-not $expected.ContainsKey($installer.Name) -or $expected[$installer.Name] -ne $actual) {
+        throw "$($installer.Name) does not match SHA256SUMS; run the package step again"
+    }
+    $setupVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($installer.FullName)
+    if ($setupVersion.FilePrivatePart -ne $commitCount) {
+        Stop-Publish "$($installer.Name) is build $($setupVersion.FilePrivatePart), but the current commit is number $commitCount. Package again from this commit."
+    }
+    Write-Host ("{0}  {1:N0} MB  build {2}" -f $installer.Name, ($installer.Length / 1MB), $setupVersion.FilePrivatePart)
+}
 
 # ----- Updates -----
 
@@ -144,6 +163,9 @@ foreach ($arch in 'arm64', 'x64') {
     $name = "Heracles-$Version-win-$arch"
     if (-not (Test-Path (Join-Path $Out "$name.iso")) -or -not (Test-Path (Join-Path $Out "$name.zip"))) {
         Stop-Publish "there is no package for $arch. Copies on that processor would never be offered this version. Run: tools\build.ps1 core package -Arch $arch"
+    }
+    if (-not (Test-Path (Join-Path $Out "$name-setup.exe"))) {
+        Stop-Publish "there is no installer for $arch. Run: tools\build.ps1 core package -Arch $arch"
     }
 }
 if (-not (Test-Path $FeedPath)) {
@@ -228,16 +250,16 @@ Heracles is a local-first, hierarchical notebook for Windows: pages in notebooks
 
 ## Install
 
-1. Download the disc image for your PC below: **win-x64** for most PCs, **win-arm64** for Windows on ARM (Settings > System > About shows the system type).
-2. Double-click the downloaded ``.iso`` file. Windows opens it as a disc. If it asks whether to open the file, choose **Open**.
-3. Copy the **Heracles** folder from the disc to your PC, for example into ``%LOCALAPPDATA%\Programs``, and run **Heracles.exe** from the copy.
-4. Eject the disc (right-click it in File Explorer and choose **Eject**). It is not needed again, and the downloaded file can be deleted.
+Pick the files for your PC below: **win-x64** for most PCs, **win-arm64** for Windows on ARM (Settings > System > About shows the system type).
 
-This build is **not code-signed**. If Windows shows "Windows protected your PC", choose **More info**, then **Run anyway**. Nothing needs installing: the .NET runtime is inside the folder. Requires Windows 10 version 2004 or newer, or Windows 11.
+- **The installer** (``Heracles-$Version-win-<arch>-setup.exe``): download it and run it. It installs Heracles for you alone, asks for no administrator, adds it to the Start menu, and can be removed again under Settings > Apps > Installed apps.
+- **The disc image** (``Heracles-$Version-win-<arch>.iso``): double-click it and Windows opens it as a disc (if it asks whether to open the file, choose **Open**). On it are the same installer and a **Heracles** folder; run the installer, or copy the folder to a place of your own (for example ``%LOCALAPPDATA%\Programs``) and run **Heracles.exe** from the copy. Then eject the disc (right-click it in File Explorer and choose **Eject**); it is not needed again.
+
+This build is **not code-signed**. If Windows shows "Windows protected your PC", choose **More info**, then **Run anyway**. The .NET runtime is inside; nothing else needs installing. Requires Windows 10 version 2004 or newer, or Windows 11.
 
 ## Updates
 
-From version 0.3.0 on, Heracles updates itself: it looks for a new version once a day and from **Help > Check for Updates**, shows what changed, and replaces its own folder when you agree. So this download is only for putting Heracles on a PC for the first time, or over a version older than 0.3.0. Keep the folder in a place of your own: run from the disc, it cannot replace itself. The ``.zip`` files and ``update-feed.json`` below are what installed copies fetch; there is no need to download them.
+From version 0.3.0 on, Heracles updates itself: it looks for a new version once a day and from **Help > Check for Updates**, shows what changed, and replaces its own folder when you agree. So these downloads are only for putting Heracles on a PC for the first time, or over a version older than 0.3.0; a copy of 0.3.0 or newer offers this version by itself. It can only replace itself in a place it may change, which is where the installer puts it: run from the disc, it cannot. The ``.zip`` files and ``update-feed.json`` below are what installed copies fetch; there is no need to download them.
 
 ## First run
 
@@ -257,7 +279,7 @@ $title = "Heracles $Version"
 if ($DryRun) {
     Step "Dry run: would publish $Tag to $Owner/$Repo at $($head.Substring(0, 7))"
     Write-Host "title: $title"
-    Write-Host "files: $((@($packages) + @($archives) | ForEach-Object { $_.Name }) -join ', '), update-feed.json, SHA256SUMS"
+    Write-Host "files: $((@($installers) + @($packages) + @($archives) | ForEach-Object { $_.Name }) -join ', '), update-feed.json, SHA256SUMS"
     Write-Host '--- notes ---'
     Write-Host $notes
     Write-Host '--- end of notes ---'
@@ -319,13 +341,35 @@ function Get-StatusCode($errorRecord) {
     return 0
 }
 
+# Attaches a file to a release that is still a draft. A file the draft
+# already holds whole (GitHub gives its SHA-256) is left as it is, so a run
+# that carries on with a draft does not send everything again; anything else
+# of that name, a broken-off upload included, is removed first. An upload
+# that breaks off is tried again: the first one of Toolbox 0.3.1, some
+# 800 MB in all, lost its connection part-way.
 function Send-Asset($release, [System.IO.FileInfo]$file, [string]$contentType) {
-    foreach ($asset in @($release.assets | Where-Object { $_.name -eq $file.Name })) {
-        Invoke-GitHub 'Delete' "$api/releases/assets/$($asset.id)" | Out-Null
-    }
     $upload = ($release.upload_url -replace '\{.*$', '') + '?name=' + [Uri]::EscapeDataString($file.Name)
-    Write-Host ("uploading {0} ({1:N0} MB)" -f $file.Name, ($file.Length / 1MB))
-    Invoke-RestMethod -Method Post -Uri $upload -Headers $headers -ContentType $contentType -InFile $file.FullName -TimeoutSec 3600 | Out-Null
+    $digest = 'sha256:' + (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    for ($attempt = 1; ; $attempt++) {
+        # Windows PowerShell hands a list from GitHub over as one object: taken apart here.
+        $there = @(Invoke-GitHub 'Get' "$api/releases/$($release.id)/assets?per_page=100" | ForEach-Object { $_ } | Where-Object { $_.name -eq $file.Name })
+        $whole = @($there | Where-Object { $_.state -eq 'uploaded' -and $_.PSObject.Properties['digest'] -and $_.digest -eq $digest })
+        if ($whole.Count -gt 0) {
+            Write-Host "already there, and the same file: $($file.Name)"
+            return
+        }
+        foreach ($asset in $there) { Invoke-GitHub 'Delete' "$api/releases/assets/$($asset.id)" | Out-Null }
+        Write-Host ("uploading {0} ({1:N0} MB)" -f $file.Name, ($file.Length / 1MB))
+        try {
+            Invoke-RestMethod -Method Post -Uri $upload -Headers $headers -ContentType $contentType -InFile $file.FullName -TimeoutSec 3600 | Out-Null
+            return
+        }
+        catch {
+            if ($attempt -ge 4) { throw }
+            Write-Host "the upload broke off ($($_.Exception.Message)); trying again"
+            Start-Sleep -Seconds 10
+        }
+    }
 }
 
 $existing = $null
@@ -333,6 +377,7 @@ try { $existing = Invoke-GitHub 'Get' "$api/releases/tags/$Tag" }
 catch { if ((Get-StatusCode $_) -ne 404) { throw "GitHub refused the request ($(Get-StatusCode $_)): $($_.Exception.Message)" } }
 
 function Send-Files($release) {
+    foreach ($installer in $installers) { Send-Asset $release $installer 'application/octet-stream' }
     foreach ($package in $packages) { Send-Asset $release $package 'application/x-iso9660-image' }
     foreach ($archive in $archives) { Send-Asset $release $archive 'application/zip' }
     # The feed goes up while the release is still a draft, with the archives
@@ -364,7 +409,12 @@ else {
     $draft = $releases | Where-Object { $_.draft -and $_.tag_name -eq $Tag } | Select-Object -First 1
     if ($null -ne $draft) {
         Step "Carrying on with the draft of $Tag"
-        $release = Invoke-GitHub 'Patch' "$api/releases/$($draft.id)" @{ name = $title; body = $notes; prerelease = [bool]$Prerelease }
+        # The tag is named in every change to a draft. The one time a draft
+        # was carried on with (Toolbox 0.3.1, with this script's twin) it
+        # was changed without, and came out published under a placeholder
+        # tag ("untagged-..."), where no installed copy looks for the
+        # archives.
+        $release = Invoke-GitHub 'Patch' "$api/releases/$($draft.id)" @{ tag_name = $Tag; name = $title; body = $notes; prerelease = [bool]$Prerelease }
         $release = Invoke-GitHub 'Get' "$api/releases/$($draft.id)"
     }
     else {
@@ -378,14 +428,26 @@ else {
         }
     }
     Send-Files $release
-    # Published last: nothing can be added to an immutable release.
+    # Published last: nothing can be added to an immutable release, and its
+    # tag cannot be changed. So the draft is looked at once more first: it
+    # must still be a draft of this tag, with every file whole.
+    $ready = Invoke-GitHub 'Get' "$api/releases/$($release.id)"
+    if ($ready.tag_name -ne $Tag) {
+        throw "the draft is for the tag '$($ready.tag_name)', not $Tag. Not published. Delete the draft on the Releases page and run this again."
+    }
+    $unfinished = @($ready.assets | Where-Object { $_.state -ne 'uploaded' } | ForEach-Object { $_.name })
+    if ($unfinished.Count -gt 0) { throw "the draft holds files that did not arrive whole ($($unfinished -join ', ')). Not published; run this again." }
     Step "Publishing $Tag"
-    $release = Invoke-GitHub 'Patch' "$api/releases/$($release.id)" @{ draft = $false }
+    $latest = if ($Prerelease) { 'false' } else { 'true' }
+    $release = Invoke-GitHub 'Patch' "$api/releases/$($release.id)" @{ draft = $false; tag_name = $Tag; make_latest = $latest }
+    if ($release.tag_name -ne $Tag) {
+        throw "GitHub published the release under the tag '$($release.tag_name)', not $Tag ($($release.html_url)). Installed copies are sent to the archives under $Tag and will not find them: this needs putting right at once (see CLAUDE.md, 0.3.1)."
+    }
 }
 
 $published = Invoke-GitHub 'Get' "$api/releases/tags/$Tag"
 $names = @($published.assets | ForEach-Object { $_.name })
-$missing = @(@(@($packages) + @($archives) | ForEach-Object { $_.Name }) + 'update-feed.json' + 'SHA256SUMS' | Where-Object { $names -notcontains $_ })
+$missing = @(@(@($installers) + @($packages) + @($archives) | ForEach-Object { $_.Name }) + 'update-feed.json' + 'SHA256SUMS' | Where-Object { $names -notcontains $_ })
 if ($missing.Count -gt 0) { throw "release $Tag is out, but GitHub does not list: $($missing -join ', ')" }
 Write-Host "published: $($published.html_url) ($($names.Count) files)"
 

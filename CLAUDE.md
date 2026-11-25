@@ -78,6 +78,43 @@ Owner, 2026-11-25:
   went out under MIT and stay so for whoever has them; 0.3.0 is the first
   release under the new terms.
 
+Owner, 2026-11-25, later the same day (said in a Toolbox session, of both
+apps: "both should be packaged installers as well. go ahead and build
+releases for heracles and toolbox as msi or exe installers. install the
+dependencies now"):
+
+- **A release also carries an installer for each processor**, from 0.3.1
+  on. This takes "an installer" off the out-of-scope list below. What
+  Claude chose within that, open to change:
+  - **An EXE made with Inno Setup 7, not an MSI.** The app replaces its
+    own folder when it updates, and Windows Installer repairs or resents
+    files it did not put there. The installer is per user
+    (`PrivilegesRequired=lowest`, into `%LOCALAPPDATA%\Programs\Heracles`),
+    so the app can change the place it lives in and nobody needs an
+    administrator.
+  - **The uninstaller is kept outside the app's folder**
+    (`%LOCALAPPDATA%\Heracles\uninstall`), because an update replaces
+    that folder whole and would take the uninstaller with it. For the
+    same reason the installer treats the app's folder as the app's alone,
+    as the updater does: it refuses a folder that holds other things,
+    empties one that holds Heracles before installing, and the
+    uninstaller removes the folder whole. It leaves the library
+    (`%APPDATA%\Heracles`) alone.
+  - **The disc image now holds the installer too**, beside the `Heracles`
+    folder and `README.txt`, so a disc is enough either way.
+  - **The archive (`.zip`) and the feed are as they were.** Nothing about
+    updates changed, and a copy of 0.3.0 takes 0.3.1 as any other update.
+  - **The app keeps the version under "Installed apps" right**
+    (`Support/InstalledCopy.cs`): the installer writes the version it
+    installed, and the app, which then updates with no installer
+    involved, writes its own at start into the entry of the folder it
+    runs from. Unlike links and reminders this is done on a test library
+    too: it claims nothing, and can only touch the entry of the very
+    folder the copy is in.
+  - Inno Setup is free to use; its authors ask commercial users to buy a
+    licence (https://jrsoftware.org/isorder.php), which is not required.
+    Whether this use calls for one is the owner's to decide.
+
 Claude's calls about updates, open to change, **each easy to change before
 a version is out and hard after**, since every copy that is out goes on
 doing what it was built to do:
@@ -145,7 +182,7 @@ doing what it was built to do:
   `%LOCALAPPDATA%\Heracles\updates` (beside the log: it is about this copy,
   not about the library). A run on a test library keeps its own, inside
   that library's folder.
-- This version is 0.3.0.
+- Updates came in with 0.3.0. (0.3.1 is the same app with an installer.)
 
 Claude's other calls of 2026-11-25:
 
@@ -170,7 +207,8 @@ Claude's calls, open to change:
   processor, in place of the zip and not beside it
   (`Heracles-<version>-win-<arch>.iso`). On the disc: the app in a folder
   named `Heracles`, and a `README.txt` that says to copy the folder to the
-  PC and run it from the copy. The disc is named `Heracles <version>`. The
+  PC and run it from the copy (from 0.3.1 the installer is on the disc as
+  well, and the README names it first). The disc is named `Heracles <version>`. The
   image is made by the part of Windows that writes discs (IMAPI2), so
   nothing is installed for it. The other reading was one image holding both
   processors: twice the download for everyone, so not taken.
@@ -228,9 +266,9 @@ Claude's calls, open to change:
 Out of scope, because the Mac has not built them either: syntax colouring
 in code blocks, find within a note, selecting text across blocks, resizing
 an image, per-section sort modes and dragging notes in the sidebar, moving
-a subtask under another task, HTML export. Also out: code signing, an
-installer, delta updates and beta channels (the Mac rules those two out
-too).
+a subtask under another task, HTML export. Also out: code signing, delta
+updates and beta channels (the Mac rules those two out too). An installer
+was on this list until the owner asked for one (2026-11-25, above).
 
 ## Layout
 
@@ -312,7 +350,9 @@ app/
                           LinkRegistration (the link scheme, the app's
                           identity and its icon for reminders,
                           WindowsIntegration: what the app writes in the
-                          registry for itself at start)
+                          registry for itself at start), InstalledCopy
+                          (the version under "Installed apps", for a copy
+                          the installer put there)
   Heracles.Tests/         xunit tests: the crossing into the core
                           (BindingTests) and every class with logic.
                           Fixtures/legacy.sqlite is a small library as the
@@ -325,6 +365,11 @@ tools/build.ps1           targets core, app, test, run, package, feed, clean
 tools/disc-image.ps1      New-DiscImage, Compare-DiscImage, Remove-DiscImage:
                           the package's ISO made, and read back by mounting
                           it (dot-sourced by build.ps1)
+tools/installer/Heracles.iss
+                          the Inno Setup script "package" compiles into
+                          Heracles-<version>-win-<arch>-setup.exe; its
+                          header says what follows from the app replacing
+                          its own folder
 tools/update-signing.ps1  the update key and what is done with it: making
                           and checking signatures, writing and reading a
                           feed, the credential store, the update archive
@@ -348,7 +393,10 @@ tools/e2e/                make-fixture, launch, capture, ui (UI Automation
                           check-legacy (the first start beside a library of
                           the original app), check-disc (a packaged disc
                           image opened as a drive, and the app started from
-                          it), check-update (a whole update rehearsed with
+                          it), check-installer (a packaged installer run
+                          for real: installed, started, its folder
+                          replaced as an update replaces it, removed
+                          again), check-update (a whole update rehearsed with
                           nothing real in it, and the updates that must be
                           refused; serve-folder is its web server),
                           check-published-update (after a release: an
@@ -392,9 +440,14 @@ Windows 11 on **ARM64** (Rust host `aarch64-pc-windows-msvc`), 200 % display
 scaling, the account is not an administrator. Installed: Git, rustup with
 stable 1.100 (ARM64 and x64 targets), Visual Studio 2022 with the C++
 tools, .NET SDK 10 and 11 (`dotnet` picks 11; the app targets .NET 10),
-`uniffi-bindgen-cs` v0.12.0+v0.32.0. Not installed and not needed: Node,
-`gh`, PowerShell 7. This core needs neither clang nor CMake (Toolbox's
-does).
+`uniffi-bindgen-cs` v0.12.0+v0.32.0, and since 2026-11-25 Inno Setup
+7.1.1 for the package step (for this account only: `winget install --id
+JRSoftware.InnoSetup.7 -e --custom /CURRENTUSER`, which lands in
+`%LOCALAPPDATA%\Programs\Inno Setup 7`, where `build.ps1` finds
+`ISCC.exe`; its help is `ISetup.chm` there, which `hh.exe -decompile
+<folder> ISetup.chm` turns into pages that can be searched). Not installed
+and not needed: Node, `gh`, PowerShell 7. This core needs neither clang
+nor CMake (Toolbox's does).
 
 Things that bite on this machine:
 
@@ -440,7 +493,7 @@ tools\build.ps1                 # core (release DLL + C# bindings), then the app
 tools\build.ps1 app -Restart    # rebuild the app, close the running build, start the new one
 tools\build.ps1 test            # cargo test --locked, then dotnet test on app\Heracles.Tests
 tools\build.ps1 run             # starts it on the real library, not a fixture
-tools\build.ps1 core package    # for this machine -> build\release: a disc image (.iso) to install from, and the same folder as an archive (.zip) for copies that update themselves
+tools\build.ps1 core package    # for this machine -> build\release: an installer (-setup.exe), a disc image (.iso) holding it and the app's folder, and the same folder as an archive (.zip) for copies that update themselves
 tools\build.ps1 core package -Arch x64   # and for the other processor (then "core" again, for this one's bindings)
 tools\build.ps1 feed            # update-feed.json for both packages, signed with the update key (needs both, and the key)
 tools\update-key.ps1            # is the update key here, and is it the one the packages carry? (-Create, -Export <file>, -Import <file>)
@@ -475,7 +528,8 @@ tools\e2e\check-boards.ps1            # the scripted check of a board and a task
 tools\e2e\check-transfer.ps1          # the scripted check of File > Import and Export, through the system's dialogs: 10 checks
 tools\e2e\make-fixture.ps1 -Legacy    # a library folder holding only the Electron app's library, to be imported
 tools\e2e\check-legacy.ps1            # the scripted check of the first start on an Electron library: 20 checks
-tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 19 checks (-Arch x64 for the other one)
+tools\e2e\check-disc.ps1              # a packaged disc image, opened as a drive, and the app started from it: 21 checks (-Arch x64 for the other one)
+tools\e2e\check-installer.ps1         # a packaged installer run for real: installed, started, its folder replaced as an update does, removed again (-Arch x64; -Keep keeps its logs). REFUSES when Heracles is installed for this account
 tools\e2e\check-update.ps1            # a whole update rehearsed from a package, with nothing real in it, and the two that must be refused: 31 checks, about six minutes (-Arch x64; -Look for pictures; -Theme light)
 tools\e2e\check-published-update.ps1  # AFTER a release: an old-looking copy with the real key takes the published update from GitHub: 11 checks (-Arch x64)
 tools\e2e\check-input.ps1             # REAL mouse and keyboard, for a minute: typing, keys, clicks, drags. 23 checks. Hands off while it runs
@@ -965,6 +1019,44 @@ rules, the Mica backdrop problem, and everything about the RDP control.
   `build\` or from a disc (`Test-OwnCopy`). A check that starts the app
   from anywhere else will find "Heracles is not running": put the copy
   under `build\`.
+- **An installer for an app that replaces its own folder** (2026-11-25,
+  `tools\installer\Heracles.iss`, Inno Setup 7). What must stay true:
+  - The uninstaller's files are not in the app's folder
+    (`UninstallFilesDir`): the first update would rename them away with
+    the old folder, and "Installed apps" would point at nothing. Never
+    move them back, and never change `UninstallFilesDir` in a later
+    version (Setup would not find the old uninstall log).
+  - `AppId` in the script and `InstalledCopy.AppId` are one value (a test
+    compares them) and never change: Windows and the next installer know
+    an installed copy by it.
+  - The installer stays per user. Where the user cannot write, the app
+    cannot update itself (`UpdateInstaller.WhyNotHere`).
+  - The app's folder is the app's alone, for the installer as for the
+    updater: `PrepareToInstall` refuses a folder with other things in it,
+    `[InstallDelete]` empties one that holds Heracles, `[UninstallDelete]`
+    removes it whole. Inno Setup's help warns against that last one, for
+    the case of a wrongly chosen folder; the refusal is what makes it
+    safe here.
+  - The uninstaller removes the link scheme and the reminder identity
+    only where they point at the copy it removes.
+  - Inno Setup details that cost time (found in the Toolbox port the same
+    day): `--define=Name=value` on ISCC's command line; `{{#AppId}`
+    writes a brace before a GUID; `PrepareToInstall` returning text ends
+    a silent install with exit code 7; `InitializeUninstall` returning
+    False gives a non-zero exit; a running program is found by trying to
+    open its file for writing (`TFileStream` with `fmShareExclusive`);
+    `InternalCompressLevel=none` leaves Setup's tables readable, which is
+    how `Find-PrivatePaths` can look through the installer (it stores no
+    source paths); the Setup program is 32-bit x86 for both packages and
+    installs in 64-bit mode, so the ARM64 installer also runs where there
+    is no x64 emulation. The uninstaller hands its last steps to a copy
+    of itself in TEMP: wait for the registry key to go, not for the
+    process.
+  - The folder a disc image is made from cannot always be removed the
+    moment the image is written, now that a 60 MB program is in it: the
+    disc writer lets go of its files only when .NET collects it, and a
+    scanner reads a freshly copied program. `Remove-BusyFolder` in
+    `build.ps1` collects and tries again for up to a minute.
 
 ## For the Mac repository
 
@@ -1488,6 +1580,26 @@ swaps in the text box and puts the caret where the click was.
   app's windows.
 - **The way back from a lost update key.** There is none in the app, and
   none was tried. See "Decisions".
+- **The installer under a hand** (0.3.1). Every run of it was silent, by
+  `check-installer.ps1`: its pages were never looked at, the folder page
+  and the desktop-shortcut box were never used, and "Launch Heracles" at
+  the end was never ticked. It has run on this PC only (the x64 one under
+  emulation), never on Windows 10, and never as a file from the web: what
+  SmartScreen says to an unsigned installer has not been seen.
+- **An installed copy taking a real update.** The check replaces the
+  installed folder itself, by the two renames the updater makes, and then
+  sees that Windows still knows the copy and can remove it. The updater
+  doing that to an installed copy has not been watched; its swap is the
+  same code whatever put the folder there.
+- **An install over an older installed version.** There is no older
+  installer yet. The script empties a folder that holds Heracles before
+  installing; that line has only run on a folder it had just filled.
+- **Uninstalling a copy that had made itself known to Windows.** A run
+  on a test library registers no link scheme and no reminder identity,
+  so the check plants both, pointing at the installed copy, and sees
+  them removed (and does that only where the account has none of its
+  own; where it has, it sees them left alone). The app's own
+  registrations, made on a real library, were never removed this way.
 
 ## Known faults
 
@@ -1539,6 +1651,14 @@ Found and not yet fixed. Each is small; none loses data.
 - The offer made by the daily look opens without taking the keyboard, so
   that typing in a note is not interrupted. It may therefore open behind
   another program's window, and wait there to be seen.
+- Reminders already handed to Windows stay with Windows when the app is
+  uninstalled: they still appear at their times, and clicking one then
+  opens nothing. (The uninstaller cannot take them back; only the app
+  can, and it is gone.)
+- The installer does not offer to remove the library, and the
+  uninstaller leaves it (`%APPDATA%\Heracles`) and the log
+  (`%LOCALAPPDATA%\Heracles`) where they are. On purpose, and said
+  nowhere in the uninstaller's own window.
 
 ## Current state (update in every commit)
 
@@ -1551,6 +1671,35 @@ push was refused, rebased its two commits onto that one, and had to
 package and check everything again, since the build number is the commit
 count. The status a session is shown when it starts says nothing of what
 is on GitHub.
+
+**0.3.1 (2026-11-25, later the same day as 0.3.0): the same app, with an
+installer.** On the owner's word, given in a Toolbox session for both
+apps (quoted under Decisions): every release is to carry an installer
+for each processor beside the disc image, and one was to be released at
+once. 0.3.0's release could not be given the files (a published release
+here takes none), so this is a new version. What changed:
+
+- `tools\installer\Heracles.iss` and the installer step in `tools\build.ps1
+  package` (Inno Setup 7.1.1, installed on the PC that day, per user).
+  The package step now makes three things for a processor:
+  `Heracles-<version>-win-<arch>-setup.exe`, the `.iso`, which holds that
+  installer beside the `Heracles` folder and a README that names it
+  first, and the `.zip` as before.
+- `Support/InstalledCopy.cs`, called once at start: the one change to the
+  app. Eight tests.
+- `tools\publish.ps1` requires, checks and sends the installers, and its
+  install text is rewritten around them.
+- `tools\e2e\check-installer.ps1` (new), `check-disc.ps1` (the disc's new
+  contents), and `check-published-update.ps1 -From <version>`, which
+  takes an earlier release's package as it was handed out for the old
+  copy, where it otherwise compiles the current one under an old number.
+- The README, release notes for 0.3.1, and these notes (Decisions,
+  "Found on Windows", "Not verified", "Known faults").
+
+How it was checked, and how the release went, is at the very end of
+these notes ("0.3.1: the installer"). **What is below, from "As of
+2026-11-25", was written for 0.3.0 and is still true of the app**, which
+0.3.1 does not change.
 
 **License, 2026-11-23, on the owner's word and pushed** (commit `4946a75`,
 made on the Mac from a fresh clone, so the tests were not run for it):
@@ -1658,13 +1807,16 @@ up. The first real update is the one to whatever is released after
    package` (this machine's last, so the bindings match its DLL), then
    `tools\build.ps1 feed` (it needs both packages and the update key, and
    refuses a build number that is not higher than the published one).
-   Check them: `tools\e2e\check-disc.ps1` and `tools\e2e\check-update.ps1`
+   Check them: `tools\e2e\check-disc.ps1`, `tools\e2e\check-installer.ps1`
+   and `tools\e2e\check-update.ps1`
    for each processor (`-Arch x64` for the other). Then
    `tools\publish.ps1 -DryRun`, and when that reads right,
    `tools\publish.ps1`, which ends by reading the feed back from where
    installed copies read it. Then `tools\e2e\check-published-update.ps1`,
    for each processor: a copy with the real key takes what was just
-   published. The packages must be built from the very
+   published (and with `-From <the version before>`, while that
+   version's folder is still in `build\release`, the copy is that
+   release itself). The packages must be built from the very
    commit that is pushed (the build number is the commit count, and the
    script refuses any other), so a commit made after packaging means
    packaging again, and the feed again.
@@ -2254,3 +2406,50 @@ does it. Reviewed by the session that wrote it; no one else has read it.
 - The packages on this machine are the released ones of 0.3.0, build 50,
   under `build\release`. `tools\e2e\check-published-update.ps1` needs
   them, and they go with the next clean build.
+
+### 0.3.1: the installer (2026-11-25)
+
+Asked for by the owner in a Toolbox session, for both apps at once (see
+Decisions). The work was done there first and brought here; the two
+`build.ps1`, `publish.ps1` and `disc-image.ps1` are twins in this respect,
+and a fix to one belongs in the other.
+
+- **Why not an MSI, and why per user.** The app replaces its own folder.
+  Windows Installer keeps a record of every file it installed and repairs
+  what differs; and an install for all users would put the app where its
+  user cannot write, so it could not update itself at all
+  (`UpdateInstaller.WhyNotHere` would say so on every look).
+- **What the swap of folders means for an installer.** The first plan
+  kept Inno Setup's defaults, with the uninstaller in the app's folder.
+  Reading `UpdateInstaller.Install` before writing a line of it showed
+  that the first update would rename the uninstaller away with the old
+  folder. Hence `UninstallFilesDir`, and hence the app's folder being
+  removed whole at uninstall (after an update nothing in it is a file
+  the installer wrote).
+- **What the first run of the check found.** `check-installer.ps1`
+  refused to start: a real copy of Heracles had been run on this PC that
+  afternoon, and keeps what its user chose about updates
+  (`preferences.json`) in `%LOCALAPPDATA%\Heracles\updates`, which the
+  uninstaller, as first written, removed whole. The check was written to
+  refuse in order to protect a real copy from the check; what it caught
+  was the installer. The uninstaller now removes only a fetched update
+  (`updates\staged`, `download.part`), and the check sees that the
+  preferences are byte for byte as they were.
+- **Two things the check itself needed**, both from the machine being
+  busy (a release of Toolbox was uploading): the app's folder cannot
+  always be renamed in the instant after the app quits (the x64 copy,
+  under emulation: "access is denied"; the updater has always tried
+  again, and the check now does), and File > Exit by automation is asked
+  again if the app is still there.
+- **Checked on trial packages before the commit** (from the working
+  tree, build 51): all Rust tests and 771 .NET tests with one skipped on
+  purpose (8 new, of `InstalledCopy`); `package` for both processors
+  (each image read back and compared, the installer and the image
+  searched for this machine's paths); `check-disc.ps1` on both (21
+  checks each: the three things at the top of the disc, the README
+  naming the installer, the installer on the disc being the one beside
+  it, and the app started from the disc); `check-installer.ps1` on both
+  (34 checks each, the x64 one under emulation). This account has a link
+  scheme and a reminder identity of its own, so the check planted
+  neither and saw both left alone; the removal of ones that point at the
+  removed copy has therefore not run (see "Not verified").

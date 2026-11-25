@@ -11,10 +11,12 @@
       app      the WPF app -> build\app\win-<arch>\Heracles.exe
       test     Rust tests, then the .NET tests
       run      start the built app (on the real library, not a fixture)
-      package  self-contained build for handing out, under build\release: a
-               disc image (.iso) for whoever installs it, the same folder as
-               an archive (.zip) for copies that update themselves, and
-               SHA256SUMS (needs "core" for that architecture first)
+      package  self-contained build for handing out, under build\release: an
+               installer (-setup.exe, made with Inno Setup), a disc image
+               (.iso) holding the installer and the app's folder, the same
+               folder as an archive (.zip) for copies that update
+               themselves, and SHA256SUMS (needs "core" for that
+               architecture first)
       feed     the update feed for the packages of both architectures,
                signed with the update key -> build\release\update-feed.json
                (needs "package" for both first; see tools\update-key.ps1)
@@ -257,18 +259,62 @@ function Get-BuildNumber {
     return $count
 }
 
+# Removes a folder, trying again for a while when Windows says a file in it
+# is in use. The folder a disc image was made from is one such: the
+# component that wrote the image lets go of its files only when .NET has
+# collected it, and a virus scanner reads a program that was copied a moment
+# ago. (Seen once, in the Toolbox port: the installer's copy, right after
+# its image was written.)
+function Remove-BusyFolder([string]$path) {
+    $waited = [System.Diagnostics.Stopwatch]::StartNew()
+    while (Test-Path -LiteralPath $path) {
+        try {
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            if ($waited.Elapsed.TotalSeconds -gt 60) { throw }
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+            Start-Sleep -Milliseconds 500
+        }
+    }
+}
+
+# The Inno Setup compiler, which makes the installer. Installed for the
+# account, with no administrator, by:
+#   winget install --id JRSoftware.InnoSetup.7 -e --custom /CURRENTUSER
+function Find-InnoSetup {
+    $onPath = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    foreach ($folder in $env:LOCALAPPDATA, $env:ProgramFiles, ${env:ProgramFiles(x86)}) {
+        if (-not $folder) { continue }
+        foreach ($sub in 'Programs\Inno Setup 7', 'Inno Setup 7') {
+            $candidate = Join-Path $folder "$sub\ISCC.exe"
+            if (Test-Path $candidate) { return $candidate }
+        }
+    }
+    throw 'the Inno Setup compiler (ISCC.exe) was not found. Install it: winget install --id JRSoftware.InnoSetup.7 -e --custom /CURRENTUSER'
+}
+
 # What the disc says of itself, in a file at its top, for whoever opens it
 # without the release page in front of them.
-function Get-DiscReadMe {
+function Get-DiscReadMe([string]$setupName) {
     return @(
         "Heracles $Version for Windows ($Arch)",
         '',
-        '1. Copy the Heracles folder from this disc to your PC, for example into',
-        '   %LOCALAPPDATA%\Programs.',
-        '2. Run Heracles.exe from the copy.',
-        '3. Eject this disc. It is not needed again.',
+        'To install it, run',
+        "    $setupName",
+        'from this disc. It installs Heracles for you alone, asks for no',
+        'administrator, and adds it to the Start menu.',
         '',
-        'Run it from the copy, not from the disc: Windows opens links to notes,',
+        'Or, without installing anything: copy the Heracles folder from this disc',
+        'to your PC, for example into %LOCALAPPDATA%\Programs, and run',
+        'Heracles.exe from the copy.',
+        '',
+        'Either way, eject this disc afterwards. It is not needed again.',
+        '',
+        'Do not run Heracles from the disc itself: Windows opens links to notes,',
         'and reminders, with the copy of Heracles that was started last.',
         '',
         'The app is not code-signed. If Windows shows "Windows protected your PC",',
@@ -279,20 +325,23 @@ function Get-DiscReadMe {
         '',
         'Heracles updates itself from here on: it looks for a new version once a',
         'day, shows what changed, and replaces its own folder when you agree. For',
-        'that it must be somewhere it can change, which a place of your own is.',
+        'that it must be somewhere it can change, which is where the installer',
+        'puts it, and what a place of your own is.',
         '',
         'https://github.com/tacticalbadger/Heracles-Windows'
     )
 }
 
 # A folder that runs on a PC with nothing installed (the .NET runtime is
-# inside), on a disc image for the Releases page: Windows opens an .iso as a
-# disc when it is double-clicked. Nothing in it is code-signed yet, so
-# Windows asks before running it the first time. The same folder is also
-# made into an archive, which is what a copy that updates itself downloads.
+# inside), handed out three ways for the Releases page: an installer; a disc
+# image holding that installer and the folder (Windows opens an .iso as a
+# disc when it is double-clicked); and the folder as an archive, which is
+# what a copy that updates itself downloads. Nothing in it is code-signed
+# yet, so Windows asks before running it the first time.
 function New-Package {
     Assert-Tool 'dotnet' 'Install the .NET SDK: winget install Microsoft.DotNet.SDK.10'
     Assert-CoreBuilt $Rid " -Arch $Arch"
+    $iscc = Find-InnoSetup
 
     $number = Get-BuildNumber
     $name = "Heracles-$Version-win-$Arch"
@@ -300,6 +349,7 @@ function New-Package {
     $stage = Join-Path $release $name
     $iso = Join-Path $release "$name.iso"
     $zip = Join-Path $release "$name.zip"
+    $setup = Join-Path $release "$name-setup.exe"
     $top = Join-Path $release "$name.top"
     # Every copy from this package will take its updates on the word of this
     # key, so there has to be one before there is a package.
@@ -308,10 +358,11 @@ function New-Package {
     New-Item -ItemType Directory -Force $release | Out-Null
     if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
     if (Test-Path $top) { Remove-Item -Recurse -Force $top }
-    # Gone before anything is built: an image, an archive or a feed left from
-    # an earlier build must not sit beside a folder it was not made from.
+    # Gone before anything is built: an installer, an image, an archive or a
+    # feed left from an earlier build must not sit beside a folder it was not
+    # made from.
     Remove-DiscImage -Path $iso
-    foreach ($stale in $zip, (Join-Path $release 'update-feed.json')) {
+    foreach ($stale in $zip, $setup, (Join-Path $release 'update-feed.json')) {
         if (Test-Path $stale) { Remove-Item -Force $stale }
     }
 
@@ -344,12 +395,32 @@ function New-Package {
         throw "$($telling -join ', ') contains a path under this machine's profile folder. Run: tools\build.ps1 core -Arch $Arch (it rewrites those paths), then package again."
     }
 
-    # The disc: the app in a folder named Heracles, and a few words beside it.
+    # The installer: the same folder, put where its user may write, with a
+    # Start menu entry and an uninstaller (tools\installer\Heracles.iss).
+    Step "package: $name-setup.exe"
+    $script = Join-Path $PSScriptRoot 'installer\Heracles.iss'
+    $icon = Join-Path $App 'Heracles\Icon\Heracles.ico'
+    Invoke-Native 'ISCC' {
+        & $iscc --quiet "--define=Version=$Version" "--define=Build=$number" "--define=Arch=$Arch" "--define=Stage=$stage" `
+            "--define=Icon=$icon" "--define=OutputDir=$release" "--define=OutputName=$name-setup" $script
+    }
+    if (-not (Test-Path $setup)) { throw "ISCC made no $name-setup.exe" }
+    $made = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+    if ($made.FilePrivatePart -ne $number) { throw "$name-setup.exe says it is build $($made.FilePrivatePart), not $number" }
+    # Setup's tables are left uncompressed (see the script), so this reads them.
+    if (@(Find-PrivatePaths @($setup)).Count -gt 0) {
+        Remove-Item -Force $setup
+        throw "$name-setup.exe contains a path under this machine's profile folder."
+    }
+
+    # The disc: the installer and a few words at its top, and the app in a
+    # folder named Heracles for whoever would rather copy it.
     Step "package: $name.iso"
     $label = "Heracles $Version"
     $holds = @{ Heracles = $stage }
     New-Item -ItemType Directory -Force $top | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $top 'README.txt'), ((Get-DiscReadMe) -join "`r`n") + "`r`n", [System.Text.Encoding]::ASCII)
+    [System.IO.File]::WriteAllText((Join-Path $top 'README.txt'), ((Get-DiscReadMe "$name-setup.exe") -join "`r`n") + "`r`n", [System.Text.Encoding]::ASCII)
+    Copy-Item -LiteralPath $setup -Destination (Join-Path $top "$name-setup.exe")
     try {
         New-DiscImage -Path $iso -Label $label -Top $top -Folders $holds
         # Read back as Windows reads it, before anyone else does: every file
@@ -357,7 +428,7 @@ function New-Package {
         $different = @(Compare-DiscImage -Path $iso -Label $label -Top $top -Folders $holds)
     }
     finally {
-        Remove-Item -Recurse -Force $top
+        Remove-BusyFolder $top
     }
     if ($different.Count -gt 0) {
         Remove-Item -Force $iso
@@ -377,11 +448,11 @@ function New-Package {
     New-UpdateArchive -Folder $stage -Path $zip
 
     # Checksums for every package of this version that is there.
-    $lines = Get-ChildItem $release -File | Where-Object { $_.Name -like "Heracles-$Version-win-*.iso" -or $_.Name -like "Heracles-$Version-win-*.zip" } |
-        Sort-Object Name | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
+    $lines = Get-ChildItem $release -File | Where-Object {
+        $_.Name -like "Heracles-$Version-win-*.iso" -or $_.Name -like "Heracles-$Version-win-*.zip" -or $_.Name -like "Heracles-$Version-win-*-setup.exe"
+    } | Sort-Object Name | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
     [System.IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS'), (($lines -join "`n") + "`n"), [System.Text.Encoding]::ASCII)
-    Write-Host ("ok: {0} ({1:N0} MB)" -f $iso, ((Get-Item $iso).Length / 1MB))
-    Write-Host ("ok: {0} ({1:N0} MB)" -f $zip, ((Get-Item $zip).Length / 1MB))
+    foreach ($file in $setup, $iso, $zip) { Write-Host ("ok: {0} ({1:N0} MB)" -f $file, ((Get-Item $file).Length / 1MB)) }
     Write-Host "ok: $(Join-Path $release 'SHA256SUMS')"
 }
 

@@ -8,9 +8,10 @@ This repository is the Windows app. It is a native app, written in C# (WPF) over
 
 ## Status and download
 
-The native app is a preview. Builds are published on the [releases page](https://github.com/tacticalbadger/Heracles-Windows/releases): a disc image (an `.iso` file) for Windows on x64, and one for Windows on ARM. The app can also be [built from source](#building).
+The native app is a preview. Builds are published on the [releases page](https://github.com/tacticalbadger/Heracles-Windows/releases): an installer and a disc image (an `.iso` file) for Windows on x64, and the same two for Windows on ARM. The app can also be [built from source](#building).
 
-- **Nothing to install.** Double-click the `.iso` and Windows opens it as a disc. Copy the `Heracles` folder from it to a place of your own on your PC (`%LOCALAPPDATA%\Programs`, say), run `Heracles.exe` from the copy, and eject the disc. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
+- **The installer** (`Heracles-<version>-win-<arch>-setup.exe`) installs Heracles for your Windows account, asks for no administrator, adds it to the Start menu, and is removed again under Settings ▸ Apps ▸ Installed apps. Removing it leaves your library where it is.
+- **Or nothing to install.** Double-click the `.iso` and Windows opens it as a disc, with the same installer on it and a `Heracles` folder. Copy the folder to a place of your own on your PC (`%LOCALAPPDATA%\Programs`, say), run `Heracles.exe` from the copy, and eject the disc. The .NET runtime is inside the folder. It needs Windows 10 version 2004 or later, or Windows 11.
 - **The build is not code-signed.** Windows will say it does not recognise the app. Choose **More info**, then **Run anyway**.
 - **From 0.3.0 on it updates itself.** It looks for a new version once a day and from **Help ▸ Check for Updates…**, shows what changed, and installs it when you agree. Installing restarts the app, after your notes are saved. **Check for Updates Automatically** turns the daily look off. An update is installed only if it carries the developer's signature. The app replaces its own folder, so the folder has to be somewhere it can change: run from the disc, it says that it cannot.
 - Version 0.2.1 and earlier cannot update themselves. Put a current version in by hand once, and later ones arrive in the app.
@@ -70,6 +71,7 @@ You need, on Windows 10 or 11 (x64 or ARM64):
 - Visual Studio 2022 Build Tools with the C++ workload
 - The .NET 10 SDK
 - `uniffi-bindgen-cs`: `cargo install uniffi-bindgen-cs --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag v0.12.0+v0.32.0`
+- Inno Setup 7, for the package step only (it makes the installer): `winget install --id JRSoftware.InnoSetup.7 -e --custom /CURRENTUSER`, which needs no administrator
 
 From PowerShell, in the repository's folder:
 
@@ -77,7 +79,7 @@ From PowerShell, in the repository's folder:
 tools\build.ps1            # the core and its C# bindings, then the app -> build\app\win-<arch>\Heracles.exe
 tools\build.ps1 test       # the core's tests (Rust), then the app's (.NET)
 tools\build.ps1 run        # start the built app
-tools\build.ps1 core package            # a disc image (.iso) and an update archive (.zip) for this PC's processor -> build\release
+tools\build.ps1 core package            # an installer (-setup.exe), a disc image (.iso) and an update archive (.zip) for this PC's processor -> build\release
 tools\build.ps1 core package -Arch x64  # and for the other one
 tools\build.ps1 feed                    # the signed feed that tells installed copies of them (needs the update key)
 ```
@@ -93,6 +95,7 @@ tools\e2e\check-boards.ps1     # a board and a task
 tools\e2e\check-transfer.ps1   # importing files and exporting a note
 tools\e2e\check-legacy.ps1     # the first start beside a library of the original app
 tools\e2e\check-disc.ps1       # a packaged disc image: opened as a drive, and the app started from it
+tools\e2e\check-installer.ps1  # a packaged installer run for real: installed, started, its folder replaced as an update does, removed again
 tools\e2e\check-update.ps1     # a whole update rehearsed on this PC with nothing real in it, and the updates that must be refused
 tools\e2e\check-input.ps1      # a minute of real typing, clicking and dragging: leave the mouse and keys alone while it runs
 ```
@@ -117,6 +120,7 @@ app/Heracles/        the Windows app (C#, WPF)
 app/Heracles.Tests/  its tests
 tools/build.ps1      builds, tests and packages
 tools/disc-image.ps1 makes the package's disc image, and reads it back
+tools/installer/     the Inno Setup script the package's installer is made from
 tools/update-*.ps1   the update key, and signing the feed with it
 tools/make-icon.ps1  draws the icon again after a change to its layers
 tools/e2e/           the scripted checks of the real window
